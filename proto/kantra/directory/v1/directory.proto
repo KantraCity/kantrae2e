@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package kantra.directory.v1;
+
+// Distribution of MLS KeyPackages. Every RPC requires a JWT; publishing
+// requires a device-bound token.
+service DirectoryService {
+  // Publishes a batch of KeyPackages (typically 20-50) for the caller's device.
+  rpc PublishKeyPackages(PublishKeyPackagesRequest) returns (PublishKeyPackagesResponse) {}
+  // Same as Publish; used when the stock runs low.
+  rpc RefillKeyPackages(RefillKeyPackagesRequest) returns (RefillKeyPackagesResponse) {}
+  // Number of unused KeyPackages left for the caller's device.
+  rpc CountKeyPackages(CountKeyPackagesRequest) returns (CountKeyPackagesResponse) {}
+  // Atomically claims one unused KeyPackage of a specific device.
+  rpc FetchKeyPackage(FetchKeyPackageRequest) returns (FetchKeyPackageResponse) {}
+  // Atomically claims one KeyPackage for every device of a user that has one.
+  rpc FetchUserKeyPackages(FetchUserKeyPackagesRequest) returns (FetchUserKeyPackagesResponse) {}
+}
+
+message PublishKeyPackagesRequest {
+  repeated bytes key_packages = 1;
+}
+
+message PublishKeyPackagesResponse {
+  int64 available = 1;
+}
+
+message RefillKeyPackagesRequest {
+  repeated bytes key_packages = 1;
+}
+
+message RefillKeyPackagesResponse {
+  int64 available = 1;
+}
+
+message CountKeyPackagesRequest {}
+
+message CountKeyPackagesResponse {
+  int64 available = 1;
+}
+
+message FetchKeyPackageRequest {
+  string user_id = 1;
+  string device_id = 2;
+}
+
+message FetchKeyPackageResponse {
+  bytes key_package = 1;
+}
+
+message FetchUserKeyPackagesRequest {
+  string user_id = 1;
+}
+
+message DeviceKeyPackage {
+  string device_id = 1;
+  bytes key_package = 2;
+}
+
+message FetchUserKeyPackagesResponse {
+  repeated DeviceKeyPackage key_packages = 1;
+}

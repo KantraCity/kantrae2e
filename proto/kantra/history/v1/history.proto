@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package kantra.history.v1;
+
+// Encrypted, content-addressed history backup stored in MinIO.
+// The server never sees the history key; chunks are opaque ciphertext.
+service HistoryService {
+  // Stores a chunk under its BLAKE3 hash (hex). The server verifies the hash.
+  rpc PutChunk(PutChunkRequest) returns (PutChunkResponse) {}
+  rpc GetChunk(GetChunkRequest) returns (GetChunkResponse) {}
+  // All chunk hashes of the caller, oldest first.
+  rpc GetManifest(GetManifestRequest) returns (GetManifestResponse) {}
+}
+
+message PutChunkRequest {
+  string hash = 1;
+  bytes data = 2;
+}
+
+message PutChunkResponse {}
+
+message GetChunkRequest {
+  string hash = 1;
+}
+
+message GetChunkResponse {
+  bytes data = 1;
+}
+
+message GetManifestRequest {}
+
+message ManifestEntry {
+  string chunk_hash = 1;
+  int64 size_bytes = 2;
+  int64 created_at = 3;
+}
+
+message GetManifestResponse {
+  repeated ManifestEntry entries = 1;
+}

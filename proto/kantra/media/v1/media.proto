@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package kantra.media.v1;
+
+// Encrypted, content-addressed media blobs (bucket `media`). The media key
+// travels inside an MLS application message, never through this service.
+service MediaService {
+  rpc PutMedia(PutMediaRequest) returns (PutMediaResponse) {}
+  rpc GetMedia(GetMediaRequest) returns (GetMediaResponse) {}
+}
+
+message PutMediaRequest {
+  // BLAKE3 hash (hex) of data; verified by the server.
+  string hash = 1;
+  bytes data = 2;
+}
+
+message PutMediaResponse {}
+
+message GetMediaRequest {
+  string hash = 1;
+}
+
+message GetMediaResponse {
+  bytes data = 1;
+}

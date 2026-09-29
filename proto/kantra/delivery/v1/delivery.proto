@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package kantra.delivery.v1;
+
+// Routes opaque MLS messages and serializes Commits per group.
+// Every RPC requires a device-bound JWT. Realtime delivery uses the
+// WebSocket endpoint /v1/ws which streams Envelope frames (binary protobuf)
+// and accepts Ack frames.
+service DeliveryService {
+  // Registers a new group at epoch 0 with the caller's device as only member.
+  rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse) {}
+  // Accepts a Commit only if `epoch` equals the group's current epoch
+  // (optimistic lock). Otherwise fails with CodeAborted (HTTP 409).
+  rpc SendCommit(SendCommitRequest) returns (SendCommitResponse) {}
+  // Accepts an application message for the given epoch.
+  rpc SendApplication(SendApplicationRequest) returns (SendApplicationResponse) {}
+  // Returns the pending Welcome for (group, device).
+  rpc FetchWelcome(FetchWelcomeRequest) returns (FetchWelcomeResponse) {}
+  // Pull-based alternative to the WebSocket: undelivered queue entries.
+  rpc FetchPending(FetchPendingRequest) returns (FetchPendingResponse) {}
+  // Marks queue entries as delivered.
+  rpc Ack(AckRequest) returns (AckResponse) {}
+  // Group metadata as seen by the server.
+  rpc GetGroup(GetGroupRequest) returns (GetGroupResponse) {}
+}
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_COMMIT = 1;
+  MESSAGE_TYPE_APPLICATION = 2;
+  MESSAGE_TYPE_WELCOME = 3;
+}
+
+// One queued message for a device.
+message Envelope {
+  int64 id = 1;
+  string group_id = 2;
+  uint64 epoch = 3;
+  MessageType type = 4;
+  bytes payload = 5;
+  string sender_device_id = 6;
+  int64 created_at = 7;
+}
+
+// Frames sent by the client over the WebSocket.
+message ClientFrame {
+  oneof frame {
+    Ack ack = 1;
+  }
+}
+
+message Ack {
+  repeated int64 ids = 1;
+}
+
+message CreateGroupRequest {
+  string group_id = 1;
+}
+
+message CreateGroupResponse {}
+
+message SendCommitRequest {
+  string group_id = 1;
+  // Epoch the commit was created in (the group's epoch before the commit).
+  uint64 epoch = 2;
+  bytes commit = 3;
+  // Welcome for added devices (empty if nobody is added).
+  bytes welcome = 4;
+  // Routing metadata (not content): devices added / removed by this commit.
+  repeated string added_device_ids = 5;
+  repeated string removed_device_ids = 6;
+}
+
+message SendCommitResponse {
+  uint64 new_epoch = 1;
+}
+
+message SendApplicationRequest {
+  string group_id = 1;
+  uint64 epoch = 2;
+  bytes payload = 3;
+}
+
+message SendApplicationResponse {
+  int64 message_id = 1;
+}
+
+message FetchWelcomeRequest {
+  string group_id = 1;
+  string device_id = 2;
+}
+
+message FetchWelcomeResponse {
+  bytes welcome = 1;
+}
+
+message FetchPendingRequest {
+  int32 limit = 1;
+}
+
+message FetchPendingResponse {
+  repeated Envelope envelopes = 1;
+}
+
+message AckRequest {
+  repeated int64 ids = 1;
+}
+
+message AckResponse {}
+
+message GetGroupRequest {
+  string group_id = 1;
+}
+
+message GetGroupResponse {
+  uint64 current_epoch = 1;
+  repeated string member_device_ids = 2;
+}

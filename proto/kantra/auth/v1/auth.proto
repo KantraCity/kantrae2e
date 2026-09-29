@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package kantra.auth.v1;
+
+// Accounts, sessions and devices.
+// Register and Login are the only unauthenticated RPCs.
+service AuthService {
+  rpc Register(RegisterRequest) returns (RegisterResponse) {}
+  rpc Login(LoginRequest) returns (LoginResponse) {}
+  // Registers a new device for the caller and returns a device-bound token.
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse) {}
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse) {}
+  rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse) {}
+  // Resolves a username to a user id (to find chat partners).
+  rpc LookupUser(LookupUserRequest) returns (LookupUserResponse) {}
+}
+
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  string user_id = 1;
+  // Account-level JWT (no device claim).
+  string token = 2;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  // Optional: an existing, non-revoked device of this user. When set the
+  // returned token is bound to this device.
+  string device_id = 3;
+}
+
+message LoginResponse {
+  string user_id = 1;
+  string token = 2;
+}
+
+message RegisterDeviceRequest {
+  string device_name = 1;
+}
+
+message RegisterDeviceResponse {
+  string device_id = 1;
+  // JWT bound to the new device.
+  string token = 2;
+}
+
+message Device {
+  string id = 1;
+  string device_name = 2;
+  int64 created_at = 3;
+  // 0 when active.
+  int64 revoked_at = 4;
+}
+
+message ListDevicesRequest {}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+}
+
+message RevokeDeviceRequest {
+  string device_id = 1;
+}
+
+message RevokeDeviceResponse {}
+
+message LookupUserRequest {
+  string username = 1;
+}
+
+message LookupUserResponse {
+  string user_id = 1;
+}
