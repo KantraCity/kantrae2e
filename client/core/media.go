@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	mediav1 "github.com/kantracity/kantrae2e/gen/kantra/media/v1"
 	"github.com/kantracity/kantrae2e/client/crypto"
-	"github.com/kantracity/kantrae2e/pkg/blobstore"
 	"github.com/kantracity/kantrae2e/client/store"
+	mediav1 "github.com/kantracity/kantrae2e/gen/kantra/media/v1"
+	"github.com/kantracity/kantrae2e/pkg/blobstore"
 )
 
 // MaxFileSize is the largest plaintext file accepted for sending.

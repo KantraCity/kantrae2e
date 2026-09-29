@@ -4,9 +4,9 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
-	"errors"
 	"sort"
 
 	"github.com/jackc/pgx/v5"

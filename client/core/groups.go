@@ -12,22 +12,22 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/kantracity/kantrae2e/client/mls"
+	"github.com/kantracity/kantrae2e/client/store"
 	authv1 "github.com/kantracity/kantrae2e/gen/kantra/auth/v1"
 	deliveryv1 "github.com/kantracity/kantrae2e/gen/kantra/delivery/v1"
 	directoryv1 "github.com/kantracity/kantrae2e/gen/kantra/directory/v1"
-	"github.com/kantracity/kantrae2e/client/mls"
-	"github.com/kantracity/kantrae2e/client/store"
 )
 
 // payload is the plaintext inside every MLS application message.
 type payload struct {
-	V     int         `json:"v"`
-	ID    string      `json:"id"`
-	Type  string      `json:"t"` // "text", "media", "meta"
-	Body  string      `json:"body,omitempty"`
-	TS    int64       `json:"ts"`
-	Media *MediaRef   `json:"media,omitempty"`
-	Meta  *groupMeta  `json:"meta,omitempty"`
+	V     int        `json:"v"`
+	ID    string     `json:"id"`
+	Type  string     `json:"t"` // "text", "media", "meta"
+	Body  string     `json:"body,omitempty"`
+	TS    int64      `json:"ts"`
+	Media *MediaRef  `json:"media,omitempty"`
+	Meta  *groupMeta `json:"meta,omitempty"`
 }
 
 type groupMeta struct {

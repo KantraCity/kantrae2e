@@ -11,9 +11,9 @@ import (
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
-	deliveryv1 "github.com/kantracity/kantrae2e/gen/kantra/delivery/v1"
 	"github.com/kantracity/kantrae2e/client/mls"
 	"github.com/kantracity/kantrae2e/client/store"
+	deliveryv1 "github.com/kantracity/kantrae2e/gen/kantra/delivery/v1"
 )
 
 // Sync pulls and processes all pending envelopes (no WebSocket needed).
