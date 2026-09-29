@@ -26,7 +26,14 @@ func (c *Client) Sync(ctx context.Context) error {
 	if err := c.requireLogin(); err != nil {
 		return err
 	}
-	return c.syncLocked(ctx)
+	if err := c.syncLocked(ctx); err != nil {
+		return err
+	}
+	// Pick up groups the account is in but this device is not (yet).
+	if _, _, err := c.joinMyGroupsLocked(ctx); err != nil {
+		c.logf("join groups: %v", err)
+	}
+	return nil
 }
 
 func (c *Client) syncLocked(ctx context.Context) error {
@@ -48,6 +55,7 @@ func (c *Client) syncLocked(ctx context.Context) error {
 		if _, err := c.del.Ack(ctx, &deliveryv1.AckRequest{Ids: ids}); err != nil {
 			return err
 		}
+		c.flushDeferred()
 	}
 }
 
@@ -61,6 +69,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 	}
 	var events []Event
 	var writes func(*store.Tx) error
+	var histEv *Event // counted inside the transaction, emitted after it
 
 	switch e.Type {
 	case deliveryv1.MessageType_MESSAGE_TYPE_WELCOME:
@@ -69,17 +78,28 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 			c.logf("welcome for group %s not usable: %v", e.GroupId, err)
 			break
 		}
-		epoch, _, _ := c.m.GroupInfo(gid)
+		epoch, members, _ := c.m.GroupInfo(gid)
+		seen := c.seenWrites(string(gid), members, e.CreatedAt*1000, "")
 		writes = func(tx *store.Tx) error {
+			if err := seen(tx); err != nil {
+				return err
+			}
 			return tx.UpsertGroup(store.Group{ID: string(gid), Epoch: epoch, Active: true, CreatedAt: time.Now().Unix()})
 		}
 		events = append(events, Event{Type: EventGroupJoined, GroupID: string(gid)})
+		// Joined as an additional device of this account: fetch what we missed.
+		if c.otherDevicesOf(members, c.acct.UserID, c.acct.DeviceID) {
+			c.deferHistoryRequestLocked(string(gid))
+		}
 		// A KeyPackage was consumed; top up in the background.
 		go func() {
 			if err := c.EnsureKeyPackages(context.Background()); err != nil {
 				c.logf("key package refill: %v", err)
 			}
 		}()
+
+	case deliveryv1.MessageType_MESSAGE_TYPE_JOIN_REQUEST:
+		c.handleJoinRequestLocked(e)
 
 	case deliveryv1.MessageType_MESSAGE_TYPE_COMMIT, deliveryv1.MessageType_MESSAGE_TYPE_APPLICATION:
 		p, err := c.m.Process([]byte(e.GroupId), e.Payload)
@@ -104,7 +124,18 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 				}
 				events = append(events, Event{Type: EventRemoved, GroupID: e.GroupId})
 			} else {
+				_, members, _ := c.m.GroupInfo([]byte(e.GroupId))
+				skip := ""
+				if p.External && !c.checkExternalJoinLocked(e.GroupId, p.Sender, members) {
+					skip, _ = splitIdentity(p.Sender)
+					events = append(events, Event{Type: EventSecurity, GroupID: e.GroupId,
+						Err: errors.New("a device of a user that was not in the group joined by itself; removing it")})
+				}
+				seen := c.seenWrites(e.GroupId, members, e.CreatedAt*1000, skip)
 				writes = func(tx *store.Tx) error {
+					if err := seen(tx); err != nil {
+						return err
+					}
 					return tx.UpsertGroup(store.Group{ID: e.GroupId, Epoch: p.Epoch, Active: true})
 				}
 				events = append(events, Event{Type: EventGroupUpdated, GroupID: e.GroupId})
@@ -116,6 +147,15 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 				break
 			}
 			uid, did := splitIdentity(p.Sender)
+			if pl.Type == "history_request" || pl.Type == "history_share" {
+				if pl.HistReq != nil && pl.Type == "history_request" {
+					c.handleHistoryRequestLocked(e.GroupId, uid, did, pl.HistReq)
+				}
+				if pl.HistShare != nil && pl.Type == "history_share" {
+					writes, histEv = c.handleHistoryShareLocked(ctx, e.GroupId, uid, pl.HistShare)
+				}
+				break
+			}
 			if pl.Type == "meta" {
 				if pl.Meta != nil {
 					writes = func(tx *store.Tx) error {
@@ -133,6 +173,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 			}
 			writes = func(tx *store.Tx) error { return tx.InsertMessage(msg) }
 			events = append(events, Event{Type: EventMessage, GroupID: e.GroupId, Message: &msg})
+			c.scheduleBackup()
 		}
 	}
 
@@ -146,6 +187,9 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 	})
 	if err != nil {
 		return err
+	}
+	if histEv != nil {
+		events = append(events, *histEv)
 	}
 	for _, ev := range events {
 		c.emit(ev)
@@ -204,6 +248,9 @@ func (c *Client) listenOnce(ctx context.Context) error {
 		if err := c.EnsureKeyPackages(ctx); err != nil {
 			c.logf("key package refill: %v", err)
 		}
+		if _, _, err := c.JoinMyGroups(ctx); err != nil {
+			c.logf("join groups: %v", err)
+		}
 	}()
 	for {
 		_, data, err := conn.Read(ctx)
@@ -224,5 +271,6 @@ func (c *Client) listenOnce(ctx context.Context) error {
 		if err := conn.Write(ctx, websocket.MessageBinary, ack); err != nil {
 			return err
 		}
+		c.flushDeferred()
 	}
 }

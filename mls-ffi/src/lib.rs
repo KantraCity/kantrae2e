@@ -30,8 +30,9 @@ use std::sync::{Arc, Mutex};
 
 use mls_rs::client_builder::{
     BaseConfig, IntoConfigOutput, WithCryptoProvider, WithGroupStateStorage, WithIdentityProvider,
-    WithKeyPackageRepo,
+    WithKeyPackageRepo, WithMlsRules,
 };
+use mls_rs::mls_rules::{CommitOptions, DefaultMlsRules};
 use mls_rs::group::{CommitEffect, Group, ReceivedMessage};
 use mls_rs::identity::basic::{BasicCredential, BasicIdentityProvider};
 use mls_rs::identity::SigningIdentity;
@@ -45,14 +46,27 @@ use store::{GroupStore, KeyPackageStore, Store};
 const CIPHERSUITE: CipherSuite = CipherSuite::CURVE25519_AES128;
 
 type Config = IntoConfigOutput<
-    WithCryptoProvider<
-        RustCryptoProvider,
-        WithIdentityProvider<
-            BasicIdentityProvider,
-            WithKeyPackageRepo<KeyPackageStore, WithGroupStateStorage<GroupStore, BaseConfig>>,
+    WithMlsRules<
+        DefaultMlsRules,
+        WithCryptoProvider<
+            RustCryptoProvider,
+            WithIdentityProvider<
+                BasicIdentityProvider,
+                WithKeyPackageRepo<KeyPackageStore, WithGroupStateStorage<GroupStore, BaseConfig>>,
+            >,
         >,
     >,
 >;
+
+/// Commits carry the ratchet tree and every commit also yields a GroupInfo
+/// that allows External Commits (used by a user's new devices to join).
+fn mls_rules() -> DefaultMlsRules {
+    DefaultMlsRules::new().with_commit_options(
+        CommitOptions::new()
+            .with_ratchet_tree_extension(true)
+            .with_allow_external_commit(true),
+    )
+}
 
 /// Status codes returned by every fallible function.
 pub const MLS_OK: i32 = 0;
@@ -92,6 +106,8 @@ pub struct MlsProcessed {
     pub epoch: u64,
     /// 1 if this commit removed the local member from the group.
     pub removed: i32,
+    /// 1 if this is an External Commit (a new member joined by itself).
+    pub external: i32,
 }
 
 pub struct MlsClient {
@@ -238,6 +254,7 @@ pub unsafe extern "C" fn mls_client_new(
             .key_package_repo(KeyPackageStore(store.clone()))
             .identity_provider(BasicIdentityProvider)
             .crypto_provider(RustCryptoProvider::default())
+            .mls_rules(mls_rules())
             .signing_identity(signing_identity, SignatureSecretKey::new(sk), CIPHERSUITE)
             .build();
         let handle = Box::new(MlsClient {
@@ -369,7 +386,8 @@ pub unsafe extern "C" fn mls_create_group(
 ///
 /// The commit stays *pending*: call `mls_apply_pending_commit` once the
 /// delivery service accepted it, or `mls_clear_pending_commit` on conflict.
-/// `out_welcome` is empty when nobody is added.
+/// `out_welcome` is empty when nobody is added. `out_group_info` is the
+/// GroupInfo of the resulting epoch (enables External Commits).
 #[no_mangle]
 pub unsafe extern "C" fn mls_create_commit(
     c: *mut MlsClient,
@@ -381,6 +399,7 @@ pub unsafe extern "C" fn mls_create_commit(
     remove_len: usize,
     out_commit: *mut MlsBuf,
     out_welcome: *mut MlsBuf,
+    out_group_info: *mut MlsBuf,
     out_err: *mut MlsBuf,
 ) -> i32 {
     guard(out_err, || {
@@ -414,9 +433,14 @@ pub unsafe extern "C" fn mls_create_commit(
                 Some(w) => w.to_bytes().map_err(err)?,
                 None => Vec::new(),
             };
+            let group_info = match &out.external_commit_group_info {
+                Some(gi) => gi.to_bytes().map_err(err)?,
+                None => Vec::new(),
+            };
             unsafe {
                 put(out_commit, out.commit_message.to_bytes().map_err(err)?);
                 put(out_welcome, welcome);
+                put(out_group_info, group_info);
             }
             Ok(())
         })
@@ -523,16 +547,17 @@ pub unsafe extern "C" fn mls_process_message(
             let sender_id = |g: &Group<Config>, idx: u32| {
                 g.member_at_index(idx).map(|m| identity_of(&m.signing_identity)).unwrap_or_default()
             };
-            let (kind, data, sender, removed) = match received {
+            let (kind, data, sender, removed, external) = match received {
                 ReceivedMessage::ApplicationMessage(m) => {
-                    (MLS_KIND_APPLICATION, m.data().to_vec(), sender_id(g, m.sender_index), 0)
+                    (MLS_KIND_APPLICATION, m.data().to_vec(), sender_id(g, m.sender_index), 0, 0)
                 }
                 ReceivedMessage::Commit(cd) => {
                     let removed = matches!(cd.effect, CommitEffect::Removed { .. }) as i32;
-                    (MLS_KIND_COMMIT, Vec::new(), sender_id(g, cd.committer), removed)
+                    let external = cd.is_external as i32;
+                    (MLS_KIND_COMMIT, Vec::new(), sender_id(g, cd.committer), removed, external)
                 }
-                ReceivedMessage::Proposal(_) => (MLS_KIND_PROPOSAL, Vec::new(), Vec::new(), 0),
-                _ => (MLS_KIND_OTHER, Vec::new(), Vec::new(), 0),
+                ReceivedMessage::Proposal(_) => (MLS_KIND_PROPOSAL, Vec::new(), Vec::new(), 0, 0),
+                _ => (MLS_KIND_OTHER, Vec::new(), Vec::new(), 0, 0),
             };
             g.write_to_storage().map_err(err)?;
             let epoch = g.current_epoch();
@@ -544,6 +569,7 @@ pub unsafe extern "C" fn mls_process_message(
                         sender: MlsBuf::from_vec(sender),
                         epoch,
                         removed,
+                        external,
                     };
                 }
             }
@@ -630,6 +656,58 @@ pub unsafe extern "C" fn mls_message_info(
     })
 }
 
+
+/// GroupInfo of the group's current epoch, allowing External Commits
+/// (ratchet tree included).
+#[no_mangle]
+pub unsafe extern "C" fn mls_group_info_message(
+    c: *mut MlsClient,
+    gid: *const u8,
+    gid_len: usize,
+    out: *mut MlsBuf,
+    out_err: *mut MlsBuf,
+) -> i32 {
+    guard(out_err, || {
+        let gid = unsafe { slice(gid, gid_len) };
+        with_client(c, |inner| {
+            let gi = inner.group(gid)?.group_info_message_allowing_ext_commit(true).map_err(err)?;
+            unsafe { put(out, gi.to_bytes().map_err(err)?) };
+            Ok(())
+        })
+    })
+}
+
+/// Joins a group by itself via an External Commit built from `group_info`.
+/// The new group state is kept in memory and persisted; if the delivery
+/// service rejects the commit, call `mls_forget_group` (and drop the rows).
+/// Returns the group id, the commit to send and the GroupInfo of the new epoch.
+#[no_mangle]
+pub unsafe extern "C" fn mls_external_join(
+    c: *mut MlsClient,
+    group_info: *const u8,
+    group_info_len: usize,
+    out_gid: *mut MlsBuf,
+    out_commit: *mut MlsBuf,
+    out_group_info: *mut MlsBuf,
+    out_err: *mut MlsBuf,
+) -> i32 {
+    guard(out_err, || {
+        let gi = MlsMessage::from_bytes(unsafe { slice(group_info, group_info_len) }).map_err(err)?;
+        with_client(c, |inner| {
+            let (mut g, commit) = inner.client.commit_external(gi).map_err(err)?;
+            g.write_to_storage().map_err(err)?;
+            let new_gi = g.group_info_message_allowing_ext_commit(true).map_err(err)?;
+            let gid = g.group_id().to_vec();
+            unsafe {
+                put(out_gid, gid.clone());
+                put(out_commit, commit.to_bytes().map_err(err)?);
+                put(out_group_info, new_gi.to_bytes().map_err(err)?);
+            }
+            inner.groups.insert(gid, g);
+            Ok(())
+        })
+    })
+}
 
 /// Returns the credential identity inside a KeyPackage message.
 #[no_mangle]

@@ -29,6 +29,7 @@ typedef struct {
     MlsBuf sender;
     uint64_t epoch;
     int32_t removed;
+    int32_t external;
 } MlsProcessed;
 
 void mls_buf_free(MlsBuf buf);
@@ -51,7 +52,8 @@ int32_t mls_create_group(MlsClient *c, const uint8_t *gid, size_t gid_len, MlsBu
 int32_t mls_create_commit(MlsClient *c, const uint8_t *gid, size_t gid_len,
                           const uint8_t *add_key_packages, size_t add_len,
                           const uint8_t *remove_identities, size_t remove_len,
-                          MlsBuf *out_commit, MlsBuf *out_welcome, MlsBuf *out_err);
+                          MlsBuf *out_commit, MlsBuf *out_welcome, MlsBuf *out_group_info,
+                          MlsBuf *out_err);
 int32_t mls_apply_pending_commit(MlsClient *c, const uint8_t *gid, size_t gid_len, MlsBuf *out_err);
 int32_t mls_clear_pending_commit(MlsClient *c, const uint8_t *gid, size_t gid_len, MlsBuf *out_err);
 int32_t mls_join_group(MlsClient *c, const uint8_t *welcome, size_t welcome_len,
@@ -68,6 +70,11 @@ int32_t mls_forget_group(MlsClient *c, const uint8_t *gid, size_t gid_len, MlsBu
 int32_t mls_message_info(const uint8_t *msg, size_t msg_len, int32_t *out_kind,
                          uint64_t *out_epoch, MlsBuf *out_gid, MlsBuf *out_err);
 
+int32_t mls_group_info_message(MlsClient *c, const uint8_t *gid, size_t gid_len,
+                               MlsBuf *out, MlsBuf *out_err);
+int32_t mls_external_join(MlsClient *c, const uint8_t *group_info, size_t group_info_len,
+                          MlsBuf *out_gid, MlsBuf *out_commit, MlsBuf *out_group_info,
+                          MlsBuf *out_err);
 int32_t mls_key_package_identity(const uint8_t *kp, size_t kp_len, MlsBuf *out_identity, MlsBuf *out_err);
 
 #endif

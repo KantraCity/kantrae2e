@@ -36,11 +36,12 @@ type jsonMessage struct {
 	Body       string `json:"body"`
 	SentAt     int64  `json:"sent_at_ms"`
 	Outgoing   bool   `json:"outgoing"`
+	Origin     string `json:"origin"` // "", "backup" or "shared"
 }
 
 func (m *Messenger) toJSON(ctx context.Context, s *store.Message) jsonMessage {
 	return jsonMessage{Seq: s.Seq, ID: s.UID, GroupID: s.GroupID, SenderUser: s.SenderUser,
-		Sender: m.c.Username(ctx, s.SenderUser), Kind: s.Kind, Body: s.Body, SentAt: s.SentAt, Outgoing: s.Outgoing}
+		Sender: m.c.Username(ctx, s.SenderUser), Kind: s.Kind, Body: s.Body, SentAt: s.SentAt, Outgoing: s.Outgoing, Origin: s.Origin}
 }
 
 func marshal(v any) (string, error) {
@@ -57,6 +58,9 @@ func Open(serverURL, dbPath string, handler EventHandler) (*Messenger, error) {
 			out := map[string]any{"type": e.Type, "group_id": e.GroupID}
 			if e.Message != nil {
 				out["message"] = m.toJSON(context.Background(), e.Message)
+			}
+			if e.Count > 0 {
+				out["count"] = e.Count
 			}
 			if e.Err != nil {
 				out["error"] = e.Err.Error()
@@ -83,8 +87,28 @@ func (m *Messenger) Register(username, password, deviceName string) (string, err
 	return m.c.Register(context.Background(), username, password, deviceName)
 }
 
-func (m *Messenger) Login(username, password, deviceName, seedPhrase string) error {
-	return m.c.Login(context.Background(), username, password, deviceName, seedPhrase)
+// Login adds this device to an existing account, restores history and joins
+// the account's groups. Returns {"Restored":n,"Joined":n,"Requested":n}.
+func (m *Messenger) Login(username, password, deviceName, seedPhrase string) (string, error) {
+	r, err := m.c.Login(context.Background(), username, password, deviceName, seedPhrase)
+	if err != nil {
+		return "", err
+	}
+	return marshal(r)
+}
+
+// DevicesJSON lists the account's devices.
+func (m *Messenger) DevicesJSON() (string, error) {
+	d, err := m.c.Devices(context.Background())
+	if err != nil {
+		return "", err
+	}
+	return marshal(d)
+}
+
+// RevokeDevice revokes another device and removes it from all groups.
+func (m *Messenger) RevokeDevice(deviceID string) (int, error) {
+	return m.c.RevokeDevice(context.Background(), deviceID)
 }
 
 // AccountJSON returns {"UserID","DeviceID","Username"} or "null".

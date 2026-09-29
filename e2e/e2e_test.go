@@ -80,13 +80,30 @@ type user struct {
 	events   []core.Event
 }
 
+func (u *user) eventsOf(t core.EventType) []core.Event {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var out []core.Event
+	for _, e := range u.events {
+		if e.Type == t {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// autoBackup is set by tests that exercise the continuous backup.
+var autoBackup = false
+
 func (c *cluster) open(name, db string) *user {
 	c.t.Helper()
 	u := &user{name: name, db: filepath.Join(c.dir, db)}
 	cl, err := core.Open(context.Background(), core.Options{
 		ServerURL: c.url, DBPath: u.db, HTTPClient: c.hc,
-		OnEvent: func(e core.Event) { u.mu.Lock(); u.events = append(u.events, e); u.mu.Unlock() },
-		Logf:    func(f string, a ...any) { c.t.Logf(name+": "+f, a...) },
+		OnEvent:           func(e core.Event) { u.mu.Lock(); u.events = append(u.events, e); u.mu.Unlock() },
+		Logf:              func(f string, a ...any) { c.t.Logf(name+": "+f, a...) },
+		DisableAutoBackup: !autoBackup,
+		BackupDelay:       20 * time.Millisecond,
 	})
 	if err != nil {
 		c.t.Fatal(err)
@@ -272,20 +289,19 @@ func TestMessengerEndToEnd(t *testing.T) {
 	ok(t, alice.Close())
 
 	alice2 := c.open("alice2", "alice-phone.db")
-	if err := alice2.Login(ctx, "alice", "password-alice", "alice-phone", "wrong words"); err == nil {
+	if _, err := alice2.Login(ctx, "alice", "password-alice", "alice-phone", "wrong words"); err == nil {
 		t.Fatal("bad seed phrase accepted")
 	}
 	alice2 = c.open("alice2", "alice-phone2.db")
-	ok(t, alice2.Login(ctx, "alice", "password-alice", "alice-phone", alicePhrase))
-	restored, err := alice2.RestoreHistory(ctx)
+	res, err := alice2.Login(ctx, "alice", "password-alice", "alice-phone", alicePhrase)
 	ok(t, err)
-	if restored != n {
-		t.Fatalf("restored %d of %d", restored, n)
+	if res.Restored != n || res.Joined != 1 {
+		t.Fatalf("login result %+v (backed up %d)", res, n)
 	}
 	eq(t, texts(t, alice2, gid), want...)
 	rg, _ := alice2.ResolveGroup(ctx, "friends")
-	if rg == nil || rg.Active {
-		t.Fatalf("restored group %+v", rg)
+	if rg == nil || !rg.Active {
+		t.Fatalf("group after login %+v", rg)
 	}
 	// Idempotent.
 	if again, _ := alice2.RestoreHistory(ctx); again != 0 {
@@ -296,9 +312,7 @@ func TestMessengerEndToEnd(t *testing.T) {
 		t.Fatal("no chunks in object store")
 	}
 
-	// The new device can be added to the group by a member.
-	ok(t, bob.Invite(ctx, gid, "alice"))
-	ok(t, alice2.Sync(ctx))
+	// The new device joined by itself and can write right away.
 	_, err = alice2.SendText(ctx, gid, "new phone, same me")
 	ok(t, err)
 	ok(t, bob.Sync(ctx))
@@ -315,5 +329,195 @@ func waitFor(t *testing.T, cond func() bool) {
 			t.Fatal("timeout")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// Seamless multi-device: the old device is switched off while others keep
+// writing; the new device restores the backup, joins all groups by itself
+// and gets the missing messages from another member.
+func TestSeamlessNewDevice(t *testing.T) {
+	autoBackup = true
+	defer func() { autoBackup = false }()
+	c := newCluster(t)
+	ctx := context.Background()
+	laptop, phrase := c.register("alice")
+	bob, _ := c.register("bob")
+	carol, _ := c.register("carol")
+
+	gid, err := laptop.CreateGroup(ctx, "team")
+	ok(t, err)
+	ok(t, laptop.Invite(ctx, gid, "bob", "carol"))
+	ok(t, bob.Sync(ctx))
+	ok(t, carol.Sync(ctx))
+	_, err = bob.SendText(ctx, gid, "hi all")
+	ok(t, err)
+	ok(t, laptop.Sync(ctx))
+	_, err = laptop.SendText(ctx, gid, "last words from the laptop")
+	ok(t, err)
+	// Second group, created on the laptop only.
+	gid2, err := laptop.CreateGroup(ctx, "alice & bob")
+	ok(t, err)
+	ok(t, laptop.Invite(ctx, gid2, "bob"))
+	_, err = laptop.SendText(ctx, gid2, "private hello")
+	ok(t, err)
+	ok(t, laptop.Close()) // flushes the automatic backup
+
+	// Alice has no device online now.
+	ok(t, bob.Sync(ctx))
+	ok(t, carol.Sync(ctx))
+	_, err = bob.SendText(ctx, gid, "while alice was offline")
+	ok(t, err)
+	_, err = bob.SendText(ctx, gid2, "are you there?")
+	ok(t, err)
+
+	// New phone: backup + both groups joined, no action from anybody else.
+	phone := c.open("phone", "alice-phone.db")
+	res, err := phone.Login(ctx, "alice", "password-alice", "alice-phone", phrase)
+	ok(t, err)
+	if res.Restored != 3 || res.Joined != 2 || res.Requested != 0 {
+		t.Fatalf("login %+v", res)
+	}
+	g, _ := phone.ResolveGroup(ctx, "team")
+	if g == nil || !g.Active {
+		t.Fatalf("team on phone: %+v", g)
+	}
+	phone.Settle(5 * time.Second) // history requests go out
+
+	// Bob and Carol process the external commits (legitimate: alice was in the
+	// groups) and answer the history requests.
+	for _, u := range []*user{bob, carol} {
+		ok(t, u.Sync(ctx))
+		u.Settle(10 * time.Second)
+		if ev := u.eventsOf(core.EventSecurity); len(ev) != 0 {
+			t.Fatalf("%s: unexpected security events %v", u.name, ev)
+		}
+	}
+	ok(t, phone.Sync(ctx))
+	eq(t, texts(t, phone, gid), "hi all", "last words from the laptop", "while alice was offline")
+	eq(t, texts(t, phone, gid2), "private hello", "are you there?")
+	ms, _ := phone.Messages(ctx, gid, 10)
+	if ms[2].Origin != "shared" || ms[0].Origin != "backup" {
+		t.Fatalf("origins %q %q", ms[0].Origin, ms[2].Origin)
+	}
+	got := 0
+	for _, ev := range phone.eventsOf(core.EventHistory) {
+		got += ev.Count
+	}
+	if got != 2 { // one missed message in each group
+		t.Fatalf("history events counted %d messages", got)
+	}
+
+	// The phone is a full member immediately.
+	_, err = phone.SendText(ctx, gid, "hello from the phone")
+	ok(t, err)
+	for _, u := range []*user{bob, carol} {
+		ok(t, u.Sync(ctx))
+		if m := texts(t, u, gid); m[len(m)-1] != "hello from the phone" {
+			t.Fatalf("%s: %q", u.name, m)
+		}
+	}
+
+	// Fallback path: no usable GroupInfo on the server -> JOIN_REQUEST, an
+	// online member (bob) adds the tablet automatically.
+	_, err = c.deliveryDB.Exec(ctx, `UPDATE groups SET group_info = NULL`)
+	ok(t, err)
+	tablet := c.open("tablet", "alice-tablet.db")
+	res, err = tablet.Login(ctx, "alice", "password-alice", "alice-tablet", phrase)
+	ok(t, err)
+	if res.Joined != 0 || res.Requested != 2 {
+		t.Fatalf("tablet login %+v", res)
+	}
+	ok(t, bob.Sync(ctx))
+	bob.Settle(10 * time.Second)
+	ok(t, tablet.Sync(ctx))
+	tablet.Settle(5 * time.Second)
+	ok(t, bob.Sync(ctx))
+	ok(t, phone.Sync(ctx))
+	bob.Settle(10 * time.Second)
+	phone.Settle(10 * time.Second)
+	ok(t, tablet.Sync(ctx))
+	m := texts(t, tablet, gid)
+	if len(m) != 4 || m[3] != "hello from the phone" {
+		t.Fatalf("tablet team: %q", m)
+	}
+	_, err = tablet.SendText(ctx, gid2, "tablet in the private chat")
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+	if m := texts(t, bob, gid2); m[len(m)-1] != "tablet in the private chat" {
+		t.Fatalf("bob gid2: %q", m)
+	}
+
+	// The (lost) laptop is revoked from the phone: removed from both groups
+	// and it cannot rejoin by itself.
+	var laptopID string
+	devs, err := phone.Devices(ctx)
+	ok(t, err)
+	for _, d := range devs {
+		if d.DeviceName == "alice-laptop" {
+			laptopID = d.Id
+		}
+	}
+	n, err := phone.RevokeDevice(ctx, laptopID)
+	ok(t, err)
+	if n != 2 {
+		t.Fatalf("removed from %d groups", n)
+	}
+	laptop = c.open("alice", "alice.db")
+	_ = laptop.Sync(ctx)
+	if g, _ := laptop.ResolveGroup(ctx, "team"); g == nil || g.Active {
+		t.Fatalf("revoked laptop still active: %+v", g)
+	}
+	if j, _, _ := laptop.JoinMyGroups(ctx); j != 0 {
+		t.Fatal("revoked laptop rejoined")
+	}
+}
+
+// Defence in depth: even if the server wrongly lets a stranger join through
+// an External Commit, members detect it and remove the device.
+func TestStrangerExternalJoinIsRemoved(t *testing.T) {
+	c := newCluster(t)
+	ctx := context.Background()
+	alice, _ := c.register("alice")
+	bob, _ := c.register("bob")
+	mallory, _ := c.register("mallory")
+	gid, err := alice.CreateGroup(ctx, "secret")
+	ok(t, err)
+	ok(t, alice.Invite(ctx, gid, "bob"))
+	ok(t, bob.Sync(ctx))
+
+	// Simulate a compromised server: pretend mallory's user is in the group.
+	_, err = c.deliveryDB.Exec(ctx, `INSERT INTO group_members (group_id, device_id, user_id) VALUES ($1, $2, $3)`,
+		gid, "00000000-0000-0000-0000-000000000001", mallory.Account().UserID)
+	ok(t, err)
+	joined, _, err := mallory.JoinMyGroups(ctx)
+	ok(t, err)
+	if joined != 1 {
+		t.Fatal("setup: mallory did not join")
+	}
+
+	ok(t, bob.Sync(ctx))
+	ok(t, alice.Sync(ctx))
+	bob.Settle(10 * time.Second)
+	alice.Settle(10 * time.Second)
+	if len(bob.eventsOf(core.EventSecurity)) == 0 || len(alice.eventsOf(core.EventSecurity)) == 0 {
+		t.Fatal("stranger not detected")
+	}
+	ok(t, alice.Sync(ctx))
+	ok(t, bob.Sync(ctx))
+	members, err := alice.Members(ctx, gid)
+	ok(t, err)
+	if len(members) != 2 {
+		t.Fatalf("members after removal: %+v", members)
+	}
+	_, err = alice.SendText(ctx, gid, "mallory must not read this")
+	ok(t, err)
+	_ = mallory.Sync(ctx)
+	if len(mallory.eventsOf(core.EventRemoved)) == 0 {
+		t.Fatal("mallory not removed")
+	}
+	for _, m := range texts(t, mallory, gid) {
+		if m == "mallory must not read this" {
+			t.Fatal("stranger read the message")
+		}
 	}
 }

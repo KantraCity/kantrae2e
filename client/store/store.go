@@ -69,7 +69,39 @@ CREATE TABLE IF NOT EXISTS processed_envelopes (
 CREATE TABLE IF NOT EXISTS restored_chunks (
     hash TEXT PRIMARY KEY
 );
+-- Earliest time (unix ms) this device knows a user to be in a group. History
+-- is only shared with a user's new devices from this point on.
+CREATE TABLE IF NOT EXISTS member_first_seen (
+    group_id TEXT NOT NULL,
+    user_id  TEXT NOT NULL,
+    ts       INTEGER NOT NULL,
+    PRIMARY KEY (group_id, user_id)
+);
 `
+
+// migrations upgrade existing databases; index i brings user_version to i+1.
+var migrations = []string{
+	// origin: '' received/sent directly, 'backup' restored from the history
+	// backup, 'shared' re-sent by another member (shared_by = its user id).
+	`ALTER TABLE messages ADD COLUMN origin TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE messages ADD COLUMN shared_by TEXT NOT NULL DEFAULT '';`,
+}
+
+func migrate(db *sql.DB) error {
+	var v int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return err
+	}
+	for ; v < len(migrations); v++ {
+		if _, err := db.Exec(migrations[v]); err != nil {
+			return fmt.Errorf("client db migration %d: %w", v+1, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, v+1)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 type Store struct {
 	db *sql.DB
@@ -84,6 +116,10 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1) // one writer; keeps MLS state writes strictly ordered
 	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -287,6 +323,8 @@ type Message struct {
 	Body         string // text, or JSON for media
 	SentAt       int64  // unix millis
 	Outgoing     bool
+	Origin       string // "", "backup" or "shared"
+	SharedBy     string // user id of the member who re-sent it (Origin "shared")
 }
 
 // InsertMessage stores a message; duplicates (group_id, uid) are ignored.
@@ -297,12 +335,30 @@ func (t *Tx) InsertMessage(m Message) error {
 	return err
 }
 
-// InsertRestoredMessage stores a message restored from a backup (already backed up).
-func (t *Tx) InsertRestoredMessage(m Message) error {
-	_, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, backed_up)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1) ON CONFLICT(group_id, uid) DO NOTHING`,
+// InsertRestoredMessage stores a message restored from a backup (already
+// backed up) and reports whether it was new.
+func (t *Tx) InsertRestoredMessage(m Message) (bool, error) {
+	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, backed_up, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'backup') ON CONFLICT(group_id, uid) DO NOTHING`,
 		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	return n > 0, nil
+}
+
+// InsertSharedMessage stores a message re-sent by another member; it reports
+// whether the message was new.
+func (t *Tx) InsertSharedMessage(m Message, sharedBy string) (bool, error) {
+	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shared', ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, sharedBy)
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	return n > 0, nil
 }
 
 func scanMessages(rows *sql.Rows) ([]Message, error) {
@@ -310,7 +366,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	var out []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.Seq, &m.UID, &m.GroupID, &m.SenderUser, &m.SenderDevice, &m.Kind, &m.Body, &m.SentAt, &m.Outgoing); err != nil {
+		if err := rows.Scan(&m.Seq, &m.UID, &m.GroupID, &m.SenderUser, &m.SenderDevice, &m.Kind, &m.Body, &m.SentAt, &m.Outgoing, &m.Origin, &m.SharedBy); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -318,7 +374,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	return out, rows.Err()
 }
 
-const msgCols = `seq, uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing`
+const msgCols = `seq, uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by`
 
 // Messages returns the last `limit` messages of a group, oldest first.
 func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Message, error) {
@@ -328,6 +384,24 @@ func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Mess
 		return nil, err
 	}
 	return scanMessages(rows)
+}
+
+// MessagesSince returns up to limit messages of a group with sent_at >= from,
+// oldest first.
+func (s *Store) MessagesSince(ctx context.Context, groupID string, from int64, limit int) ([]Message, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND sent_at >= ?
+		ORDER BY sent_at, seq LIMIT ?`, groupID, from, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanMessages(rows)
+}
+
+// LastMessageTime returns the newest sent_at of a group (0 if none).
+func (s *Store) LastMessageTime(ctx context.Context, groupID string) (int64, error) {
+	var ts sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT max(sent_at) FROM messages WHERE group_id=?`, groupID).Scan(&ts)
+	return ts.Int64, err
 }
 
 // NotBackedUp returns up to limit messages not yet in the history backup.
@@ -363,6 +437,32 @@ func (s *Store) Username(ctx context.Context, userID string) (string, error) {
 		return "", ErrNotFound
 	}
 	return n, err
+}
+
+// ---- membership history -----------------------------------------------------
+
+// SeenMember records that userID is in groupID since ts, keeping the earliest.
+func (t *Tx) SeenMember(groupID, userID string, ts int64) error {
+	_, err := t.tx.Exec(`INSERT INTO member_first_seen (group_id, user_id, ts) VALUES (?, ?, ?)
+		ON CONFLICT(group_id, user_id) DO UPDATE SET ts = min(ts, excluded.ts)`, groupID, userID, ts)
+	return err
+}
+
+// FirstSeen returns when userID was first known in groupID.
+func (s *Store) FirstSeen(ctx context.Context, groupID, userID string) (int64, error) {
+	var ts int64
+	err := s.db.QueryRowContext(ctx, `SELECT ts FROM member_first_seen WHERE group_id=? AND user_id=?`, groupID, userID).Scan(&ts)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return ts, err
+}
+
+// HasPendingBackup reports whether messages wait for the history backup.
+func (s *Store) HasPendingBackup(ctx context.Context) (bool, error) {
+	var ok bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM messages WHERE backed_up=0)`).Scan(&ok)
+	return ok, err
 }
 
 // ---- delivery de-duplication ------------------------------------------------

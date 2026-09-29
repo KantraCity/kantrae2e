@@ -48,7 +48,7 @@ unsafe fn two_members() {
     ok(mls_create_group(alice, gid.as_ptr(), gid.len(), &mut e), e);
     let (mut commit, mut welcome, mut e) = (empty(), empty(), empty());
     ok(
-        mls_create_commit(alice, gid.as_ptr(), gid.len(), kps.as_ptr(), kps.len(), null_mut(), 0, &mut commit, &mut welcome, &mut e),
+        mls_create_commit(alice, gid.as_ptr(), gid.len(), kps.as_ptr(), kps.len(), null_mut(), 0, &mut commit, &mut welcome, null_mut(), &mut e),
         e,
     );
     take(commit);
@@ -66,7 +66,7 @@ unsafe fn two_members() {
     let ct = take(ct);
     assert!(!ct.windows(pt.len()).any(|w| w == pt));
 
-    let mut p = MlsProcessed { kind: 0, data: empty(), sender: empty(), epoch: 0, removed: 0 };
+    let mut p = MlsProcessed { kind: 0, data: empty(), sender: empty(), epoch: 0, removed: 0, external: 0 };
     let mut e = empty();
     ok(mls_process_message(bob, gid.as_ptr(), gid.len(), ct.as_ptr(), ct.len(), &mut p, &mut e), e);
     assert_eq!(p.kind, MLS_KIND_APPLICATION);

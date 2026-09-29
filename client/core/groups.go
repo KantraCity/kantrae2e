@@ -23,12 +23,18 @@ import (
 type payload struct {
 	V     int        `json:"v"`
 	ID    string     `json:"id"`
-	Type  string     `json:"t"` // "text", "media", "meta"
+	Type  string     `json:"t"` // "text", "media", "meta", "history_request", "history_share"
 	Body  string     `json:"body,omitempty"`
 	TS    int64      `json:"ts"`
 	Media *MediaRef  `json:"media,omitempty"`
 	Meta  *groupMeta `json:"meta,omitempty"`
+	// History sharing (see multidevice.go).
+	HistReq   *historyRequest `json:"hreq,omitempty"`
+	HistShare *historyShare   `json:"hshare,omitempty"`
 }
+
+// storable reports whether a payload type is a user-visible message.
+func storable(t string) bool { return t == "text" || t == "media" }
 
 type groupMeta struct {
 	Name string `json:"name"`
@@ -55,14 +61,24 @@ func (c *Client) CreateGroup(ctx context.Context, name string) (string, error) {
 		return "", err
 	}
 	gid := uuid.NewString()
-	if _, err := c.del.CreateGroup(ctx, &deliveryv1.CreateGroupRequest{GroupId: gid}); err != nil {
-		return "", err
-	}
 	if err := c.m.CreateGroup([]byte(gid)); err != nil {
 		return "", err
 	}
-	err := c.persistLocked(ctx, func(tx *store.Tx) error {
-		return tx.UpsertGroup(store.Group{ID: gid, Name: name, Active: true, CreatedAt: time.Now().Unix()})
+	gi, err := c.m.GroupInfoMessage([]byte(gid))
+	if err == nil {
+		_, err = c.del.CreateGroup(ctx, &deliveryv1.CreateGroupRequest{GroupId: gid, GroupInfo: gi})
+	}
+	if err != nil {
+		_ = c.m.ForgetGroup([]byte(gid))
+		_ = c.persistLocked(ctx, func(tx *store.Tx) error { return tx.DeleteMLSGroup([]byte(gid)) })
+		return "", err
+	}
+	now := time.Now()
+	err = c.persistLocked(ctx, func(tx *store.Tx) error {
+		if err := tx.SeenMember(gid, c.acct.UserID, now.UnixMilli()); err != nil {
+			return err
+		}
+		return tx.UpsertGroup(store.Group{ID: gid, Name: name, Active: true, CreatedAt: now.Unix()})
 	})
 	return gid, err
 }
@@ -112,7 +128,7 @@ func (c *Client) Invite(ctx context.Context, groupID string, usernames ...string
 		inGroup[string(id)] = true
 	}
 	var kps [][]byte
-	var devices []string
+	var devices, users []string
 	for _, u := range usernames {
 		uid, err := c.resolveUser(ctx, u)
 		if err != nil {
@@ -136,12 +152,13 @@ func (c *Client) Invite(ctx context.Context, groupID string, usernames ...string
 			}
 			kps = append(kps, dk.KeyPackage)
 			devices = append(devices, dk.DeviceId)
+			users = append(users, uid)
 		}
 	}
 	if len(kps) == 0 {
 		return fmt.Errorf("all devices of %s are already members", strings.Join(usernames, ", "))
 	}
-	if err := c.commitLocked(ctx, groupID, kps, nil, devices, nil); err != nil {
+	if err := c.commitLocked(ctx, groupID, commitSpec{adds: kps, addedDevices: devices, addedUsers: users}); err != nil {
 		return err
 	}
 	// Tell the new members the group's name.
@@ -184,16 +201,34 @@ func (c *Client) Remove(ctx context.Context, groupID, username string) error {
 	if len(ids) == 0 {
 		return fmt.Errorf("%s is not a member", username)
 	}
-	return c.commitLocked(ctx, groupID, nil, ids, nil, devices)
+	return c.commitLocked(ctx, groupID, commitSpec{removeIDs: ids, removedDevices: devices})
+}
+
+// commitSpec describes the membership change of a Commit.
+type commitSpec struct {
+	adds           [][]byte // KeyPackages
+	addedDevices   []string // same order as adds
+	addedUsers     []string // same order as adds
+	removeIDs      [][]byte // credential identities
+	removedDevices []string
+	// still, if set, is re-checked before every attempt; false aborts
+	// silently (e.g. someone else already added the device).
+	still func() (bool, error)
 }
 
 // commitLocked creates a Commit, gets it accepted by the delivery service
 // (which enforces epoch order) and only then applies it locally. On an epoch
 // conflict the pending commit is discarded, missed commits are processed and
 // the commit is rebuilt on top of the new epoch.
-func (c *Client) commitLocked(ctx context.Context, groupID string, kps, removeIDs [][]byte, added, removed []string) error {
+func (c *Client) commitLocked(ctx context.Context, groupID string, spec commitSpec) error {
 	gid := []byte(groupID)
 	for attempt := 0; ; attempt++ {
+		if spec.still != nil {
+			ok, err := spec.still()
+			if err != nil || !ok {
+				return err
+			}
+		}
 		epoch, _, err := c.m.GroupInfo(gid)
 		if errors.Is(err, mls.ErrNotFound) {
 			return ErrNotMember
@@ -201,13 +236,13 @@ func (c *Client) commitLocked(ctx context.Context, groupID string, kps, removeID
 		if err != nil {
 			return err
 		}
-		commit, welcome, err := c.m.CreateCommit(gid, kps, removeIDs)
+		commit, welcome, groupInfo, err := c.m.CreateCommit(gid, spec.adds, spec.removeIDs)
 		if err != nil {
 			return err
 		}
 		_, err = c.del.SendCommit(ctx, &deliveryv1.SendCommitRequest{
-			GroupId: groupID, Epoch: epoch, Commit: commit, Welcome: welcome,
-			AddedDeviceIds: added, RemovedDeviceIds: removed,
+			GroupId: groupID, Epoch: epoch, Commit: commit, Welcome: welcome, GroupInfo: groupInfo,
+			AddedDeviceIds: spec.addedDevices, AddedUserIds: spec.addedUsers, RemovedDeviceIds: spec.removedDevices,
 		})
 		if err != nil {
 			if cerr := c.m.ClearPendingCommit(gid); cerr != nil {
@@ -225,7 +260,13 @@ func (c *Client) commitLocked(ctx context.Context, groupID string, kps, removeID
 		if err := c.m.ApplyPendingCommit(gid); err != nil {
 			return err
 		}
+		now := time.Now().UnixMilli()
 		return c.persistLocked(ctx, func(tx *store.Tx) error {
+			for _, u := range spec.addedUsers {
+				if err := tx.SeenMember(groupID, u, now); err != nil {
+					return err
+				}
+			}
 			return tx.UpsertGroup(store.Group{ID: groupID, Epoch: epoch + 1, Active: true, CreatedAt: time.Now().Unix()})
 		})
 	}
@@ -284,16 +325,14 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 		break
 	}
 	msg := c.localMessage(groupID, p)
-	if msg == nil {
-		return nil, nil
+	if !storable(p.Type) {
+		return msg, nil
 	}
-	err = c.st.Update(ctx, func(tx *store.Tx) error {
-		if p.Type == "meta" {
-			return nil
-		}
-		return tx.InsertMessage(*msg)
-	})
-	return msg, err
+	if err := c.st.Update(ctx, func(tx *store.Tx) error { return tx.InsertMessage(*msg) }); err != nil {
+		return nil, err
+	}
+	c.scheduleBackup()
+	return msg, nil
 }
 
 // localMessage converts an outgoing payload to a stored message.

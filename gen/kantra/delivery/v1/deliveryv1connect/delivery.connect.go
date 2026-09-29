@@ -53,6 +53,18 @@ const (
 	// DeliveryServiceGetGroupProcedure is the fully-qualified name of the DeliveryService's GetGroup
 	// RPC.
 	DeliveryServiceGetGroupProcedure = "/kantra.delivery.v1.DeliveryService/GetGroup"
+	// DeliveryServiceListMyGroupsProcedure is the fully-qualified name of the DeliveryService's
+	// ListMyGroups RPC.
+	DeliveryServiceListMyGroupsProcedure = "/kantra.delivery.v1.DeliveryService/ListMyGroups"
+	// DeliveryServiceGetGroupInfoProcedure is the fully-qualified name of the DeliveryService's
+	// GetGroupInfo RPC.
+	DeliveryServiceGetGroupInfoProcedure = "/kantra.delivery.v1.DeliveryService/GetGroupInfo"
+	// DeliveryServiceExternalJoinProcedure is the fully-qualified name of the DeliveryService's
+	// ExternalJoin RPC.
+	DeliveryServiceExternalJoinProcedure = "/kantra.delivery.v1.DeliveryService/ExternalJoin"
+	// DeliveryServiceRequestJoinProcedure is the fully-qualified name of the DeliveryService's
+	// RequestJoin RPC.
+	DeliveryServiceRequestJoinProcedure = "/kantra.delivery.v1.DeliveryService/RequestJoin"
 )
 
 // DeliveryServiceClient is a client for the kantra.delivery.v1.DeliveryService service.
@@ -72,6 +84,17 @@ type DeliveryServiceClient interface {
 	Ack(context.Context, *v1.AckRequest) (*v1.AckResponse, error)
 	// Group metadata as seen by the server.
 	GetGroup(context.Context, *v1.GetGroupRequest) (*v1.GetGroupResponse, error)
+	// --- Multi-device ---
+	// Groups in which the caller's user has at least one device.
+	ListMyGroups(context.Context, *v1.ListMyGroupsRequest) (*v1.ListMyGroupsResponse, error)
+	// Latest GroupInfo (allows External Commit). Only for users in the group.
+	GetGroupInfo(context.Context, *v1.GetGroupInfoRequest) (*v1.GetGroupInfoResponse, error)
+	// A new device of a user already in the group joins by itself via an
+	// MLS External Commit. Same epoch rule as SendCommit (CodeAborted on conflict).
+	ExternalJoin(context.Context, *v1.ExternalJoinRequest) (*v1.ExternalJoinResponse, error)
+	// Fallback: asks online members to add this device (sends its KeyPackage
+	// to the group as a JOIN_REQUEST envelope).
+	RequestJoin(context.Context, *v1.RequestJoinRequest) (*v1.RequestJoinResponse, error)
 }
 
 // NewDeliveryServiceClient constructs a client for the kantra.delivery.v1.DeliveryService service.
@@ -127,6 +150,30 @@ func NewDeliveryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(deliveryServiceMethods.ByName("GetGroup")),
 			connect.WithClientOptions(opts...),
 		),
+		listMyGroups: connect.NewClient[v1.ListMyGroupsRequest, v1.ListMyGroupsResponse](
+			httpClient,
+			baseURL+DeliveryServiceListMyGroupsProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("ListMyGroups")),
+			connect.WithClientOptions(opts...),
+		),
+		getGroupInfo: connect.NewClient[v1.GetGroupInfoRequest, v1.GetGroupInfoResponse](
+			httpClient,
+			baseURL+DeliveryServiceGetGroupInfoProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("GetGroupInfo")),
+			connect.WithClientOptions(opts...),
+		),
+		externalJoin: connect.NewClient[v1.ExternalJoinRequest, v1.ExternalJoinResponse](
+			httpClient,
+			baseURL+DeliveryServiceExternalJoinProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("ExternalJoin")),
+			connect.WithClientOptions(opts...),
+		),
+		requestJoin: connect.NewClient[v1.RequestJoinRequest, v1.RequestJoinResponse](
+			httpClient,
+			baseURL+DeliveryServiceRequestJoinProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("RequestJoin")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -139,6 +186,10 @@ type deliveryServiceClient struct {
 	fetchPending    *connect.Client[v1.FetchPendingRequest, v1.FetchPendingResponse]
 	ack             *connect.Client[v1.AckRequest, v1.AckResponse]
 	getGroup        *connect.Client[v1.GetGroupRequest, v1.GetGroupResponse]
+	listMyGroups    *connect.Client[v1.ListMyGroupsRequest, v1.ListMyGroupsResponse]
+	getGroupInfo    *connect.Client[v1.GetGroupInfoRequest, v1.GetGroupInfoResponse]
+	externalJoin    *connect.Client[v1.ExternalJoinRequest, v1.ExternalJoinResponse]
+	requestJoin     *connect.Client[v1.RequestJoinRequest, v1.RequestJoinResponse]
 }
 
 // CreateGroup calls kantra.delivery.v1.DeliveryService.CreateGroup.
@@ -204,6 +255,42 @@ func (c *deliveryServiceClient) GetGroup(ctx context.Context, req *v1.GetGroupRe
 	return nil, err
 }
 
+// ListMyGroups calls kantra.delivery.v1.DeliveryService.ListMyGroups.
+func (c *deliveryServiceClient) ListMyGroups(ctx context.Context, req *v1.ListMyGroupsRequest) (*v1.ListMyGroupsResponse, error) {
+	response, err := c.listMyGroups.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// GetGroupInfo calls kantra.delivery.v1.DeliveryService.GetGroupInfo.
+func (c *deliveryServiceClient) GetGroupInfo(ctx context.Context, req *v1.GetGroupInfoRequest) (*v1.GetGroupInfoResponse, error) {
+	response, err := c.getGroupInfo.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ExternalJoin calls kantra.delivery.v1.DeliveryService.ExternalJoin.
+func (c *deliveryServiceClient) ExternalJoin(ctx context.Context, req *v1.ExternalJoinRequest) (*v1.ExternalJoinResponse, error) {
+	response, err := c.externalJoin.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// RequestJoin calls kantra.delivery.v1.DeliveryService.RequestJoin.
+func (c *deliveryServiceClient) RequestJoin(ctx context.Context, req *v1.RequestJoinRequest) (*v1.RequestJoinResponse, error) {
+	response, err := c.requestJoin.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // DeliveryServiceHandler is an implementation of the kantra.delivery.v1.DeliveryService service.
 type DeliveryServiceHandler interface {
 	// Registers a new group at epoch 0 with the caller's device as only member.
@@ -221,6 +308,17 @@ type DeliveryServiceHandler interface {
 	Ack(context.Context, *v1.AckRequest) (*v1.AckResponse, error)
 	// Group metadata as seen by the server.
 	GetGroup(context.Context, *v1.GetGroupRequest) (*v1.GetGroupResponse, error)
+	// --- Multi-device ---
+	// Groups in which the caller's user has at least one device.
+	ListMyGroups(context.Context, *v1.ListMyGroupsRequest) (*v1.ListMyGroupsResponse, error)
+	// Latest GroupInfo (allows External Commit). Only for users in the group.
+	GetGroupInfo(context.Context, *v1.GetGroupInfoRequest) (*v1.GetGroupInfoResponse, error)
+	// A new device of a user already in the group joins by itself via an
+	// MLS External Commit. Same epoch rule as SendCommit (CodeAborted on conflict).
+	ExternalJoin(context.Context, *v1.ExternalJoinRequest) (*v1.ExternalJoinResponse, error)
+	// Fallback: asks online members to add this device (sends its KeyPackage
+	// to the group as a JOIN_REQUEST envelope).
+	RequestJoin(context.Context, *v1.RequestJoinRequest) (*v1.RequestJoinResponse, error)
 }
 
 // NewDeliveryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -272,6 +370,30 @@ func NewDeliveryServiceHandler(svc DeliveryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(deliveryServiceMethods.ByName("GetGroup")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deliveryServiceListMyGroupsHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceListMyGroupsProcedure,
+		svc.ListMyGroups,
+		connect.WithSchema(deliveryServiceMethods.ByName("ListMyGroups")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deliveryServiceGetGroupInfoHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceGetGroupInfoProcedure,
+		svc.GetGroupInfo,
+		connect.WithSchema(deliveryServiceMethods.ByName("GetGroupInfo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deliveryServiceExternalJoinHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceExternalJoinProcedure,
+		svc.ExternalJoin,
+		connect.WithSchema(deliveryServiceMethods.ByName("ExternalJoin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deliveryServiceRequestJoinHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceRequestJoinProcedure,
+		svc.RequestJoin,
+		connect.WithSchema(deliveryServiceMethods.ByName("RequestJoin")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.delivery.v1.DeliveryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeliveryServiceCreateGroupProcedure:
@@ -288,6 +410,14 @@ func NewDeliveryServiceHandler(svc DeliveryServiceHandler, opts ...connect.Handl
 			deliveryServiceAckHandler.ServeHTTP(w, r)
 		case DeliveryServiceGetGroupProcedure:
 			deliveryServiceGetGroupHandler.ServeHTTP(w, r)
+		case DeliveryServiceListMyGroupsProcedure:
+			deliveryServiceListMyGroupsHandler.ServeHTTP(w, r)
+		case DeliveryServiceGetGroupInfoProcedure:
+			deliveryServiceGetGroupInfoHandler.ServeHTTP(w, r)
+		case DeliveryServiceExternalJoinProcedure:
+			deliveryServiceExternalJoinHandler.ServeHTTP(w, r)
+		case DeliveryServiceRequestJoinProcedure:
+			deliveryServiceRequestJoinHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -323,4 +453,20 @@ func (UnimplementedDeliveryServiceHandler) Ack(context.Context, *v1.AckRequest) 
 
 func (UnimplementedDeliveryServiceHandler) GetGroup(context.Context, *v1.GetGroupRequest) (*v1.GetGroupResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.GetGroup is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) ListMyGroups(context.Context, *v1.ListMyGroupsRequest) (*v1.ListMyGroupsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.ListMyGroups is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) GetGroupInfo(context.Context, *v1.GetGroupInfoRequest) (*v1.GetGroupInfoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.GetGroupInfo is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) ExternalJoin(context.Context, *v1.ExternalJoinRequest) (*v1.ExternalJoinResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.ExternalJoin is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) RequestJoin(context.Context, *v1.RequestJoinRequest) (*v1.RequestJoinResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.RequestJoin is not implemented"))
 }

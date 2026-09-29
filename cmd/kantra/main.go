@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -29,9 +30,12 @@ Usage: kantra [flags] <command> [args]
 
 Account:
   register <username> [device-name]   create account + this device, prints seed phrase
-  login <username> [device-name]      add this client as a new device (asks for seed phrase)
+  login <username> [device-name]      add this client as a new device: restores history,
+                                      joins all your groups (asks for the seed phrase)
   relogin                             renew the session of this device
   whoami                              show account
+  devices                             list the account's devices
+  revoke <device-id>                  revoke a device (e.g. lost phone) and remove it from groups
 
 Groups:
   create <name>                       create a group
@@ -49,7 +53,7 @@ Messages:
   listen                              stay online and print incoming messages
   chat <group>                        interactive chat (lines from stdin)
 
-History backup:
+History backup (automatic; manual commands for completeness):
   backup                              upload new messages (encrypted with the seed key)
   restore                             restore history from the backup
 
@@ -147,6 +151,9 @@ type app struct {
 	live bool
 	// chat mode: only print messages of this group
 	focus string
+	// history answers received (login waits for them)
+	histMu      sync.Mutex
+	histAnswers int
 }
 
 func need(args []string, n int, what string) error {
@@ -208,13 +215,68 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := a.c.Login(ctx, args[0], pw, deviceName(args), phrase); err != nil {
+		res, err := a.c.Login(ctx, args[0], pw, deviceName(args), phrase)
+		if res != nil {
+			fmt.Fprintf(a.out, "Logged in as a new device: %d messages restored from the backup, joined %d groups",
+				res.Restored, res.Joined)
+			if res.Requested > 0 {
+				fmt.Fprintf(a.out, ", asked members to add this device to %d more", res.Requested)
+			}
+			fmt.Fprintln(a.out, ".")
+		}
+		if err != nil {
 			return err
 		}
-		fmt.Fprintln(a.out, "Logged in as a new device. Ask a group member to invite you again to rejoin groups.")
-		if phrase != "" {
-			fmt.Fprintln(a.out, "Run `kantra restore` to restore your history.")
+		if phrase == "" {
+			fmt.Fprintln(a.out, "No seed phrase: older history is only filled in by other members (history sharing).")
 		}
+		// Wait (briefly) for other members to send what the backup misses.
+		if res != nil && res.Joined > 0 {
+			a.c.Settle(5 * time.Second)
+			deadline := time.Now().Add(8 * time.Second)
+			for time.Now().Before(deadline) {
+				if err := a.c.Sync(ctx); err != nil {
+					fmt.Fprintln(os.Stderr, "warning: sync failed:", err)
+					break
+				}
+				a.histMu.Lock()
+				done := a.histAnswers >= res.Joined
+				a.histMu.Unlock()
+				if done {
+					break
+				}
+				time.Sleep(400 * time.Millisecond)
+			}
+		}
+		return nil
+
+	case "devices":
+		devs, err := a.c.Devices(ctx)
+		if err != nil {
+			return err
+		}
+		me := a.c.Account()
+		for _, d := range devs {
+			state := ""
+			switch {
+			case d.RevokedAt != 0:
+				state = " (revoked)"
+			case me != nil && d.Id == me.DeviceID:
+				state = " (this device)"
+			}
+			fmt.Fprintf(a.out, "%s  %-20s %s%s\n", d.Id, d.DeviceName, time.Unix(d.CreatedAt, 0).Format("2006-01-02"), state)
+		}
+		return nil
+
+	case "revoke":
+		if err := need(args, 1, "revoke <device-id>"); err != nil {
+			return err
+		}
+		n, err := a.c.RevokeDevice(ctx, args[0])
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "device revoked and removed from %d groups\n", n)
 		return nil
 
 	case "relogin":
@@ -453,7 +515,16 @@ func ignoreCancel(err error) error {
 	return err
 }
 
+// group resolves a group reference, syncing once if it is not known yet
+// (e.g. we were just invited).
 func (a *app) group(ctx context.Context, ref string) (*store.Group, error) {
+	g, err := a.c.ResolveGroup(ctx, ref)
+	if err == nil {
+		return g, nil
+	}
+	if serr := a.c.Sync(ctx); serr != nil {
+		return nil, err
+	}
 	return a.c.ResolveGroup(ctx, ref)
 }
 
@@ -464,6 +535,9 @@ func (a *app) print(ctx context.Context, m *store.Message) {
 	}
 	ts := time.UnixMilli(m.SentAt).Format("01-02 15:04")
 	body := m.Body
+	if m.Origin == "shared" {
+		who += "↺" // re-sent by another member, not received directly
+	}
 	if ref, err := core.ParseMedia(m); err == nil {
 		body = fmt.Sprintf("[file %s, %d bytes — kantra download <group> %d]", ref.Name, ref.Size, m.Seq)
 	}
@@ -471,6 +545,14 @@ func (a *app) print(ctx context.Context, m *store.Message) {
 }
 
 func (a *app) onEvent(e core.Event) {
+	if e.Type == core.EventHistory {
+		a.histMu.Lock()
+		a.histAnswers++
+		a.histMu.Unlock()
+		if e.Count > 0 {
+			fmt.Fprintf(os.Stderr, "* %d missed messages received from another member\n", e.Count)
+		}
+	}
 	if !a.live {
 		return
 	}
@@ -498,6 +580,8 @@ func (a *app) onEvent(e core.Event) {
 		fmt.Fprintf(os.Stderr, "* joined group %s\n", e.GroupID)
 	case core.EventRemoved:
 		fmt.Fprintf(os.Stderr, "* removed from group %s\n", e.GroupID)
+	case core.EventSecurity:
+		fmt.Fprintf(os.Stderr, "* SECURITY in %s: %v\n", e.GroupID, e.Err)
 	case core.EventDisconnected:
 		fmt.Fprintf(os.Stderr, "* disconnected: %v\n", e.Err)
 	}

@@ -117,8 +117,8 @@ func TestTwoMembersInProcess(t *testing.T) {
 	if err := alice.c.CreateGroup(gid); err != nil {
 		t.Fatal(err)
 	}
-	commit, welcome, err := alice.c.CreateCommit(gid, [][]byte{kp}, nil)
-	if err != nil || len(commit) == 0 || len(welcome) == 0 {
+	commit, welcome, gi, err := alice.c.CreateCommit(gid, [][]byte{kp}, nil)
+	if err != nil || len(commit) == 0 || len(welcome) == 0 || len(gi) == 0 {
 		t.Fatalf("commit: %v", err)
 	}
 	if _, ep, g, _ := Inspect(commit); ep != 0 || !bytes.Equal(g, gid) {
@@ -160,7 +160,7 @@ func TestRestartKeepsSession(t *testing.T) {
 	bob.restart(t) // key package secrets must survive
 
 	ok(t, alice.c.CreateGroup(gid))
-	_, welcome, err := alice.c.CreateCommit(gid, [][]byte{kp}, nil)
+	_, welcome, _, err := alice.c.CreateCommit(gid, [][]byte{kp}, nil)
 	ok(t, err)
 	ok(t, alice.c.ApplyPendingCommit(gid))
 	alice.persist(t)
@@ -191,13 +191,13 @@ func TestRemoveMember(t *testing.T) {
 	gid := []byte("g3")
 	ok(t, a.c.CreateGroup(gid))
 	kps := [][]byte{must(b.c.GenerateKeyPackage()), must(c.c.GenerateKeyPackage())}
-	_, welcome, err := a.c.CreateCommit(gid, kps, nil)
+	_, welcome, _, err := a.c.CreateCommit(gid, kps, nil)
 	ok(t, err)
 	ok(t, a.c.ApplyPendingCommit(gid))
 	must(b.c.JoinGroup(welcome))
 	must(c.c.JoinGroup(welcome))
 
-	commit, _, err := a.c.CreateCommit(gid, nil, [][]byte{[]byte("c")})
+	commit, _, _, err := a.c.CreateCommit(gid, nil, [][]byte{[]byte("c")})
 	ok(t, err)
 	ok(t, a.c.ApplyPendingCommit(gid))
 	if p := must(b.c.Process(gid, commit)); p.Kind != KindCommit || p.Removed || p.Epoch != 2 {
@@ -221,7 +221,7 @@ func TestClearPendingCommit(t *testing.T) {
 	a, b := newDevice(t, "a"), newDevice(t, "b")
 	gid := []byte("g4")
 	ok(t, a.c.CreateGroup(gid))
-	_, _, err := a.c.CreateCommit(gid, [][]byte{must(b.c.GenerateKeyPackage())}, nil)
+	_, _, _, err := a.c.CreateCommit(gid, [][]byte{must(b.c.GenerateKeyPackage())}, nil)
 	ok(t, err)
 	ok(t, a.c.ClearPendingCommit(gid))
 	if ep, members, _ := a.c.GroupInfo(gid); ep != 0 || len(members) != 1 {
@@ -237,5 +237,50 @@ func TestKeyPackageIdentity(t *testing.T) {
 	}
 	if _, err := KeyPackageIdentity([]byte("junk")); err == nil {
 		t.Fatal("junk accepted")
+	}
+}
+
+// A second device of Alice joins by itself via External Commit; existing
+// members process it and everyone keeps talking.
+func TestExternalJoin(t *testing.T) {
+	a, b := newDevice(t, "alice:laptop"), newDevice(t, "bob:phone")
+	gid := []byte("g5")
+	ok(t, a.c.CreateGroup(gid))
+	_, welcome, gi, err := a.c.CreateCommit(gid, [][]byte{must(b.c.GenerateKeyPackage())}, nil)
+	ok(t, err)
+	ok(t, a.c.ApplyPendingCommit(gid))
+	must(b.c.JoinGroup(welcome))
+
+	a2 := newDevice(t, "alice:tablet")
+	joined, commit, gi2, err := a2.c.ExternalJoin(gi)
+	ok(t, err)
+	if !bytes.Equal(joined, gid) || len(gi2) == 0 {
+		t.Fatalf("joined %q", joined)
+	}
+	for _, d := range []*device{a, b} {
+		p := must(d.c.Process(gid, commit))
+		if p.Kind != KindCommit || !p.External || string(p.Sender) != "alice:tablet" || p.Epoch != 2 {
+			t.Fatalf("%s: %+v", d.id, p)
+		}
+	}
+	ct := must(a2.c.Encrypt(gid, []byte("from tablet")))
+	for _, d := range []*device{a, b} {
+		if p := must(d.c.Process(gid, ct)); string(p.Plaintext) != "from tablet" {
+			t.Fatal("cannot read tablet")
+		}
+	}
+	// A GroupInfo can only be used once: epoch has moved on.
+	a3 := newDevice(t, "alice:tv")
+	_, stale, _, err := a3.c.ExternalJoin(gi)
+	ok(t, err) // builds locally, but the commit is for an old epoch
+	if _, err := a.c.Process(gid, stale); err == nil {
+		t.Fatal("stale external commit accepted")
+	}
+	// A fresh GroupInfo from any member works.
+	fresh := must(b.c.GroupInfoMessage(gid))
+	_, c3, _, err := a3.c.ExternalJoin(fresh)
+	ok(t, err)
+	if p := must(a.c.Process(gid, c3)); !p.External || p.Epoch != 3 {
+		t.Fatalf("%+v", p)
 	}
 }

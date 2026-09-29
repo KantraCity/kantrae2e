@@ -28,6 +28,8 @@ const (
 	MessageType_MESSAGE_TYPE_COMMIT      MessageType = 1
 	MessageType_MESSAGE_TYPE_APPLICATION MessageType = 2
 	MessageType_MESSAGE_TYPE_WELCOME     MessageType = 3
+	// payload: KeyPackage of the requesting device (plaintext routing data).
+	MessageType_MESSAGE_TYPE_JOIN_REQUEST MessageType = 4
 )
 
 // Enum value maps for MessageType.
@@ -37,12 +39,14 @@ var (
 		1: "MESSAGE_TYPE_COMMIT",
 		2: "MESSAGE_TYPE_APPLICATION",
 		3: "MESSAGE_TYPE_WELCOME",
+		4: "MESSAGE_TYPE_JOIN_REQUEST",
 	}
 	MessageType_value = map[string]int32{
-		"MESSAGE_TYPE_UNSPECIFIED": 0,
-		"MESSAGE_TYPE_COMMIT":      1,
-		"MESSAGE_TYPE_APPLICATION": 2,
-		"MESSAGE_TYPE_WELCOME":     3,
+		"MESSAGE_TYPE_UNSPECIFIED":  0,
+		"MESSAGE_TYPE_COMMIT":       1,
+		"MESSAGE_TYPE_APPLICATION":  2,
+		"MESSAGE_TYPE_WELCOME":      3,
+		"MESSAGE_TYPE_JOIN_REQUEST": 4,
 	}
 )
 
@@ -83,6 +87,7 @@ type Envelope struct {
 	Payload        []byte                 `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
 	SenderDeviceId string                 `protobuf:"bytes,6,opt,name=sender_device_id,json=senderDeviceId,proto3" json:"sender_device_id,omitempty"`
 	CreatedAt      int64                  `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	SenderUserId   string                 `protobuf:"bytes,8,opt,name=sender_user_id,json=senderUserId,proto3" json:"sender_user_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -164,6 +169,13 @@ func (x *Envelope) GetCreatedAt() int64 {
 		return x.CreatedAt
 	}
 	return 0
+}
+
+func (x *Envelope) GetSenderUserId() string {
+	if x != nil {
+		return x.SenderUserId
+	}
+	return ""
 }
 
 // Frames sent by the client over the WebSocket.
@@ -278,8 +290,10 @@ func (x *Ack) GetIds() []int64 {
 }
 
 type CreateGroupRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	GroupId string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// GroupInfo of epoch 0.
+	GroupInfo     []byte `protobuf:"bytes,2,opt,name=group_info,json=groupInfo,proto3" json:"group_info,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -319,6 +333,13 @@ func (x *CreateGroupRequest) GetGroupId() string {
 		return x.GroupId
 	}
 	return ""
+}
+
+func (x *CreateGroupRequest) GetGroupInfo() []byte {
+	if x != nil {
+		return x.GroupInfo
+	}
+	return nil
 }
 
 type CreateGroupResponse struct {
@@ -368,8 +389,12 @@ type SendCommitRequest struct {
 	// Routing metadata (not content): devices added / removed by this commit.
 	AddedDeviceIds   []string `protobuf:"bytes,5,rep,name=added_device_ids,json=addedDeviceIds,proto3" json:"added_device_ids,omitempty"`
 	RemovedDeviceIds []string `protobuf:"bytes,6,rep,name=removed_device_ids,json=removedDeviceIds,proto3" json:"removed_device_ids,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// User ids of added_device_ids (same order).
+	AddedUserIds []string `protobuf:"bytes,7,rep,name=added_user_ids,json=addedUserIds,proto3" json:"added_user_ids,omitempty"`
+	// GroupInfo of the new epoch.
+	GroupInfo     []byte `protobuf:"bytes,8,opt,name=group_info,json=groupInfo,proto3" json:"group_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendCommitRequest) Reset() {
@@ -440,6 +465,20 @@ func (x *SendCommitRequest) GetAddedDeviceIds() []string {
 func (x *SendCommitRequest) GetRemovedDeviceIds() []string {
 	if x != nil {
 		return x.RemovedDeviceIds
+	}
+	return nil
+}
+
+func (x *SendCommitRequest) GetAddedUserIds() []string {
+	if x != nil {
+		return x.AddedUserIds
+	}
+	return nil
+}
+
+func (x *SendCommitRequest) GetGroupInfo() []byte {
+	if x != nil {
+		return x.GroupInfo
 	}
 	return nil
 }
@@ -952,11 +991,450 @@ func (x *GetGroupResponse) GetMemberDeviceIds() []string {
 	return nil
 }
 
+type ListMyGroupsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyGroupsRequest) Reset() {
+	*x = ListMyGroupsRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyGroupsRequest) ProtoMessage() {}
+
+func (x *ListMyGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyGroupsRequest.ProtoReflect.Descriptor instead.
+func (*ListMyGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{17}
+}
+
+type MyGroup struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	GroupId      string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	CurrentEpoch uint64                 `protobuf:"varint,2,opt,name=current_epoch,json=currentEpoch,proto3" json:"current_epoch,omitempty"`
+	// Whether the calling device itself is a member.
+	DeviceIsMember bool `protobuf:"varint,3,opt,name=device_is_member,json=deviceIsMember,proto3" json:"device_is_member,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MyGroup) Reset() {
+	*x = MyGroup{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MyGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MyGroup) ProtoMessage() {}
+
+func (x *MyGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MyGroup.ProtoReflect.Descriptor instead.
+func (*MyGroup) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *MyGroup) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *MyGroup) GetCurrentEpoch() uint64 {
+	if x != nil {
+		return x.CurrentEpoch
+	}
+	return 0
+}
+
+func (x *MyGroup) GetDeviceIsMember() bool {
+	if x != nil {
+		return x.DeviceIsMember
+	}
+	return false
+}
+
+type ListMyGroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        []*MyGroup             `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyGroupsResponse) Reset() {
+	*x = ListMyGroupsResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyGroupsResponse) ProtoMessage() {}
+
+func (x *ListMyGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyGroupsResponse.ProtoReflect.Descriptor instead.
+func (*ListMyGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListMyGroupsResponse) GetGroups() []*MyGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type GetGroupInfoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGroupInfoRequest) Reset() {
+	*x = GetGroupInfoRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGroupInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGroupInfoRequest) ProtoMessage() {}
+
+func (x *GetGroupInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGroupInfoRequest.ProtoReflect.Descriptor instead.
+func (*GetGroupInfoRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetGroupInfoRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+type GetGroupInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupInfo     []byte                 `protobuf:"bytes,1,opt,name=group_info,json=groupInfo,proto3" json:"group_info,omitempty"`
+	Epoch         uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGroupInfoResponse) Reset() {
+	*x = GetGroupInfoResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGroupInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGroupInfoResponse) ProtoMessage() {}
+
+func (x *GetGroupInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGroupInfoResponse.ProtoReflect.Descriptor instead.
+func (*GetGroupInfoResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GetGroupInfoResponse) GetGroupInfo() []byte {
+	if x != nil {
+		return x.GroupInfo
+	}
+	return nil
+}
+
+func (x *GetGroupInfoResponse) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+type ExternalJoinRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	GroupId string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// Epoch of the GroupInfo the commit was built from.
+	Epoch  uint64 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	Commit []byte `protobuf:"bytes,3,opt,name=commit,proto3" json:"commit,omitempty"`
+	// GroupInfo of the new epoch.
+	GroupInfo     []byte `protobuf:"bytes,4,opt,name=group_info,json=groupInfo,proto3" json:"group_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExternalJoinRequest) Reset() {
+	*x = ExternalJoinRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalJoinRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalJoinRequest) ProtoMessage() {}
+
+func (x *ExternalJoinRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalJoinRequest.ProtoReflect.Descriptor instead.
+func (*ExternalJoinRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ExternalJoinRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *ExternalJoinRequest) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *ExternalJoinRequest) GetCommit() []byte {
+	if x != nil {
+		return x.Commit
+	}
+	return nil
+}
+
+func (x *ExternalJoinRequest) GetGroupInfo() []byte {
+	if x != nil {
+		return x.GroupInfo
+	}
+	return nil
+}
+
+type ExternalJoinResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NewEpoch      uint64                 `protobuf:"varint,1,opt,name=new_epoch,json=newEpoch,proto3" json:"new_epoch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExternalJoinResponse) Reset() {
+	*x = ExternalJoinResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalJoinResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalJoinResponse) ProtoMessage() {}
+
+func (x *ExternalJoinResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalJoinResponse.ProtoReflect.Descriptor instead.
+func (*ExternalJoinResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ExternalJoinResponse) GetNewEpoch() uint64 {
+	if x != nil {
+		return x.NewEpoch
+	}
+	return 0
+}
+
+type RequestJoinRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	KeyPackage    []byte                 `protobuf:"bytes,2,opt,name=key_package,json=keyPackage,proto3" json:"key_package,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestJoinRequest) Reset() {
+	*x = RequestJoinRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestJoinRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestJoinRequest) ProtoMessage() {}
+
+func (x *RequestJoinRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestJoinRequest.ProtoReflect.Descriptor instead.
+func (*RequestJoinRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RequestJoinRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *RequestJoinRequest) GetKeyPackage() []byte {
+	if x != nil {
+		return x.KeyPackage
+	}
+	return nil
+}
+
+type RequestJoinResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestJoinResponse) Reset() {
+	*x = RequestJoinResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestJoinResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestJoinResponse) ProtoMessage() {}
+
+func (x *RequestJoinResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestJoinResponse.ProtoReflect.Descriptor instead.
+func (*RequestJoinResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{25}
+}
+
 var File_kantra_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
-	"!kantra/delivery/v1/delivery.proto\x12\x12kantra.delivery.v1\"\xe3\x01\n" +
+	"!kantra/delivery/v1/delivery.proto\x12\x12kantra.delivery.v1\"\x89\x02\n" +
 	"\bEnvelope\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x14\n" +
@@ -965,22 +1443,28 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\apayload\x18\x05 \x01(\fR\apayload\x12(\n" +
 	"\x10sender_device_id\x18\x06 \x01(\tR\x0esenderDeviceId\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\a \x01(\x03R\tcreatedAt\"C\n" +
+	"created_at\x18\a \x01(\x03R\tcreatedAt\x12$\n" +
+	"\x0esender_user_id\x18\b \x01(\tR\fsenderUserId\"C\n" +
 	"\vClientFrame\x12+\n" +
 	"\x03ack\x18\x01 \x01(\v2\x17.kantra.delivery.v1.AckH\x00R\x03ackB\a\n" +
 	"\x05frame\"\x17\n" +
 	"\x03Ack\x12\x10\n" +
-	"\x03ids\x18\x01 \x03(\x03R\x03ids\"/\n" +
+	"\x03ids\x18\x01 \x03(\x03R\x03ids\"N\n" +
 	"\x12CreateGroupRequest\x12\x19\n" +
-	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"\x15\n" +
-	"\x13CreateGroupResponse\"\xce\x01\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1d\n" +
+	"\n" +
+	"group_info\x18\x02 \x01(\fR\tgroupInfo\"\x15\n" +
+	"\x13CreateGroupResponse\"\x93\x02\n" +
 	"\x11SendCommitRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x14\n" +
 	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x16\n" +
 	"\x06commit\x18\x03 \x01(\fR\x06commit\x12\x18\n" +
 	"\awelcome\x18\x04 \x01(\fR\awelcome\x12(\n" +
 	"\x10added_device_ids\x18\x05 \x03(\tR\x0eaddedDeviceIds\x12,\n" +
-	"\x12removed_device_ids\x18\x06 \x03(\tR\x10removedDeviceIds\"1\n" +
+	"\x12removed_device_ids\x18\x06 \x03(\tR\x10removedDeviceIds\x12$\n" +
+	"\x0eadded_user_ids\x18\a \x03(\tR\faddedUserIds\x12\x1d\n" +
+	"\n" +
+	"group_info\x18\b \x01(\fR\tgroupInfo\"1\n" +
 	"\x12SendCommitResponse\x12\x1b\n" +
 	"\tnew_epoch\x18\x01 \x01(\x04R\bnewEpoch\"c\n" +
 	"\x16SendApplicationRequest\x12\x19\n" +
@@ -1007,12 +1491,39 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"c\n" +
 	"\x10GetGroupResponse\x12#\n" +
 	"\rcurrent_epoch\x18\x01 \x01(\x04R\fcurrentEpoch\x12*\n" +
-	"\x11member_device_ids\x18\x02 \x03(\tR\x0fmemberDeviceIds*|\n" +
+	"\x11member_device_ids\x18\x02 \x03(\tR\x0fmemberDeviceIds\"\x15\n" +
+	"\x13ListMyGroupsRequest\"s\n" +
+	"\aMyGroup\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12#\n" +
+	"\rcurrent_epoch\x18\x02 \x01(\x04R\fcurrentEpoch\x12(\n" +
+	"\x10device_is_member\x18\x03 \x01(\bR\x0edeviceIsMember\"K\n" +
+	"\x14ListMyGroupsResponse\x123\n" +
+	"\x06groups\x18\x01 \x03(\v2\x1b.kantra.delivery.v1.MyGroupR\x06groups\"0\n" +
+	"\x13GetGroupInfoRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"K\n" +
+	"\x14GetGroupInfoResponse\x12\x1d\n" +
+	"\n" +
+	"group_info\x18\x01 \x01(\fR\tgroupInfo\x12\x14\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\"}\n" +
+	"\x13ExternalJoinRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x14\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x16\n" +
+	"\x06commit\x18\x03 \x01(\fR\x06commit\x12\x1d\n" +
+	"\n" +
+	"group_info\x18\x04 \x01(\fR\tgroupInfo\"3\n" +
+	"\x14ExternalJoinResponse\x12\x1b\n" +
+	"\tnew_epoch\x18\x01 \x01(\x04R\bnewEpoch\"P\n" +
+	"\x12RequestJoinRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1f\n" +
+	"\vkey_package\x18\x02 \x01(\fR\n" +
+	"keyPackage\"\x15\n" +
+	"\x13RequestJoinResponse*\x9b\x01\n" +
 	"\vMessageType\x12\x1c\n" +
 	"\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MESSAGE_TYPE_COMMIT\x10\x01\x12\x1c\n" +
 	"\x18MESSAGE_TYPE_APPLICATION\x10\x02\x12\x18\n" +
-	"\x14MESSAGE_TYPE_WELCOME\x10\x032\xad\x05\n" +
+	"\x14MESSAGE_TYPE_WELCOME\x10\x03\x12\x1d\n" +
+	"\x19MESSAGE_TYPE_JOIN_REQUEST\x10\x042\xbe\b\n" +
 	"\x0fDeliveryService\x12`\n" +
 	"\vCreateGroup\x12&.kantra.delivery.v1.CreateGroupRequest\x1a'.kantra.delivery.v1.CreateGroupResponse\"\x00\x12]\n" +
 	"\n" +
@@ -1021,7 +1532,11 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\fFetchWelcome\x12'.kantra.delivery.v1.FetchWelcomeRequest\x1a(.kantra.delivery.v1.FetchWelcomeResponse\"\x00\x12c\n" +
 	"\fFetchPending\x12'.kantra.delivery.v1.FetchPendingRequest\x1a(.kantra.delivery.v1.FetchPendingResponse\"\x00\x12H\n" +
 	"\x03Ack\x12\x1e.kantra.delivery.v1.AckRequest\x1a\x1f.kantra.delivery.v1.AckResponse\"\x00\x12W\n" +
-	"\bGetGroup\x12#.kantra.delivery.v1.GetGroupRequest\x1a$.kantra.delivery.v1.GetGroupResponse\"\x00B\xd4\x01\n" +
+	"\bGetGroup\x12#.kantra.delivery.v1.GetGroupRequest\x1a$.kantra.delivery.v1.GetGroupResponse\"\x00\x12c\n" +
+	"\fListMyGroups\x12'.kantra.delivery.v1.ListMyGroupsRequest\x1a(.kantra.delivery.v1.ListMyGroupsResponse\"\x00\x12c\n" +
+	"\fGetGroupInfo\x12'.kantra.delivery.v1.GetGroupInfoRequest\x1a(.kantra.delivery.v1.GetGroupInfoResponse\"\x00\x12c\n" +
+	"\fExternalJoin\x12'.kantra.delivery.v1.ExternalJoinRequest\x1a(.kantra.delivery.v1.ExternalJoinResponse\"\x00\x12`\n" +
+	"\vRequestJoin\x12&.kantra.delivery.v1.RequestJoinRequest\x1a'.kantra.delivery.v1.RequestJoinResponse\"\x00B\xd4\x01\n" +
 	"\x16com.kantra.delivery.v1B\rDeliveryProtoP\x01ZAgithub.com/kantracity/kantrae2e/gen/kantra/delivery/v1;deliveryv1\xa2\x02\x03KDX\xaa\x02\x12Kantra.Delivery.V1\xca\x02\x12Kantra\\Delivery\\V1\xe2\x02\x1eKantra\\Delivery\\V1\\GPBMetadata\xea\x02\x14Kantra::Delivery::V1b\x06proto3"
 
 var (
@@ -1037,7 +1552,7 @@ func file_kantra_delivery_v1_delivery_proto_rawDescGZIP() []byte {
 }
 
 var file_kantra_delivery_v1_delivery_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_kantra_delivery_v1_delivery_proto_goTypes = []any{
 	(MessageType)(0),                // 0: kantra.delivery.v1.MessageType
 	(*Envelope)(nil),                // 1: kantra.delivery.v1.Envelope
@@ -1057,30 +1572,48 @@ var file_kantra_delivery_v1_delivery_proto_goTypes = []any{
 	(*AckResponse)(nil),             // 15: kantra.delivery.v1.AckResponse
 	(*GetGroupRequest)(nil),         // 16: kantra.delivery.v1.GetGroupRequest
 	(*GetGroupResponse)(nil),        // 17: kantra.delivery.v1.GetGroupResponse
+	(*ListMyGroupsRequest)(nil),     // 18: kantra.delivery.v1.ListMyGroupsRequest
+	(*MyGroup)(nil),                 // 19: kantra.delivery.v1.MyGroup
+	(*ListMyGroupsResponse)(nil),    // 20: kantra.delivery.v1.ListMyGroupsResponse
+	(*GetGroupInfoRequest)(nil),     // 21: kantra.delivery.v1.GetGroupInfoRequest
+	(*GetGroupInfoResponse)(nil),    // 22: kantra.delivery.v1.GetGroupInfoResponse
+	(*ExternalJoinRequest)(nil),     // 23: kantra.delivery.v1.ExternalJoinRequest
+	(*ExternalJoinResponse)(nil),    // 24: kantra.delivery.v1.ExternalJoinResponse
+	(*RequestJoinRequest)(nil),      // 25: kantra.delivery.v1.RequestJoinRequest
+	(*RequestJoinResponse)(nil),     // 26: kantra.delivery.v1.RequestJoinResponse
 }
 var file_kantra_delivery_v1_delivery_proto_depIdxs = []int32{
 	0,  // 0: kantra.delivery.v1.Envelope.type:type_name -> kantra.delivery.v1.MessageType
 	3,  // 1: kantra.delivery.v1.ClientFrame.ack:type_name -> kantra.delivery.v1.Ack
 	1,  // 2: kantra.delivery.v1.FetchPendingResponse.envelopes:type_name -> kantra.delivery.v1.Envelope
-	4,  // 3: kantra.delivery.v1.DeliveryService.CreateGroup:input_type -> kantra.delivery.v1.CreateGroupRequest
-	6,  // 4: kantra.delivery.v1.DeliveryService.SendCommit:input_type -> kantra.delivery.v1.SendCommitRequest
-	8,  // 5: kantra.delivery.v1.DeliveryService.SendApplication:input_type -> kantra.delivery.v1.SendApplicationRequest
-	10, // 6: kantra.delivery.v1.DeliveryService.FetchWelcome:input_type -> kantra.delivery.v1.FetchWelcomeRequest
-	12, // 7: kantra.delivery.v1.DeliveryService.FetchPending:input_type -> kantra.delivery.v1.FetchPendingRequest
-	14, // 8: kantra.delivery.v1.DeliveryService.Ack:input_type -> kantra.delivery.v1.AckRequest
-	16, // 9: kantra.delivery.v1.DeliveryService.GetGroup:input_type -> kantra.delivery.v1.GetGroupRequest
-	5,  // 10: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
-	7,  // 11: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
-	9,  // 12: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
-	11, // 13: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
-	13, // 14: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
-	15, // 15: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
-	17, // 16: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
-	10, // [10:17] is the sub-list for method output_type
-	3,  // [3:10] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	19, // 3: kantra.delivery.v1.ListMyGroupsResponse.groups:type_name -> kantra.delivery.v1.MyGroup
+	4,  // 4: kantra.delivery.v1.DeliveryService.CreateGroup:input_type -> kantra.delivery.v1.CreateGroupRequest
+	6,  // 5: kantra.delivery.v1.DeliveryService.SendCommit:input_type -> kantra.delivery.v1.SendCommitRequest
+	8,  // 6: kantra.delivery.v1.DeliveryService.SendApplication:input_type -> kantra.delivery.v1.SendApplicationRequest
+	10, // 7: kantra.delivery.v1.DeliveryService.FetchWelcome:input_type -> kantra.delivery.v1.FetchWelcomeRequest
+	12, // 8: kantra.delivery.v1.DeliveryService.FetchPending:input_type -> kantra.delivery.v1.FetchPendingRequest
+	14, // 9: kantra.delivery.v1.DeliveryService.Ack:input_type -> kantra.delivery.v1.AckRequest
+	16, // 10: kantra.delivery.v1.DeliveryService.GetGroup:input_type -> kantra.delivery.v1.GetGroupRequest
+	18, // 11: kantra.delivery.v1.DeliveryService.ListMyGroups:input_type -> kantra.delivery.v1.ListMyGroupsRequest
+	21, // 12: kantra.delivery.v1.DeliveryService.GetGroupInfo:input_type -> kantra.delivery.v1.GetGroupInfoRequest
+	23, // 13: kantra.delivery.v1.DeliveryService.ExternalJoin:input_type -> kantra.delivery.v1.ExternalJoinRequest
+	25, // 14: kantra.delivery.v1.DeliveryService.RequestJoin:input_type -> kantra.delivery.v1.RequestJoinRequest
+	5,  // 15: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
+	7,  // 16: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
+	9,  // 17: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
+	11, // 18: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
+	13, // 19: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
+	15, // 20: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
+	17, // 21: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
+	20, // 22: kantra.delivery.v1.DeliveryService.ListMyGroups:output_type -> kantra.delivery.v1.ListMyGroupsResponse
+	22, // 23: kantra.delivery.v1.DeliveryService.GetGroupInfo:output_type -> kantra.delivery.v1.GetGroupInfoResponse
+	24, // 24: kantra.delivery.v1.DeliveryService.ExternalJoin:output_type -> kantra.delivery.v1.ExternalJoinResponse
+	26, // 25: kantra.delivery.v1.DeliveryService.RequestJoin:output_type -> kantra.delivery.v1.RequestJoinResponse
+	15, // [15:26] is the sub-list for method output_type
+	4,  // [4:15] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_kantra_delivery_v1_delivery_proto_init() }
@@ -1097,7 +1630,7 @@ func file_kantra_delivery_v1_delivery_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_delivery_v1_delivery_proto_rawDesc), len(file_kantra_delivery_v1_delivery_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   17,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

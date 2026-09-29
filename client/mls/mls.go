@@ -197,9 +197,10 @@ func (c *Client) CreateGroup(groupID []byte) error {
 
 // CreateCommit builds a pending Commit adding keyPackages and removing the
 // members with the given credential identities. welcome is nil if nobody
-// is added. Call ApplyPendingCommit after the server accepted the commit
-// or ClearPendingCommit if it was rejected.
-func (c *Client) CreateCommit(groupID []byte, keyPackages, removeIdentities [][]byte) (commit, welcome []byte, err error) {
+// is added; groupInfo is the GroupInfo of the resulting epoch (allows
+// External Commits). Call ApplyPendingCommit after the server accepted the
+// commit or ClearPendingCommit if it was rejected.
+func (c *Client) CreateCommit(groupID []byte, keyPackages, removeIdentities [][]byte) (commit, welcome, groupInfo []byte, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	gp, gn := cbytes(groupID)
@@ -208,10 +209,37 @@ func (c *Client) CreateCommit(groupID []byte, keyPackages, removeIdentities [][]
 	defer free(gp)
 	defer free(ap)
 	defer free(rp)
-	var cm, wl, e C.MlsBuf
-	code := C.mls_create_commit(c.c, gp, gn, ap, an, rp, rn, &cm, &wl, &e)
-	commit, welcome = takeBuf(cm), takeBuf(wl)
-	return commit, welcome, check(code, e)
+	var cm, wl, gi, e C.MlsBuf
+	code := C.mls_create_commit(c.c, gp, gn, ap, an, rp, rn, &cm, &wl, &gi, &e)
+	commit, welcome, groupInfo = takeBuf(cm), takeBuf(wl), takeBuf(gi)
+	return commit, welcome, groupInfo, check(code, e)
+}
+
+// GroupInfoMessage returns the GroupInfo of the current epoch, allowing
+// External Commits.
+func (c *Client) GroupInfoMessage(groupID []byte) ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	gp, gn := cbytes(groupID)
+	defer free(gp)
+	var out, e C.MlsBuf
+	code := C.mls_group_info_message(c.c, gp, gn, &out, &e)
+	gi := takeBuf(out)
+	return gi, check(code, e)
+}
+
+// ExternalJoin joins a group by itself with an External Commit built from
+// groupInfo. The group is already in the new epoch locally; if the server
+// rejects the commit, call ForgetGroup and drop its persisted state.
+func (c *Client) ExternalJoin(groupInfo []byte) (groupID, commit, newGroupInfo []byte, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ip, in := cbytes(groupInfo)
+	defer free(ip)
+	var g, cm, gi, e C.MlsBuf
+	code := C.mls_external_join(c.c, ip, in, &g, &cm, &gi, &e)
+	groupID, commit, newGroupInfo = takeBuf(g), takeBuf(cm), takeBuf(gi)
+	return groupID, commit, newGroupInfo, check(code, e)
 }
 
 func (c *Client) ApplyPendingCommit(groupID []byte) error {
@@ -265,6 +293,7 @@ type Processed struct {
 	Sender    []byte // credential identity of sender / committer
 	Epoch     uint64 // group epoch after processing
 	Removed   bool   // this commit removed us from the group
+	External  bool   // External Commit: the sender joined by itself
 }
 
 // Process handles an incoming Commit, Proposal or application message.
@@ -287,6 +316,7 @@ func (c *Client) Process(groupID, msg []byte) (*Processed, error) {
 		Sender:    takeBuf(out.sender),
 		Epoch:     uint64(out.epoch),
 		Removed:   out.removed != 0,
+		External:  out.external != 0,
 	}, nil
 }
 

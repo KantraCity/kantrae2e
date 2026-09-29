@@ -43,6 +43,8 @@ func (c *Client) historyKey(ctx context.Context) ([]byte, error) {
 // BackupHistory uploads all messages not yet backed up as encrypted chunks.
 // It returns the number of messages uploaded.
 func (c *Client) BackupHistory(ctx context.Context) (int, error) {
+	c.backupMu.Lock()
+	defer c.backupMu.Unlock()
 	key, err := c.historyKey(ctx)
 	if err != nil {
 		return 0, err
@@ -108,7 +110,7 @@ func (c *Client) BackupHistory(ctx context.Context) (int, error) {
 
 // RestoreHistory downloads every chunk of the manifest that this device has
 // not seen yet, decrypts it locally and merges the messages. It returns the
-// number of messages in the restored chunks.
+// number of messages that were new to this device.
 func (c *Client) RestoreHistory(ctx context.Context) (int, error) {
 	key, err := c.historyKey(ctx)
 	if err != nil {
@@ -159,8 +161,12 @@ func (c *Client) RestoreHistory(ctx context.Context) (int, error) {
 			}
 			for _, m := range chunk.Messages {
 				m.Outgoing = m.SenderUser == c.acct.UserID
-				if err := tx.InsertRestoredMessage(m); err != nil {
+				isNew, err := tx.InsertRestoredMessage(m)
+				if err != nil {
 					return err
+				}
+				if isNew {
+					total++
 				}
 			}
 			return tx.MarkChunkRestored(e.ChunkHash)
@@ -168,7 +174,6 @@ func (c *Client) RestoreHistory(ctx context.Context) (int, error) {
 		if err != nil {
 			return total, err
 		}
-		total += len(chunk.Messages)
 	}
 	return total, nil
 }

@@ -22,6 +22,18 @@ service DeliveryService {
   rpc Ack(AckRequest) returns (AckResponse) {}
   // Group metadata as seen by the server.
   rpc GetGroup(GetGroupRequest) returns (GetGroupResponse) {}
+
+  // --- Multi-device ---
+  // Groups in which the caller's user has at least one device.
+  rpc ListMyGroups(ListMyGroupsRequest) returns (ListMyGroupsResponse) {}
+  // Latest GroupInfo (allows External Commit). Only for users in the group.
+  rpc GetGroupInfo(GetGroupInfoRequest) returns (GetGroupInfoResponse) {}
+  // A new device of a user already in the group joins by itself via an
+  // MLS External Commit. Same epoch rule as SendCommit (CodeAborted on conflict).
+  rpc ExternalJoin(ExternalJoinRequest) returns (ExternalJoinResponse) {}
+  // Fallback: asks online members to add this device (sends its KeyPackage
+  // to the group as a JOIN_REQUEST envelope).
+  rpc RequestJoin(RequestJoinRequest) returns (RequestJoinResponse) {}
 }
 
 enum MessageType {
@@ -29,6 +41,8 @@ enum MessageType {
   MESSAGE_TYPE_COMMIT = 1;
   MESSAGE_TYPE_APPLICATION = 2;
   MESSAGE_TYPE_WELCOME = 3;
+  // payload: KeyPackage of the requesting device (plaintext routing data).
+  MESSAGE_TYPE_JOIN_REQUEST = 4;
 }
 
 // One queued message for a device.
@@ -40,6 +54,7 @@ message Envelope {
   bytes payload = 5;
   string sender_device_id = 6;
   int64 created_at = 7;
+  string sender_user_id = 8;
 }
 
 // Frames sent by the client over the WebSocket.
@@ -55,6 +70,8 @@ message Ack {
 
 message CreateGroupRequest {
   string group_id = 1;
+  // GroupInfo of epoch 0.
+  bytes group_info = 2;
 }
 
 message CreateGroupResponse {}
@@ -69,6 +86,10 @@ message SendCommitRequest {
   // Routing metadata (not content): devices added / removed by this commit.
   repeated string added_device_ids = 5;
   repeated string removed_device_ids = 6;
+  // User ids of added_device_ids (same order).
+  repeated string added_user_ids = 7;
+  // GroupInfo of the new epoch.
+  bytes group_info = 8;
 }
 
 message SendCommitResponse {
@@ -116,3 +137,45 @@ message GetGroupResponse {
   uint64 current_epoch = 1;
   repeated string member_device_ids = 2;
 }
+
+message ListMyGroupsRequest {}
+
+message MyGroup {
+  string group_id = 1;
+  uint64 current_epoch = 2;
+  // Whether the calling device itself is a member.
+  bool device_is_member = 3;
+}
+
+message ListMyGroupsResponse {
+  repeated MyGroup groups = 1;
+}
+
+message GetGroupInfoRequest {
+  string group_id = 1;
+}
+
+message GetGroupInfoResponse {
+  bytes group_info = 1;
+  uint64 epoch = 2;
+}
+
+message ExternalJoinRequest {
+  string group_id = 1;
+  // Epoch of the GroupInfo the commit was built from.
+  uint64 epoch = 2;
+  bytes commit = 3;
+  // GroupInfo of the new epoch.
+  bytes group_info = 4;
+}
+
+message ExternalJoinResponse {
+  uint64 new_epoch = 1;
+}
+
+message RequestJoinRequest {
+  string group_id = 1;
+  bytes key_package = 2;
+}
+
+message RequestJoinResponse {}

@@ -28,8 +28,8 @@ type env struct {
 }
 
 type dev struct {
-	id, tok string
-	c       deliveryv1connect.DeliveryServiceClient
+	id, user, tok string
+	c             deliveryv1connect.DeliveryServiceClient
 }
 
 func setup(t *testing.T) *env {
@@ -40,9 +40,11 @@ func setup(t *testing.T) *env {
 	return &env{t: t, url: srv.URL, hc: srv.Client()}
 }
 
-func (e *env) device() *dev {
+func (e *env) device() *dev { return e.deviceOf(uuid.NewString()) }
+
+func (e *env) deviceOf(userID string) *dev {
 	id := uuid.NewString()
-	tok, err := authmiddleware.Issue(testutil.Secret, uuid.NewString(), id, time.Hour)
+	tok, err := authmiddleware.Issue(testutil.Secret, userID, id, time.Hour)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -53,7 +55,7 @@ func (e *env) device() *dev {
 				return next(ctx, r)
 			}
 		})))
-	return &dev{id: id, tok: tok, c: c}
+	return &dev{id: id, user: userID, tok: tok, c: c}
 }
 
 func pending(t *testing.T, d *dev) []*deliveryv1.Envelope {
@@ -294,5 +296,100 @@ func TestWebSocketDeliveryAndOfflineQueue(t *testing.T) {
 		HTTPClient: e.hc, HTTPHeader: http.Header{"Authorization": {"Bearer " + tok}}})
 	if err == nil || resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("account token ws: %v", err)
+	}
+}
+
+func TestMultiDevice(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	aliceUser := uuid.NewString()
+	laptop, tablet, phone := e.deviceOf(aliceUser), e.deviceOf(aliceUser), e.deviceOf(aliceUser)
+	bob, mallory := e.device(), e.device()
+	g := uuid.NewString()
+
+	if _, err := laptop.c.CreateGroup(ctx, &deliveryv1.CreateGroupRequest{GroupId: g, GroupInfo: []byte("gi-0")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := laptop.c.SendCommit(ctx, &deliveryv1.SendCommitRequest{GroupId: g, Epoch: 0, Commit: []byte("add-bob"),
+		Welcome: []byte("w"), AddedDeviceIds: []string{bob.id}, AddedUserIds: []string{bob.user}, GroupInfo: []byte("gi-1")}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice's tablet discovers the group and its current GroupInfo.
+	mine, err := tablet.c.ListMyGroups(ctx, &deliveryv1.ListMyGroupsRequest{})
+	if err != nil || len(mine.Groups) != 1 || mine.Groups[0].GroupId != g || mine.Groups[0].DeviceIsMember {
+		t.Fatalf("list: %v %v", mine, err)
+	}
+	gi, err := tablet.c.GetGroupInfo(ctx, &deliveryv1.GetGroupInfoRequest{GroupId: g})
+	if err != nil || string(gi.GroupInfo) != "gi-1" || gi.Epoch != 1 {
+		t.Fatalf("group info: %v %v", gi, err)
+	}
+	// Other users can neither read the GroupInfo nor join by themselves.
+	if _, err := mallory.c.GetGroupInfo(ctx, &deliveryv1.GetGroupInfoRequest{GroupId: g}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("mallory group info: %v", err)
+	}
+	if _, err := mallory.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: g, Epoch: 1, Commit: []byte("x"), GroupInfo: []byte("x")}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("mallory join: %v", err)
+	}
+	if _, err := mallory.c.RequestJoin(ctx, &deliveryv1.RequestJoinRequest{GroupId: g, KeyPackage: []byte("kp")}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("mallory request: %v", err)
+	}
+
+	// Stale epoch -> conflict; current epoch -> accepted.
+	if _, err := tablet.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: g, Epoch: 0, Commit: []byte("ext"), GroupInfo: []byte("gi")}); connect.CodeOf(err) != connect.CodeAborted {
+		t.Fatalf("stale join: %v", err)
+	}
+	r, err := tablet.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: g, Epoch: 1, Commit: []byte("ext-tablet"), GroupInfo: []byte("gi-2")})
+	if err != nil || r.NewEpoch != 2 {
+		t.Fatalf("join: %v %v", r, err)
+	}
+	var found bool
+	for _, env := range pending(t, bob) {
+		if string(env.Payload) == "ext-tablet" && env.SenderUserId == aliceUser && env.SenderDeviceId == tablet.id {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("bob did not get the external commit")
+	}
+	if _, err := tablet.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: g, Epoch: 2, Commit: []byte("again"), GroupInfo: []byte("gi")}); connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("double join: %v", err)
+	}
+	if mine, _ := tablet.c.ListMyGroups(ctx, &deliveryv1.ListMyGroupsRequest{}); !mine.Groups[0].DeviceIsMember {
+		t.Fatal("tablet not a member")
+	}
+
+	// A commit without GroupInfo invalidates the stored one.
+	if _, err := bob.c.SendCommit(ctx, &deliveryv1.SendCommitRequest{GroupId: g, Epoch: 2, Commit: []byte("upd")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := phone.c.GetGroupInfo(ctx, &deliveryv1.GetGroupInfoRequest{GroupId: g}); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("stale group info served: %v", err)
+	}
+
+	// Fallback: the phone asks members to add it.
+	if _, err := phone.c.RequestJoin(ctx, &deliveryv1.RequestJoinRequest{GroupId: g, KeyPackage: []byte("kp-phone")}); err != nil {
+		t.Fatal(err)
+	}
+	var req *deliveryv1.Envelope
+	for _, env := range pending(t, laptop) {
+		if env.Type == deliveryv1.MessageType_MESSAGE_TYPE_JOIN_REQUEST {
+			req = env
+		}
+	}
+	if req == nil || string(req.Payload) != "kp-phone" || req.SenderDeviceId != phone.id || req.SenderUserId != aliceUser {
+		t.Fatalf("join request: %v", req)
+	}
+
+	// A removed device can neither see nor rejoin the group by itself.
+	if _, err := bob.c.SendCommit(ctx, &deliveryv1.SendCommitRequest{GroupId: g, Epoch: 3, Commit: []byte("rm-tablet"),
+		RemovedDeviceIds: []string{tablet.id}, GroupInfo: []byte("gi-4")}); err != nil {
+		t.Fatal(err)
+	}
+	if mine, _ := tablet.c.ListMyGroups(ctx, &deliveryv1.ListMyGroupsRequest{}); len(mine.Groups) != 0 {
+		t.Fatalf("banned device still lists group: %v", mine.Groups)
+	}
+	if _, err := tablet.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: g, Epoch: 4, Commit: []byte("back"), GroupInfo: []byte("gi")}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("banned rejoin: %v", err)
 	}
 }

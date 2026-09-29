@@ -54,6 +54,11 @@ type Options struct {
 	OnEvent func(Event)
 	// Logf receives diagnostic messages (never plaintext). Optional.
 	Logf func(format string, args ...any)
+	// DisableAutoBackup turns off the continuous history backup (it is on
+	// whenever the device knows the history key).
+	DisableAutoBackup bool
+	// BackupDelay debounces the automatic backup (default 2s).
+	BackupDelay time.Duration
 }
 
 // EventType enumerates Event kinds.
@@ -66,6 +71,11 @@ const (
 	EventRemoved      EventType = "removed"
 	EventConnected    EventType = "connected"
 	EventDisconnected EventType = "disconnected"
+	// EventHistory: another member answered a history request (Count new
+	// messages, possibly 0).
+	EventHistory EventType = "history"
+	// EventSecurity: something suspicious was detected and handled.
+	EventSecurity EventType = "security"
 )
 
 type Event struct {
@@ -73,6 +83,8 @@ type Event struct {
 	GroupID string
 	Message *store.Message
 	Err     error
+	// Count of messages for EventHistory.
+	Count int
 }
 
 // Account is the identity of this device.
@@ -96,6 +108,20 @@ type Client struct {
 
 	tokMu sync.Mutex
 	token string
+
+	// backupMu serializes history backups (auto and manual).
+	backupMu sync.Mutex
+
+	// Background work (deferred actions, auto backup). Guarded by bgMu.
+	bgMu          sync.Mutex
+	bg            sync.WaitGroup
+	later         []func(context.Context)
+	backupTimer   *time.Timer
+	backupPending bool
+	closed        bool
+	// Multi-device bookkeeping, guarded by c.mu.
+	answered      map[string]bool      // history requests already answered by someone
+	joinRequested map[string]time.Time // groups we asked to be added to
 
 	auth  authv1connect.AuthServiceClient
 	dir   directoryv1connect.DirectoryServiceClient
@@ -131,7 +157,11 @@ func Open(ctx context.Context, opts Options) (*Client, error) {
 		return nil, errors.New("server URL is required")
 	}
 	opts.ServerURL = strings.TrimRight(opts.ServerURL, "/")
-	c := &Client{opts: opts, st: st, hc: opts.HTTPClient}
+	if opts.BackupDelay == 0 {
+		opts.BackupDelay = 2 * time.Second
+	}
+	c := &Client{opts: opts, st: st, hc: opts.HTTPClient,
+		answered: map[string]bool{}, joinRequested: map[string]time.Time{}}
 	if c.hc == nil {
 		c.hc = http.DefaultClient
 	}
@@ -149,13 +179,115 @@ func Open(ctx context.Context, opts Options) (*Client, error) {
 	return c, nil
 }
 
+// Close waits for background work, flushes a pending history backup and
+// closes the database.
 func (c *Client) Close() error {
+	c.bgMu.Lock()
+	if c.closed {
+		c.bgMu.Unlock()
+		return nil
+	}
+	c.closed = true
+	flush := c.backupPending
+	c.backupPending = false
+	if c.backupTimer != nil {
+		c.backupTimer.Stop()
+	}
+	c.bgMu.Unlock()
+	c.waitBackground(10 * time.Second)
+	if flush {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if _, err := c.BackupHistory(ctx); err != nil && !errors.Is(err, ErrNoHistoryKey) {
+			c.logf("final history backup: %v", err)
+		}
+		cancel()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.m != nil {
 		c.m.Close()
 	}
 	return c.st.Close()
+}
+
+// Settle waits until background work triggered so far (auto-invites,
+// history sharing, backups) has finished. Useful for tests and CLIs.
+func (c *Client) Settle(timeout time.Duration) { c.waitBackground(timeout) }
+
+func (c *Client) waitBackground(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() { c.bg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
+}
+
+// deferLocked queues fn to run in the background after the current batch of
+// incoming messages has been persisted and acknowledged. fn must take c.mu
+// itself. Caller holds c.mu.
+func (c *Client) deferLocked(fn func(context.Context)) {
+	c.bgMu.Lock()
+	c.later = append(c.later, fn)
+	c.bgMu.Unlock()
+}
+
+// flushDeferred starts the queued background actions.
+func (c *Client) flushDeferred() {
+	c.bgMu.Lock()
+	later := c.later
+	c.later = nil
+	closed := c.closed
+	if !closed {
+		c.bg.Add(len(later))
+	}
+	c.bgMu.Unlock()
+	if closed {
+		return
+	}
+	for _, fn := range later {
+		go func() {
+			defer c.bg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			fn(ctx)
+		}()
+	}
+}
+
+// scheduleBackup (debounced) uploads new messages to the history backup.
+func (c *Client) scheduleBackup() {
+	if c.opts.DisableAutoBackup {
+		return
+	}
+	c.bgMu.Lock()
+	defer c.bgMu.Unlock()
+	if c.closed {
+		return
+	}
+	c.backupPending = true
+	if c.backupTimer != nil {
+		c.backupTimer.Stop()
+	}
+	c.backupTimer = time.AfterFunc(c.opts.BackupDelay, func() {
+		c.bgMu.Lock()
+		if c.closed || !c.backupPending {
+			c.bgMu.Unlock()
+			return
+		}
+		c.backupPending = false
+		c.bg.Add(1)
+		c.bgMu.Unlock()
+		defer c.bg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if _, err := c.BackupHistory(ctx); err != nil && !errors.Is(err, ErrNoHistoryKey) {
+			c.logf("auto backup: %v", err)
+			c.bgMu.Lock()
+			c.backupPending = true // retried on the next message or on Close
+			c.bgMu.Unlock()
+		}
+	})
 }
 
 func (c *Client) logf(format string, args ...any) {
@@ -295,17 +427,36 @@ func (c *Client) Register(ctx context.Context, username, password, deviceName st
 	return phrase, nil
 }
 
-// Login adds this client as a new device of an existing account. With the
-// seed phrase the device can restore and extend the history backup.
-func (c *Client) Login(ctx context.Context, username, password, deviceName, seedPhrase string) error {
+// LoginResult summarizes what a new device picked up on login.
+type LoginResult struct {
+	Restored  int // messages restored from the history backup
+	Joined    int // groups joined by itself (External Commit)
+	Requested int // groups where online members were asked to add it
+}
+
+// Login adds this client as a new device of an existing account and makes it
+// a full participant right away: it restores the history backup (with the
+// seed phrase), joins every group of the account by itself and asks the other
+// members for messages that are missing from the backup.
+func (c *Client) Login(ctx context.Context, username, password, deviceName, seedPhrase string) (*LoginResult, error) {
 	if c.Account() != nil {
-		return ErrAlreadySetUp
+		return nil, ErrAlreadySetUp
 	}
 	r, err := c.auth.Login(ctx, &authv1.LoginRequest{Username: username, Password: password})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return c.setupDevice(ctx, r.UserId, username, r.Token, deviceName, seedPhrase)
+	if err := c.setupDevice(ctx, r.UserId, username, r.Token, deviceName, seedPhrase); err != nil {
+		return nil, err
+	}
+	res := &LoginResult{}
+	if seedPhrase != "" {
+		if res.Restored, err = c.RestoreHistory(ctx); err != nil {
+			return res, fmt.Errorf("restore history: %w", err)
+		}
+	}
+	res.Joined, res.Requested, err = c.JoinMyGroups(ctx)
+	return res, err
 }
 
 // Relogin refreshes the session of this existing device with the password.

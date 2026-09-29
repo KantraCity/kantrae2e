@@ -100,13 +100,59 @@ func requireMember(ctx context.Context, tx pgx.Tx, groupID, deviceID string) err
 	return nil
 }
 
-func insertMessage(ctx context.Context, tx pgx.Tx, groupID string, epoch uint64, typ deliveryv1.MessageType, payload []byte, sender string) (int64, error) {
+func insertMessage(ctx context.Context, tx pgx.Tx, groupID string, epoch uint64, typ deliveryv1.MessageType, payload []byte, senderUser, sender string) (int64, error) {
 	var id int64
 	err := tx.QueryRow(ctx,
-		`INSERT INTO group_messages (group_id, epoch, message_type, payload, sender_device_id)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		groupID, int64(epoch), int16(typ), payload, sender).Scan(&id)
+		`INSERT INTO group_messages (group_id, epoch, message_type, payload, sender_user_id, sender_device_id)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+		groupID, int64(epoch), int16(typ), payload, senderUser, sender).Scan(&id)
 	return id, err
+}
+
+// storeGroupInfo remembers the GroupInfo of `epoch`, or forgets the stale one
+// when the committer did not provide it.
+func storeGroupInfo(ctx context.Context, tx pgx.Tx, groupID string, epoch uint64, gi []byte) error {
+	if len(gi) == 0 {
+		_, err := tx.Exec(ctx, `UPDATE groups SET group_info=NULL, group_info_epoch=NULL WHERE id=$1`, groupID)
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE groups SET group_info=$2, group_info_epoch=$3 WHERE id=$1`, groupID, gi, int64(epoch))
+	return err
+}
+
+// requireUserInGroup checks that the caller's user has a device in the group
+// and that the calling device has not been removed from it.
+func requireUserInGroup(ctx context.Context, tx pgx.Tx, groupID, userID, deviceID string) error {
+	var inGroup, banned bool
+	err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2),
+		        EXISTS (SELECT 1 FROM group_bans WHERE group_id=$1 AND device_id=$3)`,
+		groupID, userID, deviceID).Scan(&inGroup, &banned)
+	if err != nil {
+		return err
+	}
+	if !inGroup || banned {
+		return errf(connect.CodePermissionDenied, "your account is not in this group")
+	}
+	return nil
+}
+
+// casEpoch advances the group epoch iff it equals `epoch` (optimistic lock).
+func casEpoch(ctx context.Context, tx pgx.Tx, groupID string, epoch uint64) error {
+	tag, err := tx.Exec(ctx,
+		`UPDATE groups SET current_epoch = current_epoch + 1 WHERE id = $1 AND current_epoch = $2`,
+		groupID, int64(epoch))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		var cur int64
+		if err := tx.QueryRow(ctx, `SELECT current_epoch FROM groups WHERE id=$1`, groupID).Scan(&cur); err != nil {
+			return errf(connect.CodeNotFound, "no such group")
+		}
+		return errf(connect.CodeAborted, "epoch conflict: group is at epoch %d, commit was for %d", cur, epoch)
+	}
+	return nil
 }
 
 // fanOut queues message id for all current members except the sender that
@@ -124,7 +170,7 @@ func fanOut(ctx context.Context, tx pgx.Tx, groupID string, messageID int64, sen
 }
 
 func (s *Service) CreateGroup(ctx context.Context, req *deliveryv1.CreateGroupRequest) (*deliveryv1.CreateGroupResponse, error) {
-	_, did, err := authmiddleware.RequireDevice(ctx)
+	uid, did, err := authmiddleware.RequireDevice(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +184,11 @@ func (s *Service) CreateGroup(ctx context.Context, req *deliveryv1.CreateGroupRe
 			}
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO group_members (group_id, device_id) VALUES ($1, $2)`, req.GroupId, did)
-		return err
+		if _, err := tx.Exec(ctx, `INSERT INTO group_members (group_id, device_id, user_id) VALUES ($1, $2, $3)`,
+			req.GroupId, did, uid); err != nil {
+			return err
+		}
+		return storeGroupInfo(ctx, tx, req.GroupId, 0, req.GroupInfo)
 	})
 	if err != nil {
 		return nil, asConnect(err)
@@ -149,7 +198,7 @@ func (s *Service) CreateGroup(ctx context.Context, req *deliveryv1.CreateGroupRe
 
 // SendCommit is the ordering point of the whole system (roadmap 2.3).
 func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequest) (*deliveryv1.SendCommitResponse, error) {
-	_, did, err := authmiddleware.RequireDevice(ctx)
+	uid, did, err := authmiddleware.RequireDevice(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -160,8 +209,12 @@ func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequ
 		return nil, errf(connect.CodeInvalidArgument, "bad payload size")
 	case (len(req.Welcome) > 0) != (len(req.AddedDeviceIds) > 0):
 		return nil, errf(connect.CodeInvalidArgument, "welcome and added_device_ids go together")
+	case len(req.AddedUserIds) != 0 && len(req.AddedUserIds) != len(req.AddedDeviceIds):
+		return nil, errf(connect.CodeInvalidArgument, "added_user_ids must match added_device_ids")
+	case len(req.GroupInfo) > MaxPayload:
+		return nil, errf(connect.CodeInvalidArgument, "bad group_info size")
 	}
-	if err := validDevices(append(append([]string{}, req.AddedDeviceIds...), req.RemovedDeviceIds...)); err != nil {
+	if err := validDevices(append(append(append([]string{}, req.AddedDeviceIds...), req.RemovedDeviceIds...), req.AddedUserIds...)); err != nil {
 		return nil, err
 	}
 
@@ -172,21 +225,11 @@ func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequ
 			return err
 		}
 		// Optimistic lock: only the first Commit for this epoch wins.
-		tag, err := tx.Exec(ctx,
-			`UPDATE groups SET current_epoch = current_epoch + 1 WHERE id = $1 AND current_epoch = $2`,
-			req.GroupId, int64(req.Epoch))
-		if err != nil {
+		if err := casEpoch(ctx, tx, req.GroupId, req.Epoch); err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 0 {
-			var cur int64
-			if err := tx.QueryRow(ctx, `SELECT current_epoch FROM groups WHERE id=$1`, req.GroupId).Scan(&cur); err != nil {
-				return errf(connect.CodeNotFound, "no such group")
-			}
-			return errf(connect.CodeAborted, "epoch conflict: group is at epoch %d, commit was for %d", cur, req.Epoch)
-		}
 
-		msgID, err := insertMessage(ctx, tx, req.GroupId, req.Epoch, deliveryv1.MessageType_MESSAGE_TYPE_COMMIT, req.Commit, did)
+		msgID, err := insertMessage(ctx, tx, req.GroupId, req.Epoch, deliveryv1.MessageType_MESSAGE_TYPE_COMMIT, req.Commit, uid, did)
 		if err != nil {
 			return err
 		}
@@ -203,10 +246,23 @@ func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequ
 			if tag.RowsAffected() == 0 {
 				return errf(connect.CodeInvalidArgument, "device %s is not a member", r)
 			}
+			// A removed device may not rejoin by itself (External Commit).
+			if _, err := tx.Exec(ctx, `INSERT INTO group_bans (group_id, device_id) VALUES ($1, $2)
+				ON CONFLICT DO NOTHING`, req.GroupId, r); err != nil {
+				return err
+			}
 		}
-		for _, a := range req.AddedDeviceIds {
-			if _, err := tx.Exec(ctx, `INSERT INTO group_members (group_id, device_id, joined_epoch) VALUES ($1, $2, $3)`,
-				req.GroupId, a, int64(newEpoch)); err != nil {
+		for i, a := range req.AddedDeviceIds {
+			var addedUser any
+			if len(req.AddedUserIds) > 0 {
+				addedUser = req.AddedUserIds[i]
+			}
+			// Being added explicitly lifts an earlier ban.
+			if _, err := tx.Exec(ctx, `DELETE FROM group_bans WHERE group_id=$1 AND device_id=$2`, req.GroupId, a); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO group_members (group_id, device_id, joined_epoch, user_id) VALUES ($1, $2, $3, $4)`,
+				req.GroupId, a, int64(newEpoch), addedUser); err != nil {
 				if db.IsUniqueViolation(err) {
 					return errf(connect.CodeInvalidArgument, "device %s is already a member", a)
 				}
@@ -214,7 +270,7 @@ func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequ
 			}
 		}
 		if len(req.Welcome) > 0 {
-			wID, err := insertMessage(ctx, tx, req.GroupId, newEpoch, deliveryv1.MessageType_MESSAGE_TYPE_WELCOME, req.Welcome, did)
+			wID, err := insertMessage(ctx, tx, req.GroupId, newEpoch, deliveryv1.MessageType_MESSAGE_TYPE_WELCOME, req.Welcome, uid, did)
 			if err != nil {
 				return err
 			}
@@ -225,7 +281,7 @@ func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequ
 			}
 			recipients = append(recipients, req.AddedDeviceIds...)
 		}
-		return nil
+		return storeGroupInfo(ctx, tx, req.GroupId, newEpoch, req.GroupInfo)
 	})
 	if err != nil {
 		return nil, asConnect(err)
@@ -237,7 +293,7 @@ func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequ
 }
 
 func (s *Service) SendApplication(ctx context.Context, req *deliveryv1.SendApplicationRequest) (*deliveryv1.SendApplicationResponse, error) {
-	_, did, err := authmiddleware.RequireDevice(ctx)
+	uid, did, err := authmiddleware.RequireDevice(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +318,7 @@ func (s *Service) SendApplication(ctx context.Context, req *deliveryv1.SendAppli
 		if int64(req.Epoch) > cur || int64(req.Epoch) < cur-EpochLag {
 			return errf(connect.CodeFailedPrecondition, "stale or future epoch %d (current %d)", req.Epoch, cur)
 		}
-		msgID, err = insertMessage(ctx, tx, req.GroupId, req.Epoch, deliveryv1.MessageType_MESSAGE_TYPE_APPLICATION, req.Payload, did)
+		msgID, err = insertMessage(ctx, tx, req.GroupId, req.Epoch, deliveryv1.MessageType_MESSAGE_TYPE_APPLICATION, req.Payload, uid, did)
 		if err != nil {
 			return err
 		}
@@ -301,7 +357,8 @@ func (s *Service) FetchWelcome(ctx context.Context, req *deliveryv1.FetchWelcome
 // pending returns undelivered envelopes of a device with queue id > after.
 func (s *Service) pending(ctx context.Context, deviceID string, after int64, limit int) ([]*deliveryv1.Envelope, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT q.id, m.group_id, m.epoch, m.message_type, m.payload, m.sender_device_id::text, m.created_at
+		`SELECT q.id, m.group_id, m.epoch, m.message_type, m.payload, m.sender_device_id::text,
+		        COALESCE(m.sender_user_id::text, ''), m.created_at
 		 FROM message_queue q JOIN group_messages m ON m.id = q.message_id
 		 WHERE q.device_id=$1 AND q.delivered_at IS NULL AND q.id > $2
 		 ORDER BY q.id LIMIT $3`, deviceID, after, limit)
@@ -315,7 +372,7 @@ func (s *Service) pending(ctx context.Context, deviceID string, after int64, lim
 		var epoch int64
 		var typ int16
 		var created time.Time
-		if err := rows.Scan(&e.Id, &e.GroupId, &epoch, &typ, &e.Payload, &e.SenderDeviceId, &created); err != nil {
+		if err := rows.Scan(&e.Id, &e.GroupId, &epoch, &typ, &e.Payload, &e.SenderDeviceId, &e.SenderUserId, &created); err != nil {
 			return nil, err
 		}
 		e.Epoch, e.Type, e.CreatedAt = uint64(epoch), deliveryv1.MessageType(typ), created.Unix()
@@ -387,4 +444,147 @@ func (s *Service) GetGroup(ctx context.Context, req *deliveryv1.GetGroupRequest)
 		return nil, asConnect(err)
 	}
 	return resp, nil
+}
+
+// ---- multi-device -----------------------------------------------------------
+
+func (s *Service) ListMyGroups(ctx context.Context, _ *deliveryv1.ListMyGroupsRequest) (*deliveryv1.ListMyGroupsResponse, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT g.id, g.current_epoch, bool_or(m.device_id = $2)
+		 FROM group_members m JOIN groups g ON g.id = m.group_id
+		 WHERE m.user_id = $1
+		   AND NOT EXISTS (SELECT 1 FROM group_bans b WHERE b.group_id = g.id AND b.device_id = $2)
+		 GROUP BY g.id, g.current_epoch ORDER BY g.id`, uid, did)
+	if err != nil {
+		return nil, asConnect(err)
+	}
+	defer rows.Close()
+	resp := &deliveryv1.ListMyGroupsResponse{}
+	for rows.Next() {
+		var g deliveryv1.MyGroup
+		var epoch int64
+		if err := rows.Scan(&g.GroupId, &epoch, &g.DeviceIsMember); err != nil {
+			return nil, asConnect(err)
+		}
+		g.CurrentEpoch = uint64(epoch)
+		resp.Groups = append(resp.Groups, &g)
+	}
+	return resp, rows.Err()
+}
+
+func (s *Service) GetGroupInfo(ctx context.Context, req *deliveryv1.GetGroupInfoRequest) (*deliveryv1.GetGroupInfoResponse, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp := &deliveryv1.GetGroupInfoResponse{}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := requireUserInGroup(ctx, tx, req.GroupId, uid, did); err != nil {
+			return err
+		}
+		var gi []byte
+		var giEpoch *int64
+		var cur int64
+		if err := tx.QueryRow(ctx, `SELECT group_info, group_info_epoch, current_epoch FROM groups WHERE id=$1`,
+			req.GroupId).Scan(&gi, &giEpoch, &cur); err != nil {
+			return err
+		}
+		if len(gi) == 0 || giEpoch == nil || *giEpoch != cur {
+			return errf(connect.CodeNotFound, "no GroupInfo for the current epoch")
+		}
+		resp.GroupInfo, resp.Epoch = gi, uint64(cur)
+		return nil
+	})
+	if err != nil {
+		return nil, asConnect(err)
+	}
+	return resp, nil
+}
+
+func (s *Service) ExternalJoin(ctx context.Context, req *deliveryv1.ExternalJoinRequest) (*deliveryv1.ExternalJoinResponse, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := validGroupID(req.GroupId); err != nil {
+		return nil, err
+	}
+	if len(req.Commit) == 0 || len(req.Commit) > MaxPayload || len(req.GroupInfo) == 0 || len(req.GroupInfo) > MaxPayload {
+		return nil, errf(connect.CodeInvalidArgument, "bad payload size")
+	}
+	newEpoch := req.Epoch + 1
+	var recipients []string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		// Policy: only a new device of a user that is already in the group.
+		if err := requireUserInGroup(ctx, tx, req.GroupId, uid, did); err != nil {
+			return err
+		}
+		var member bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND device_id=$2)`,
+			req.GroupId, did).Scan(&member); err != nil {
+			return err
+		}
+		if member {
+			return errf(connect.CodeAlreadyExists, "device is already a member")
+		}
+		if err := casEpoch(ctx, tx, req.GroupId, req.Epoch); err != nil {
+			return err
+		}
+		msgID, err := insertMessage(ctx, tx, req.GroupId, req.Epoch, deliveryv1.MessageType_MESSAGE_TYPE_COMMIT, req.Commit, uid, did)
+		if err != nil {
+			return err
+		}
+		if recipients, err = fanOut(ctx, tx, req.GroupId, msgID, did, req.Epoch); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO group_members (group_id, device_id, joined_epoch, user_id) VALUES ($1, $2, $3, $4)`,
+			req.GroupId, did, int64(newEpoch), uid); err != nil {
+			return err
+		}
+		return storeGroupInfo(ctx, tx, req.GroupId, newEpoch, req.GroupInfo)
+	})
+	if err != nil {
+		return nil, asConnect(err)
+	}
+	s.log.Info().Str("group", req.GroupId).Uint64("epoch", newEpoch).Msg("external join accepted")
+	s.hub.Notify(recipients...)
+	return &deliveryv1.ExternalJoinResponse{NewEpoch: newEpoch}, nil
+}
+
+func (s *Service) RequestJoin(ctx context.Context, req *deliveryv1.RequestJoinRequest) (*deliveryv1.RequestJoinResponse, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := validGroupID(req.GroupId); err != nil {
+		return nil, err
+	}
+	if len(req.KeyPackage) == 0 || len(req.KeyPackage) > MaxPayload {
+		return nil, errf(connect.CodeInvalidArgument, "bad key package size")
+	}
+	var recipients []string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := requireUserInGroup(ctx, tx, req.GroupId, uid, did); err != nil {
+			return err
+		}
+		var cur int64
+		if err := tx.QueryRow(ctx, `SELECT current_epoch FROM groups WHERE id=$1 FOR SHARE`, req.GroupId).Scan(&cur); err != nil {
+			return err
+		}
+		msgID, err := insertMessage(ctx, tx, req.GroupId, uint64(cur), deliveryv1.MessageType_MESSAGE_TYPE_JOIN_REQUEST, req.KeyPackage, uid, did)
+		if err != nil {
+			return err
+		}
+		recipients, err = fanOut(ctx, tx, req.GroupId, msgID, did, uint64(cur))
+		return err
+	})
+	if err != nil {
+		return nil, asConnect(err)
+	}
+	s.hub.Notify(recipients...)
+	return &deliveryv1.RequestJoinResponse{}, nil
 }
