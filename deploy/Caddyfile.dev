@@ -1,6 +1,10 @@
 # Local development: self-signed certificate from Caddy's internal CA.
 # Trust it with `kantra -ca deploy/caddy-root.crt` (see Makefile: dev-ca)
 # or use `kantra -insecure` / `curl -k`.
+{
+	order rate_limit before reverse_proxy
+}
+
 localhost {
 	tls internal
 	import Caddyfile.routes

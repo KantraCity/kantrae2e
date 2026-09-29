@@ -181,6 +181,12 @@ cp deploy/.env.example deploy/.env    # домен, email, секреты
 make prod-up                          # docker compose -f deploy/docker-compose.prod.yml ...
 ```
 
+Caddy собирается с плагином `caddy-ratelimit` (`deploy/caddy.Dockerfile`, Апгрейд 2): 5
+запросов в минуту с IP на `Login`, `Register`, `RegisterDevice`; 60 в минуту на
+`ExternalJoin`/`RequestJoin`; 1200 в минуту на остальные API. Сверх лимита — 429 с
+`Retry-After`. За CDN/балансировщиком настройте `trusted_proxies`, иначе все клиенты будут
+выглядеть одним IP.
+
 Наружу публикуется только Caddy (80, 443/tcp, 443/udp для HTTP/3), TLS автоматический.
 Postgres и MinIO (API и консоль) — только во внутренней сети; консоль — через
 `ssh -L`. `caddy_data` — persistent volume (лимиты Let's Encrypt). `deploy/backup.sh` делает
@@ -208,4 +214,3 @@ Postgres и MinIO (API и консоль) — только во внутренн
 - Локальная SQLite клиента не зашифрована (содержит расшифрованные сообщения и history-key).
 - Realtime-уведомления внутри одного экземпляра delivery-service (плюс опрос раз в 15 с);
   для нескольких экземпляров — Postgres LISTEN/NOTIFY.
-- Rate limiting на гейтвее (Апгрейд 2) не включён — нужен кастомный Caddy через `xcaddy`.

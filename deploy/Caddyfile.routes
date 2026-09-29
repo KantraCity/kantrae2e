@@ -2,18 +2,85 @@
 # `handle` keeps the full path: services serve exactly the paths below,
 # the same with or without the gateway.
 
-# --- auth-service ---
+# Rate limits (caddy-ratelimit, per client IP). A request over the limit gets
+# 429 with Retry-After. Behind a CDN/load balancer configure trusted_proxies
+# so that {client_ip} is the real client.
+
+# --- auth-service: brute-force protection first (roadmap Upgrade 2) ---
+handle /kantra.auth.v1.AuthService/Login {
+	rate_limit {
+		zone auth_login {
+			key {client_ip}
+			events 5
+			window 1m
+		}
+	}
+	reverse_proxy auth-service:8080
+}
+handle /kantra.auth.v1.AuthService/Register {
+	rate_limit {
+		zone auth_register {
+			key {client_ip}
+			events 5
+			window 1m
+		}
+	}
+	reverse_proxy auth-service:8080
+}
+handle /kantra.auth.v1.AuthService/RegisterDevice {
+	rate_limit {
+		zone auth_register_device {
+			key {client_ip}
+			events 5
+			window 1m
+		}
+	}
+	reverse_proxy auth-service:8080
+}
 handle /kantra.auth.v1.AuthService/* {
+	rate_limit {
+		zone api {
+			key {client_ip}
+			events 1200
+			window 1m
+		}
+	}
 	reverse_proxy auth-service:8080
 }
 
 # --- directory-service (KeyPackages) ---
 handle /kantra.directory.v1.DirectoryService/* {
+	rate_limit {
+		zone api {
+			key {client_ip}
+			events 1200
+			window 1m
+		}
+	}
 	reverse_proxy directory-service:8081
 }
 
 # --- delivery-service, incl. WebSocket (Upgrade is proxied automatically) ---
+# Joining groups by oneself is cheap to abuse: separate, tighter zone.
+@selfjoin path /kantra.delivery.v1.DeliveryService/ExternalJoin /kantra.delivery.v1.DeliveryService/RequestJoin
+handle @selfjoin {
+	rate_limit {
+		zone self_join {
+			key {client_ip}
+			events 60
+			window 1m
+		}
+	}
+	reverse_proxy delivery-service:8082
+}
 handle /kantra.delivery.v1.DeliveryService/* {
+	rate_limit {
+		zone api {
+			key {client_ip}
+			events 1200
+			window 1m
+		}
+	}
 	reverse_proxy delivery-service:8082
 }
 handle /v1/ws {

@@ -31,4 +31,7 @@ jobs:
       - run: make lint
       - run: make test
       - name: Build service images
-        run: for s in auth-service directory-service delivery-service history-service media-service s3init; do docker build --build-arg SERVICE=$s -t kantra-$s . ; done
+        run: |
+          for s in auth-service directory-service delivery-service history-service media-service s3init; do docker build --build-arg SERVICE=$s -t kantra-$s . ; done
+          docker build -f deploy/caddy.Dockerfile -t kantra-caddy deploy
+          docker run --rm -v $PWD/deploy:/etc/caddy:ro -e DOMAIN=chat.example.com -e ACME_EMAIL=ci@example.com kantra-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

@@ -103,7 +103,10 @@ services:
 
   caddy:
     <<: *service
-    image: caddy:2-alpine
+    image: kantra-caddy
+    build:
+      context: .
+      dockerfile: caddy.Dockerfile
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
