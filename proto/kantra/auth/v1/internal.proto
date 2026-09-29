@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package kantra.auth.v1;
+
+// Service-to-service API. Not routed by the gateway; authenticated with the
+// shared INTERNAL_TOKEN ("Authorization: Internal <token>").
+service AuthInternalService {
+  // Which of the given devices exist and are not revoked.
+  rpc DeviceStatus(DeviceStatusRequest) returns (DeviceStatusResponse) {}
+}
+
+message DeviceStatusRequest {
+  repeated string device_ids = 1;
+}
+
+message DeviceStatusResponse {
+  repeated string active_device_ids = 1;
+}

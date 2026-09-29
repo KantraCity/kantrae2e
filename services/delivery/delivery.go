@@ -21,6 +21,7 @@ import (
 	"github.com/kantracity/kantrae2e/gen/kantra/delivery/v1/deliveryv1connect"
 	"github.com/kantracity/kantrae2e/pkg/authmiddleware"
 	"github.com/kantracity/kantrae2e/pkg/db"
+	"github.com/kantracity/kantrae2e/pkg/devicestatus"
 )
 
 //go:embed migrations/*.sql
@@ -43,20 +44,27 @@ const (
 )
 
 type Service struct {
-	pool   *pgxpool.Pool
-	secret []byte
-	hub    *Hub
-	log    zerolog.Logger
+	pool    *pgxpool.Pool
+	secret  []byte
+	hub     *Hub
+	log     zerolog.Logger
+	devices devicestatus.Checker
 }
 
 func New(pool *pgxpool.Pool, secret []byte, log zerolog.Logger) *Service {
 	return &Service{pool: pool, secret: secret, hub: NewHub(), log: log}
 }
 
+// WithDevices makes the service reject revoked devices (nil disables it).
+func (s *Service) WithDevices(ch devicestatus.Checker) *Service {
+	s.devices = ch
+	return s
+}
+
 // Handler mounts the connect service.
 func (s *Service) Handler() (string, http.Handler) {
 	return deliveryv1connect.NewDeliveryServiceHandler(s,
-		connect.WithInterceptors(authmiddleware.Interceptor(s.secret)))
+		connect.WithInterceptors(authmiddleware.Interceptor(s.secret), devicestatus.Interceptor(s.devices)))
 }
 
 func errf(code connect.Code, format string, args ...any) error {

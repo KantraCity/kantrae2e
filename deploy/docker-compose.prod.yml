@@ -16,6 +16,9 @@ x-env: &env
   DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
   JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
   TOKEN_TTL: ${TOKEN_TTL:-24h}
+  # Service-to-service API of auth (device revocation checks).
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set INTERNAL_TOKEN in deploy/.env}
+  AUTH_INTERNAL_URL: http://auth-service:8080
 
 x-s3: &s3
   S3_ENDPOINT: minio:9000

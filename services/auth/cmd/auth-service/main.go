@@ -24,6 +24,14 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle(auth.New(pool, server.JWTSecret(), ttl).Handler())
+	if tok := server.Env("INTERNAL_TOKEN", ""); tok != "" {
+		if len(tok) < 32 {
+			l.Fatal().Msg("INTERNAL_TOKEN must be at least 32 bytes")
+		}
+		mux.Handle(auth.NewInternal(pool, tok).Handler())
+	} else {
+		l.Warn().Msg("INTERNAL_TOKEN not set: device revocation is not visible to other services")
+	}
 	mux.Handle("GET /healthz", server.Health(pool.Ping))
 	server.Run(l, server.Env("LISTEN_ADDR", ":8080"), mux)
 }

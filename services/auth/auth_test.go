@@ -90,3 +90,42 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatalf("reverse lookup: %v %v", lu, err)
 	}
 }
+
+func TestInternalDeviceStatus(t *testing.T) {
+	pool := testutil.Pool(t, testutil.DatabaseURL(t), auth.Schema, auth.Migrations())
+	path, h := auth.New(pool, testutil.Secret, time.Hour).Handler()
+	ipath, ih := auth.NewInternal(pool, "internal-token-internal-token-1234").Handler()
+	srv := testutil.Serve(t, map[string]http.Handler{path: h, ipath: ih})
+	ctx := context.Background()
+
+	anon := authv1connect.NewAuthServiceClient(srv.Client(), srv.URL)
+	reg, err := anon.Register(ctx, &authv1.RegisterRequest{Username: "alice", Password: "correct horse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cl := authv1connect.NewAuthServiceClient(srv.Client(), srv.URL, bearer(reg.Token))
+	d1, _ := cl.RegisterDevice(ctx, &authv1.RegisterDeviceRequest{DeviceName: "a"})
+	d2, _ := cl.RegisterDevice(ctx, &authv1.RegisterDeviceRequest{DeviceName: "b"})
+	if _, err := cl.RevokeDevice(ctx, &authv1.RevokeDeviceRequest{DeviceId: d2.DeviceId}); err != nil {
+		t.Fatal(err)
+	}
+
+	internalWith := func(tok string) authv1connect.AuthInternalServiceClient {
+		return authv1connect.NewAuthInternalServiceClient(srv.Client(), srv.URL, connect.WithInterceptors(
+			connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+				return func(ctx context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {
+					r.Header().Set("Authorization", tok)
+					return next(ctx, r)
+				}
+			})))
+	}
+	req := &authv1.DeviceStatusRequest{DeviceIds: []string{d1.DeviceId, d2.DeviceId, "not-a-uuid"}}
+	// A user JWT is not enough.
+	if _, err := internalWith("Bearer "+reg.Token).DeviceStatus(ctx, req); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("jwt accepted: %v", err)
+	}
+	r, err := internalWith("Internal internal-token-internal-token-1234").DeviceStatus(ctx, req)
+	if err != nil || len(r.ActiveDeviceIds) != 1 || r.ActiveDeviceIds[0] != d1.DeviceId {
+		t.Fatalf("status: %v %v", r, err)
+	}
+}

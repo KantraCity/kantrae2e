@@ -18,13 +18,15 @@ import (
 	"github.com/kantracity/kantrae2e/gen/kantra/delivery/v1/deliveryv1connect"
 	"github.com/kantracity/kantrae2e/internal/testutil"
 	"github.com/kantracity/kantrae2e/pkg/authmiddleware"
+	"github.com/kantracity/kantrae2e/pkg/devicestatus"
 	"github.com/kantracity/kantrae2e/services/delivery"
 )
 
 type env struct {
-	t   *testing.T
-	url string
-	hc  *http.Client
+	t       *testing.T
+	url     string
+	hc      *http.Client
+	devices *devicestatus.Static
 }
 
 type dev struct {
@@ -34,10 +36,11 @@ type dev struct {
 
 func setup(t *testing.T) *env {
 	pool := testutil.Pool(t, testutil.DatabaseURL(t), delivery.Schema, delivery.Migrations())
-	svc := delivery.New(pool, testutil.Secret, zerolog.Nop())
+	devices := &devicestatus.Static{}
+	svc := delivery.New(pool, testutil.Secret, zerolog.Nop()).WithDevices(devices)
 	path, h := svc.Handler()
 	srv := testutil.Serve(t, map[string]http.Handler{path: h, delivery.WSPath: svc.WSHandler()})
-	return &env{t: t, url: srv.URL, hc: srv.Client()}
+	return &env{t: t, url: srv.URL, hc: srv.Client(), devices: devices}
 }
 
 func (e *env) device() *dev { return e.deviceOf(uuid.NewString()) }
@@ -391,5 +394,31 @@ func TestMultiDevice(t *testing.T) {
 	}
 	if _, err := tablet.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: g, Epoch: 4, Commit: []byte("back"), GroupInfo: []byte("gi")}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("banned rejoin: %v", err)
+	}
+}
+
+func TestRevokedDeviceIsLockedOut(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	aliceUser := uuid.NewString()
+	laptop, phone := e.deviceOf(aliceUser), e.deviceOf(aliceUser)
+	g := uuid.NewString()
+	if _, err := laptop.c.CreateGroup(ctx, &deliveryv1.CreateGroupRequest{GroupId: g, GroupInfo: []byte("gi")}); err != nil {
+		t.Fatal(err)
+	}
+	e.devices.Revoke(phone.id)
+	if _, err := phone.c.ListMyGroups(ctx, &deliveryv1.ListMyGroupsRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("list: %v", err)
+	}
+	if _, err := phone.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: g, Epoch: 0, Commit: []byte("c"), GroupInfo: []byte("g")}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("external join: %v", err)
+	}
+	_, resp, err := websocket.Dial(ctx, "wss"+strings.TrimPrefix(e.url, "https")+delivery.WSPath, &websocket.DialOptions{
+		HTTPClient: e.hc, HTTPHeader: http.Header{"Authorization": {"Bearer " + phone.tok}}})
+	if err == nil || resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("ws: %v", err)
+	}
+	if _, err := laptop.c.ListMyGroups(ctx, &deliveryv1.ListMyGroupsRequest{}); err != nil {
+		t.Fatalf("active device rejected: %v", err)
 	}
 }

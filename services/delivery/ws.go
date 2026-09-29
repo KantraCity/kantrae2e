@@ -11,6 +11,7 @@ import (
 
 	deliveryv1 "github.com/kantracity/kantrae2e/gen/kantra/delivery/v1"
 	"github.com/kantracity/kantrae2e/pkg/authmiddleware"
+	"github.com/kantracity/kantrae2e/pkg/devicestatus"
 )
 
 // WSPath is the realtime endpoint (roadmap 2.3).
@@ -72,6 +73,10 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 	did, ok := authmiddleware.DeviceIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "device-bound token required", http.StatusForbidden)
+		return
+	}
+	if err := devicestatus.RequireActive(r.Context(), s.devices, did); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	conn, err := websocket.Accept(w, r, nil)

@@ -16,6 +16,7 @@ import (
 	"github.com/kantracity/kantrae2e/gen/kantra/directory/v1/directoryv1connect"
 	"github.com/kantracity/kantrae2e/internal/testutil"
 	"github.com/kantracity/kantrae2e/pkg/authmiddleware"
+	"github.com/kantracity/kantrae2e/pkg/devicestatus"
 	"github.com/kantracity/kantrae2e/services/directory"
 )
 
@@ -121,5 +122,35 @@ func TestFetchUserKeyPackages(t *testing.T) {
 	}
 	if _, err := alice.FetchUserKeyPackages(ctx, &directoryv1.FetchUserKeyPackagesRequest{UserId: bob}); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("drained: %v", err)
+	}
+}
+
+func TestRevokedDevicesKeyPackagesHidden(t *testing.T) {
+	pool := testutil.Pool(t, testutil.DatabaseURL(t), directory.Schema, directory.Migrations())
+	devices := &devicestatus.Static{}
+	path, h := directory.New(pool, testutil.Secret).WithDevices(devices).Handler()
+	srv := testutil.Serve(t, map[string]http.Handler{path: h})
+	ctx := context.Background()
+
+	bob := uuid.NewString()
+	laptop, phone := uuid.NewString(), uuid.NewString()
+	for _, d := range []string{laptop, phone} {
+		if _, err := client(t, srv.URL, srv.Client(), bob, d).PublishKeyPackages(ctx,
+			&directoryv1.PublishKeyPackagesRequest{KeyPackages: [][]byte{[]byte(d), []byte(d)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	devices.Revoke(laptop)
+	alice := client(t, srv.URL, srv.Client(), uuid.NewString(), "")
+	r, err := alice.FetchUserKeyPackages(ctx, &directoryv1.FetchUserKeyPackagesRequest{UserId: bob})
+	if err != nil || len(r.KeyPackages) != 1 || r.KeyPackages[0].DeviceId != phone {
+		t.Fatalf("fetch user: %v %v", r, err)
+	}
+	if _, err := alice.FetchKeyPackage(ctx, &directoryv1.FetchKeyPackageRequest{UserId: bob, DeviceId: laptop}); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("revoked device kp: %v", err)
+	}
+	if _, err := client(t, srv.URL, srv.Client(), bob, laptop).RefillKeyPackages(ctx,
+		&directoryv1.RefillKeyPackagesRequest{KeyPackages: [][]byte{[]byte("x")}}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("revoked publish: %v", err)
 	}
 }

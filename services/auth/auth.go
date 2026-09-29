@@ -3,6 +3,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"embed"
 	"errors"
 	"io/fs"
@@ -235,4 +236,61 @@ func (s *Service) RefreshToken(ctx context.Context, _ *authv1.RefreshTokenReques
 		return nil, internal(err)
 	}
 	return &authv1.RefreshTokenResponse{Token: tok}, nil
+}
+
+// ---- internal API -------------------------------------------------------------
+
+// Internal implements AuthInternalService for other services.
+type Internal struct {
+	pool  *pgxpool.Pool
+	token string
+}
+
+func NewInternal(pool *pgxpool.Pool, token string) *Internal {
+	return &Internal{pool: pool, token: token}
+}
+
+// Handler mounts the internal service, guarded by the shared token.
+func (s *Internal) Handler() (string, http.Handler) {
+	return authv1connect.NewAuthInternalServiceHandler(s, connect.WithInterceptors(internalAuth(s.token)))
+}
+
+func internalAuth(token string) connect.UnaryInterceptorFunc {
+	want := []byte("Internal " + token)
+	return func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			got := []byte(req.Header().Get("Authorization"))
+			if subtle.ConstantTimeCompare(got, want) != 1 {
+				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("internal token required"))
+			}
+			return next(ctx, req)
+		}
+	}
+}
+
+const maxStatusBatch = 1000
+
+func (s *Internal) DeviceStatus(ctx context.Context, req *authv1.DeviceStatusRequest) (*authv1.DeviceStatusResponse, error) {
+	if len(req.DeviceIds) > maxStatusBatch {
+		return nil, invalid("too many device ids")
+	}
+	var ids []string
+	for _, id := range req.DeviceIds {
+		if _, err := uuid.Parse(id); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	resp := &authv1.DeviceStatusResponse{}
+	if len(ids) == 0 {
+		return resp, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id::text FROM devices WHERE id = ANY($1::uuid[]) AND revoked_at IS NULL`, ids)
+	if err != nil {
+		return nil, internal(err)
+	}
+	resp.ActiveDeviceIds, err = pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, internal(err)
+	}
+	return resp, nil
 }

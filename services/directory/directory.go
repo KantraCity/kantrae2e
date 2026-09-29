@@ -16,6 +16,7 @@ import (
 	directoryv1 "github.com/kantracity/kantrae2e/gen/kantra/directory/v1"
 	"github.com/kantracity/kantrae2e/gen/kantra/directory/v1/directoryv1connect"
 	"github.com/kantracity/kantrae2e/pkg/authmiddleware"
+	"github.com/kantracity/kantrae2e/pkg/devicestatus"
 )
 
 //go:embed migrations/*.sql
@@ -36,17 +37,43 @@ const (
 )
 
 type Service struct {
-	pool   *pgxpool.Pool
-	secret []byte
+	pool    *pgxpool.Pool
+	secret  []byte
+	devices devicestatus.Checker
 }
 
 func New(pool *pgxpool.Pool, secret []byte) *Service {
 	return &Service{pool: pool, secret: secret}
 }
 
+// WithDevices hides KeyPackages of revoked devices and rejects requests
+// from revoked devices (nil disables it).
+func (s *Service) WithDevices(ch devicestatus.Checker) *Service {
+	s.devices = ch
+	return s
+}
+
 func (s *Service) Handler() (string, http.Handler) {
 	return directoryv1connect.NewDirectoryServiceHandler(s,
-		connect.WithInterceptors(authmiddleware.Interceptor(s.secret)))
+		connect.WithInterceptors(authmiddleware.Interceptor(s.secret), devicestatus.Interceptor(s.devices)))
+}
+
+// activeDevices filters out revoked devices.
+func (s *Service) activeDevices(ctx context.Context, ids []string) ([]string, error) {
+	if s.devices == nil || len(ids) == 0 {
+		return ids, nil
+	}
+	st, err := s.devices.Active(ctx, ids...)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
+	var out []string
+	for _, id := range ids {
+		if st[id] {
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) publish(ctx context.Context, kps [][]byte) (int64, error) {
@@ -150,6 +177,13 @@ func (s *Service) FetchKeyPackage(ctx context.Context, req *directoryv1.FetchKey
 	if _, err := authmiddleware.RequireUser(ctx); err != nil {
 		return nil, err
 	}
+	active, err := s.activeDevices(ctx, []string{req.DeviceId})
+	if err != nil {
+		return nil, err
+	}
+	if len(active) == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("no key package available"))
+	}
 	kp, err := claim(ctx, s.pool, req.UserId, req.DeviceId)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("no key package available"))
@@ -172,6 +206,10 @@ func (s *Service) FetchUserKeyPackages(ctx context.Context, req *directoryv1.Fet
 	devices, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// KeyPackages of revoked devices are never handed out.
+	if devices, err = s.activeDevices(ctx, devices); err != nil {
+		return nil, err
 	}
 	resp := &directoryv1.FetchUserKeyPackagesResponse{}
 	for _, d := range devices {

@@ -12,12 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
 	"github.com/kantracity/kantrae2e/client/core"
 	"github.com/kantracity/kantrae2e/internal/testutil"
 	"github.com/kantracity/kantrae2e/pkg/blobstore"
+	"github.com/kantracity/kantrae2e/pkg/devicestatus"
 	"github.com/kantracity/kantrae2e/services/auth"
 	"github.com/kantracity/kantrae2e/services/delivery"
 	"github.com/kantracity/kantrae2e/services/directory"
@@ -58,10 +60,16 @@ func newCluster(t *testing.T) *cluster {
 	h := map[string]http.Handler{}
 	add := func(p string, hd http.Handler) { h[p] = hd }
 
-	add(auth.New(testutil.Pool(t, dsn, auth.Schema, auth.Migrations()), secret, time.Hour).Handler())
-	add(directory.New(testutil.Pool(t, dsn, directory.Schema, directory.Migrations()), secret).Handler())
+	authDB := testutil.Pool(t, dsn, auth.Schema, auth.Migrations())
+	add(auth.New(authDB, secret, time.Hour).Handler())
+	const internalToken = "internal-token-internal-token-1234"
+	add(auth.NewInternal(authDB, internalToken).Handler())
+	// Services learn about revocations through auth's internal API; the
+	// base URL is only known once the server runs, hence the indirection.
+	devices := &lateChecker{}
+	add(directory.New(testutil.Pool(t, dsn, directory.Schema, directory.Migrations()), secret).WithDevices(devices).Handler())
 	c.deliveryDB = testutil.Pool(t, dsn, delivery.Schema, delivery.Migrations())
-	del := delivery.New(c.deliveryDB, secret, zerolog.Nop())
+	del := delivery.New(c.deliveryDB, secret, zerolog.Nop()).WithDevices(devices)
 	add(del.Handler())
 	add(delivery.WSPath, del.WSHandler())
 	c.historyBlob = blobs(t, history.Bucket)
@@ -70,8 +78,13 @@ func newCluster(t *testing.T) *cluster {
 
 	srv := testutil.Serve(t, h)
 	c.url, c.hc = srv.URL, srv.Client()
+	dc := devicestatus.New(srv.Client(), srv.URL, internalToken)
+	dc.TTL = 0 // see revocations immediately (production: devicestatus.ActiveTTL)
+	devices.Checker = dc
 	return c
 }
+
+type lateChecker struct{ devicestatus.Checker }
 
 type user struct {
 	*core.Client
@@ -462,13 +475,18 @@ func TestSeamlessNewDevice(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("removed from %d groups", n)
 	}
+	// The revoked laptop is locked out of delivery and directory.
 	laptop = c.open("alice", "alice.db")
-	_ = laptop.Sync(ctx)
-	if g, _ := laptop.ResolveGroup(ctx, "team"); g == nil || g.Active {
-		t.Fatalf("revoked laptop still active: %+v", g)
+	if err := laptop.Sync(ctx); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("revoked laptop sync: %v", err)
 	}
-	if j, _, _ := laptop.JoinMyGroups(ctx); j != 0 {
+	if j, _, err := laptop.JoinMyGroups(ctx); j != 0 || err == nil {
 		t.Fatal("revoked laptop rejoined")
+	}
+	// Bob re-inviting alice does not bring the laptop back.
+	ok(t, bob.Sync(ctx))
+	if err := bob.Invite(ctx, gid, "alice"); err == nil {
+		t.Fatal("expected: all active devices of alice are already members")
 	}
 }
 
