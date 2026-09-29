@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=kantra-desktop
+Exec=kantra-desktop
+Icon=kantra-desktop
+Categories=Development;
+Terminal=false
+Keywords=wails
+Version=1.0
+StartupNotify=false

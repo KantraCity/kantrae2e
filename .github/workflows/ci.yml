@@ -35,3 +35,30 @@ jobs:
           for s in auth-service directory-service delivery-service history-service media-service s3init; do docker build --build-arg SERVICE=$s -t kantra-$s . ; done
           docker build -f deploy/caddy.Dockerfile -t kantra-caddy deploy
           docker run --rm -v $PWD/deploy:/etc/caddy:ro -e DOMAIN=chat.example.com -e ACME_EMAIL=ci@example.com kantra-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  desktop:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mls-ffi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - name: System libraries (GTK4, WebKitGTK 6)
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+      - run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
+      - run: make mls-ffi
+      - name: Type-check frontend
+        working-directory: desktop/frontend
+        run: npm ci && npx svelte-check --tsconfig ./tsconfig.json
+      - name: Build web (server mode) and desktop
+        working-directory: desktop
+        run: wails3 task build:server && wails3 task build

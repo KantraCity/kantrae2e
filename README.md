@@ -7,6 +7,7 @@
 
 ```
 cmd/kantra            CLI-клиент
+desktop/              десктоп- и веб-клиент (Wails v3 + Svelte, стиль TG dark)
 cmd/s3init            создание бакетов history/media (init-контейнер)
 client/mls            cgo-мост к mls-rs (единственный "не Go" кусок)
 client/store          SQLite клиента (modernc.org/sqlite, без cgo)
@@ -52,6 +53,20 @@ bin/kantra -db /tmp/alice.db backup                  # зашифрованны�
 curl -k https://localhost/kantra.auth.v1.AuthService/Register \
   -H 'Content-Type: application/json' -d '{"username":"test","password":"test1234"}'
 ```
+
+## Десктоп и веб
+
+`desktop/` — Wails v3 (пресет `svelte`) поверх того же `client/core`. Одна кодовая база
+собирается в двух вариантах:
+
+```bash
+make desktop       # окно (WebKitGTK / WebView2 / WKWebView)
+make desktop-web   # Wails server mode: тот же UI в браузере на http://localhost:8090
+```
+
+Веб-вариант — это ваш MLS-клиент, запущенный локально: он хранит ключи этого устройства и
+расшифрованные сообщения, поэтому по умолчанию слушает только `localhost`. Подробности — в
+`desktop/README.md`.
 
 ## Тесты
 

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Kantra
+Comment=E2EE messenger (MLS)
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/kantra-desktop %u
+Terminal=false
+Type=Application
+Icon=kantra-desktop
+Categories=Utility;
+StartupWMClass=kantra-desktop
+
+ 

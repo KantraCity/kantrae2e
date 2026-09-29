@@ -6,7 +6,7 @@ COMPOSE_DEV  = docker compose -f deploy/docker-compose.yml
 COMPOSE_PROD = docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env
 SERVICES = auth directory delivery history media
 
-.PHONY: all mls-ffi gen build cli services test test-unit test-rust lint up down logs dev-ca prod-up
+.PHONY: all mls-ffi gen build cli services test test-unit test-rust lint up down logs dev-ca prod-up desktop desktop-web
 
 all: build
 
@@ -61,3 +61,11 @@ dev-ca:
 
 prod-up:
 	$(COMPOSE_PROD) up -d --build
+
+## Desktop app (Wails v3; needs the wails3 CLI, Node, GTK4/WebKitGTK 6 on Linux)
+desktop: mls-ffi
+	cd desktop && wails3 task build
+
+## Same app for the browser (Wails server mode, no GUI libraries needed)
+desktop-web: mls-ffi
+	cd desktop && wails3 task build:server
