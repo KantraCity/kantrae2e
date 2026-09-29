@@ -41,7 +41,7 @@ test: mls-ffi test-rust
 
 lint:
 	go vet ./...
-	test -z "$$(gofmt -l $$(git ls-files '*.go' | grep -v '^gen/'))"
+	test -z "$$(gofmt -l $$(git ls-files '*.go' | grep -v -e '^gen/' -e '^desktop/build/'))"
 	cd mls-ffi && cargo clippy --release --all-targets -- -D warnings
 
 ## Local stack (https://localhost)
