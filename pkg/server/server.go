@@ -3,8 +3,10 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -99,6 +101,12 @@ func (w *statusWriter) WriteHeader(code int) {
 // Unwrap lets http.ResponseController reach the underlying writer
 // (needed for WebSocket hijacking and flushing).
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// Hijack supports WebSocket upgrades through the access log wrapper.
+func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.status = http.StatusSwitchingProtocols
+	return http.NewResponseController(w.ResponseWriter).Hijack()
+}
 
 // Run serves handler on addr (HTTP/1.1 and cleartext HTTP/2) until SIGINT or
 // SIGTERM, then shuts down gracefully.

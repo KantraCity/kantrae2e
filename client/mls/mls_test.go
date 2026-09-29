@@ -228,3 +228,14 @@ func TestClearPendingCommit(t *testing.T) {
 		t.Fatalf("epoch %d members %d", ep, len(members))
 	}
 }
+
+func TestKeyPackageIdentity(t *testing.T) {
+	d := newDevice(t, "user:device")
+	id, err := KeyPackageIdentity(must(d.c.GenerateKeyPackage()))
+	if err != nil || string(id) != "user:device" {
+		t.Fatalf("%q %v", id, err)
+	}
+	if _, err := KeyPackageIdentity([]byte("junk")); err == nil {
+		t.Fatal("junk accepted")
+	}
+}

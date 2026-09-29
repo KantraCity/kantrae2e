@@ -68,14 +68,25 @@ func TestAuthFlow(t *testing.T) {
 	if err != nil || len(list.Devices) != 1 {
 		t.Fatalf("list: %v %v", list, err)
 	}
+	devCl := authv1connect.NewAuthServiceClient(srv.Client(), srv.URL, bearer(dev.Token))
+	if r, err := devCl.RefreshToken(ctx, &authv1.RefreshTokenRequest{}); err != nil || r.Token == "" {
+		t.Fatalf("refresh: %v", err)
+	}
 	if _, err := cl.RevokeDevice(ctx, &authv1.RevokeDeviceRequest{DeviceId: dev.DeviceId}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := anon.Login(ctx, &authv1.LoginRequest{Username: "alice", Password: "correct horse", DeviceId: dev.DeviceId}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("revoked device login: %v", err)
 	}
+	if _, err := devCl.RefreshToken(ctx, &authv1.RefreshTokenRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("refresh revoked: %v", err)
+	}
 	lu, err := cl.LookupUser(ctx, &authv1.LookupUserRequest{Username: "alice"})
 	if err != nil || lu.UserId != reg.UserId {
 		t.Fatalf("lookup: %v %v", lu, err)
+	}
+	lu, err = cl.LookupUser(ctx, &authv1.LookupUserRequest{UserId: reg.UserId})
+	if err != nil || lu.Username != "alice" {
+		t.Fatalf("reverse lookup: %v %v", lu, err)
 	}
 }

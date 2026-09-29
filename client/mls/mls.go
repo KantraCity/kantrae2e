@@ -316,3 +316,13 @@ func (c *Client) ForgetGroup(groupID []byte) error {
 	var e C.MlsBuf
 	return check(C.mls_forget_group(c.c, gp, gn, &e), e)
 }
+
+// KeyPackageIdentity returns the credential identity inside a KeyPackage.
+func KeyPackageIdentity(kp []byte) ([]byte, error) {
+	p, n := cbytes(kp)
+	defer free(p)
+	var id, e C.MlsBuf
+	code := C.mls_key_package_identity(p, n, &id, &e)
+	out := takeBuf(id)
+	return out, check(code, e)
+}

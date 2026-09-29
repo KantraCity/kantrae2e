@@ -47,6 +47,9 @@ const (
 	AuthServiceRevokeDeviceProcedure = "/kantra.auth.v1.AuthService/RevokeDevice"
 	// AuthServiceLookupUserProcedure is the fully-qualified name of the AuthService's LookupUser RPC.
 	AuthServiceLookupUserProcedure = "/kantra.auth.v1.AuthService/LookupUser"
+	// AuthServiceRefreshTokenProcedure is the fully-qualified name of the AuthService's RefreshToken
+	// RPC.
+	AuthServiceRefreshTokenProcedure = "/kantra.auth.v1.AuthService/RefreshToken"
 )
 
 // AuthServiceClient is a client for the kantra.auth.v1.AuthService service.
@@ -57,8 +60,10 @@ type AuthServiceClient interface {
 	RegisterDevice(context.Context, *v1.RegisterDeviceRequest) (*v1.RegisterDeviceResponse, error)
 	ListDevices(context.Context, *v1.ListDevicesRequest) (*v1.ListDevicesResponse, error)
 	RevokeDevice(context.Context, *v1.RevokeDeviceRequest) (*v1.RevokeDeviceResponse, error)
-	// Resolves a username to a user id (to find chat partners).
+	// Resolves a username to a user id or vice versa.
 	LookupUser(context.Context, *v1.LookupUserRequest) (*v1.LookupUserResponse, error)
+	// Exchanges a valid token for a fresh one. Fails for revoked devices.
+	RefreshToken(context.Context, *v1.RefreshTokenRequest) (*v1.RefreshTokenResponse, error)
 }
 
 // NewAuthServiceClient constructs a client for the kantra.auth.v1.AuthService service. By default,
@@ -108,6 +113,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("LookupUser")),
 			connect.WithClientOptions(opts...),
 		),
+		refreshToken: connect.NewClient[v1.RefreshTokenRequest, v1.RefreshTokenResponse](
+			httpClient,
+			baseURL+AuthServiceRefreshTokenProcedure,
+			connect.WithSchema(authServiceMethods.ByName("RefreshToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -119,6 +130,7 @@ type authServiceClient struct {
 	listDevices    *connect.Client[v1.ListDevicesRequest, v1.ListDevicesResponse]
 	revokeDevice   *connect.Client[v1.RevokeDeviceRequest, v1.RevokeDeviceResponse]
 	lookupUser     *connect.Client[v1.LookupUserRequest, v1.LookupUserResponse]
+	refreshToken   *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
 }
 
 // Register calls kantra.auth.v1.AuthService.Register.
@@ -175,6 +187,15 @@ func (c *authServiceClient) LookupUser(ctx context.Context, req *v1.LookupUserRe
 	return nil, err
 }
 
+// RefreshToken calls kantra.auth.v1.AuthService.RefreshToken.
+func (c *authServiceClient) RefreshToken(ctx context.Context, req *v1.RefreshTokenRequest) (*v1.RefreshTokenResponse, error) {
+	response, err := c.refreshToken.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // AuthServiceHandler is an implementation of the kantra.auth.v1.AuthService service.
 type AuthServiceHandler interface {
 	Register(context.Context, *v1.RegisterRequest) (*v1.RegisterResponse, error)
@@ -183,8 +204,10 @@ type AuthServiceHandler interface {
 	RegisterDevice(context.Context, *v1.RegisterDeviceRequest) (*v1.RegisterDeviceResponse, error)
 	ListDevices(context.Context, *v1.ListDevicesRequest) (*v1.ListDevicesResponse, error)
 	RevokeDevice(context.Context, *v1.RevokeDeviceRequest) (*v1.RevokeDeviceResponse, error)
-	// Resolves a username to a user id (to find chat partners).
+	// Resolves a username to a user id or vice versa.
 	LookupUser(context.Context, *v1.LookupUserRequest) (*v1.LookupUserResponse, error)
+	// Exchanges a valid token for a fresh one. Fails for revoked devices.
+	RefreshToken(context.Context, *v1.RefreshTokenRequest) (*v1.RefreshTokenResponse, error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -230,6 +253,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("LookupUser")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceRefreshTokenHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceRefreshTokenProcedure,
+		svc.RefreshToken,
+		connect.WithSchema(authServiceMethods.ByName("RefreshToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.auth.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceRegisterProcedure:
@@ -244,6 +273,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceRevokeDeviceHandler.ServeHTTP(w, r)
 		case AuthServiceLookupUserProcedure:
 			authServiceLookupUserHandler.ServeHTTP(w, r)
+		case AuthServiceRefreshTokenProcedure:
+			authServiceRefreshTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -275,4 +306,8 @@ func (UnimplementedAuthServiceHandler) RevokeDevice(context.Context, *v1.RevokeD
 
 func (UnimplementedAuthServiceHandler) LookupUser(context.Context, *v1.LookupUserRequest) (*v1.LookupUserResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.LookupUser is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) RefreshToken(context.Context, *v1.RefreshTokenRequest) (*v1.RefreshTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.RefreshToken is not implemented"))
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
@@ -193,13 +194,45 @@ func (s *Service) LookupUser(ctx context.Context, req *authv1.LookupUserRequest)
 	if _, err := authmiddleware.RequireUser(ctx); err != nil {
 		return nil, err
 	}
-	var id string
-	err := s.pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, req.Username).Scan(&id)
+	resp := &authv1.LookupUserResponse{}
+	var err error
+	switch {
+	case req.Username != "" && req.UserId == "":
+		err = s.pool.QueryRow(ctx, `SELECT id, username FROM users WHERE username=$1`, req.Username).Scan(&resp.UserId, &resp.Username)
+	case req.UserId != "" && req.Username == "":
+		if _, perr := uuid.Parse(req.UserId); perr != nil {
+			return nil, invalid("bad user_id")
+		}
+		err = s.pool.QueryRow(ctx, `SELECT id, username FROM users WHERE id=$1`, req.UserId).Scan(&resp.UserId, &resp.Username)
+	default:
+		return nil, invalid("exactly one of username / user_id is required")
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("no such user"))
 	}
 	if err != nil {
 		return nil, internal(err)
 	}
-	return &authv1.LookupUserResponse{UserId: id}, nil
+	return resp, nil
+}
+
+func (s *Service) RefreshToken(ctx context.Context, _ *authv1.RefreshTokenRequest) (*authv1.RefreshTokenResponse, error) {
+	uid, err := authmiddleware.RequireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	did, _ := authmiddleware.DeviceIDFromContext(ctx)
+	if did != "" {
+		var active bool
+		err := s.pool.QueryRow(ctx,
+			`SELECT revoked_at IS NULL FROM devices WHERE id=$1 AND user_id=$2`, did, uid).Scan(&active)
+		if err != nil || !active {
+			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("device unknown or revoked"))
+		}
+	}
+	tok, err := authmiddleware.Issue(s.secret, uid, did, s.tokenTTL)
+	if err != nil {
+		return nil, internal(err)
+	}
+	return &authv1.RefreshTokenResponse{Token: tok}, nil
 }

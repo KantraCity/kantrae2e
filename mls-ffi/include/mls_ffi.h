@@ -68,4 +68,6 @@ int32_t mls_forget_group(MlsClient *c, const uint8_t *gid, size_t gid_len, MlsBu
 int32_t mls_message_info(const uint8_t *msg, size_t msg_len, int32_t *out_kind,
                          uint64_t *out_epoch, MlsBuf *out_gid, MlsBuf *out_err);
 
+int32_t mls_key_package_identity(const uint8_t *kp, size_t kp_len, MlsBuf *out_identity, MlsBuf *out_err);
+
 #endif

@@ -567,8 +567,10 @@ func (*RevokeDeviceResponse) Descriptor() ([]byte, []int) {
 }
 
 type LookupUserRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Exactly one of username / user_id.
+	Username      string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -610,9 +612,17 @@ func (x *LookupUserRequest) GetUsername() string {
 	return ""
 }
 
+func (x *LookupUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
 type LookupUserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -654,6 +664,93 @@ func (x *LookupUserResponse) GetUserId() string {
 	return ""
 }
 
+func (x *LookupUserResponse) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+type RefreshTokenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshTokenRequest) Reset() {
+	*x = RefreshTokenRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshTokenRequest) ProtoMessage() {}
+
+func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshTokenRequest.ProtoReflect.Descriptor instead.
+func (*RefreshTokenRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{13}
+}
+
+type RefreshTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshTokenResponse) Reset() {
+	*x = RefreshTokenResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshTokenResponse) ProtoMessage() {}
+
+func (x *RefreshTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshTokenResponse.ProtoReflect.Descriptor instead.
+func (*RefreshTokenResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RefreshTokenResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
 var File_kantra_auth_v1_auth_proto protoreflect.FileDescriptor
 
 const file_kantra_auth_v1_auth_proto_rawDesc = "" +
@@ -691,11 +788,16 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\adevices\x18\x01 \x03(\v2\x16.kantra.auth.v1.DeviceR\adevices\"2\n" +
 	"\x13RevokeDeviceRequest\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\"\x16\n" +
-	"\x14RevokeDeviceResponse\"/\n" +
+	"\x14RevokeDeviceResponse\"H\n" +
 	"\x11LookupUserRequest\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\"-\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"I\n" +
 	"\x12LookupUserResponse\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId2\x97\x04\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\"\x15\n" +
+	"\x13RefreshTokenRequest\",\n" +
+	"\x14RefreshTokenResponse\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token2\xf4\x04\n" +
 	"\vAuthService\x12O\n" +
 	"\bRegister\x12\x1f.kantra.auth.v1.RegisterRequest\x1a .kantra.auth.v1.RegisterResponse\"\x00\x12F\n" +
 	"\x05Login\x12\x1c.kantra.auth.v1.LoginRequest\x1a\x1d.kantra.auth.v1.LoginResponse\"\x00\x12a\n" +
@@ -703,7 +805,8 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\vListDevices\x12\".kantra.auth.v1.ListDevicesRequest\x1a#.kantra.auth.v1.ListDevicesResponse\"\x00\x12[\n" +
 	"\fRevokeDevice\x12#.kantra.auth.v1.RevokeDeviceRequest\x1a$.kantra.auth.v1.RevokeDeviceResponse\"\x00\x12U\n" +
 	"\n" +
-	"LookupUser\x12!.kantra.auth.v1.LookupUserRequest\x1a\".kantra.auth.v1.LookupUserResponse\"\x00B\xb4\x01\n" +
+	"LookupUser\x12!.kantra.auth.v1.LookupUserRequest\x1a\".kantra.auth.v1.LookupUserResponse\"\x00\x12[\n" +
+	"\fRefreshToken\x12#.kantra.auth.v1.RefreshTokenRequest\x1a$.kantra.auth.v1.RefreshTokenResponse\"\x00B\xb4\x01\n" +
 	"\x12com.kantra.auth.v1B\tAuthProtoP\x01Z9github.com/kantracity/kantrae2e/gen/kantra/auth/v1;authv1\xa2\x02\x03KAX\xaa\x02\x0eKantra.Auth.V1\xca\x02\x0eKantra\\Auth\\V1\xe2\x02\x1aKantra\\Auth\\V1\\GPBMetadata\xea\x02\x10Kantra::Auth::V1b\x06proto3"
 
 var (
@@ -718,7 +821,7 @@ func file_kantra_auth_v1_auth_proto_rawDescGZIP() []byte {
 	return file_kantra_auth_v1_auth_proto_rawDescData
 }
 
-var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_kantra_auth_v1_auth_proto_goTypes = []any{
 	(*RegisterRequest)(nil),        // 0: kantra.auth.v1.RegisterRequest
 	(*RegisterResponse)(nil),       // 1: kantra.auth.v1.RegisterResponse
@@ -733,6 +836,8 @@ var file_kantra_auth_v1_auth_proto_goTypes = []any{
 	(*RevokeDeviceResponse)(nil),   // 10: kantra.auth.v1.RevokeDeviceResponse
 	(*LookupUserRequest)(nil),      // 11: kantra.auth.v1.LookupUserRequest
 	(*LookupUserResponse)(nil),     // 12: kantra.auth.v1.LookupUserResponse
+	(*RefreshTokenRequest)(nil),    // 13: kantra.auth.v1.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),   // 14: kantra.auth.v1.RefreshTokenResponse
 }
 var file_kantra_auth_v1_auth_proto_depIdxs = []int32{
 	6,  // 0: kantra.auth.v1.ListDevicesResponse.devices:type_name -> kantra.auth.v1.Device
@@ -742,14 +847,16 @@ var file_kantra_auth_v1_auth_proto_depIdxs = []int32{
 	7,  // 4: kantra.auth.v1.AuthService.ListDevices:input_type -> kantra.auth.v1.ListDevicesRequest
 	9,  // 5: kantra.auth.v1.AuthService.RevokeDevice:input_type -> kantra.auth.v1.RevokeDeviceRequest
 	11, // 6: kantra.auth.v1.AuthService.LookupUser:input_type -> kantra.auth.v1.LookupUserRequest
-	1,  // 7: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
-	3,  // 8: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
-	5,  // 9: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
-	8,  // 10: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
-	10, // 11: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
-	12, // 12: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
-	7,  // [7:13] is the sub-list for method output_type
-	1,  // [1:7] is the sub-list for method input_type
+	13, // 7: kantra.auth.v1.AuthService.RefreshToken:input_type -> kantra.auth.v1.RefreshTokenRequest
+	1,  // 8: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
+	3,  // 9: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
+	5,  // 10: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
+	8,  // 11: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
+	10, // 12: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
+	12, // 13: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
+	14, // 14: kantra.auth.v1.AuthService.RefreshToken:output_type -> kantra.auth.v1.RefreshTokenResponse
+	8,  // [8:15] is the sub-list for method output_type
+	1,  // [1:8] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -766,7 +873,7 @@ func file_kantra_auth_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_auth_v1_auth_proto_rawDesc), len(file_kantra_auth_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

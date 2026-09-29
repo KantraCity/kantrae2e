@@ -621,5 +621,24 @@ pub extern "C" fn mls_message_info(
     })
 }
 
+
+/// Returns the credential identity inside a KeyPackage message.
+#[no_mangle]
+pub extern "C" fn mls_key_package_identity(
+    kp: *const u8,
+    kp_len: usize,
+    out_identity: *mut MlsBuf,
+    out_err: *mut MlsBuf,
+) -> i32 {
+    guard(out_err, || {
+        let m = MlsMessage::from_bytes(unsafe { slice(kp, kp_len) }).map_err(err)?;
+        let kp = m
+            .as_key_package()
+            .ok_or_else(|| (MLS_ERR, "not a key package".to_string()))?;
+        unsafe { put(out_identity, identity_of(kp.signing_identity())) };
+        Ok(())
+    })
+}
+
 #[cfg(test)]
 mod tests;

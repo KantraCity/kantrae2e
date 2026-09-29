@@ -11,8 +11,10 @@ service AuthService {
   rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse) {}
   rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse) {}
   rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse) {}
-  // Resolves a username to a user id (to find chat partners).
+  // Resolves a username to a user id or vice versa.
   rpc LookupUser(LookupUserRequest) returns (LookupUserResponse) {}
+  // Exchanges a valid token for a fresh one. Fails for revoked devices.
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {}
 }
 
 message RegisterRequest {
@@ -70,9 +72,18 @@ message RevokeDeviceRequest {
 message RevokeDeviceResponse {}
 
 message LookupUserRequest {
+  // Exactly one of username / user_id.
   string username = 1;
+  string user_id = 2;
 }
 
 message LookupUserResponse {
   string user_id = 1;
+  string username = 2;
+}
+
+message RefreshTokenRequest {}
+
+message RefreshTokenResponse {
+  string token = 1;
 }
