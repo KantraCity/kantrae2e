@@ -2,3 +2,4 @@
 *.db
 *.sqlite
 deploy/.env
+deploy/caddy-root.crt

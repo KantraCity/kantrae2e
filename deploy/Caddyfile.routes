@@ -1,0 +1,47 @@
+# Shared routing (imported by Caddyfile and Caddyfile.dev).
+# `handle` keeps the full path: services serve exactly the paths below,
+# the same with or without the gateway.
+
+# --- auth-service ---
+handle /kantra.auth.v1.AuthService/* {
+	reverse_proxy auth-service:8080
+}
+
+# --- directory-service (KeyPackages) ---
+handle /kantra.directory.v1.DirectoryService/* {
+	reverse_proxy directory-service:8081
+}
+
+# --- delivery-service, incl. WebSocket (Upgrade is proxied automatically) ---
+handle /kantra.delivery.v1.DeliveryService/* {
+	reverse_proxy delivery-service:8082
+}
+handle /v1/ws {
+	reverse_proxy delivery-service:8082
+}
+
+# --- history-service ---
+handle /kantra.history.v1.HistoryService/* {
+	request_body {
+		max_size 9MB
+	}
+	reverse_proxy history-service:8083
+}
+
+# --- media-service ---
+handle /kantra.media.v1.MediaService/* {
+	request_body {
+		max_size 26MB
+	}
+	reverse_proxy media-service:8084
+}
+
+# --- everything else is a 404, never proxied somewhere by accident ---
+handle {
+	respond "Not found" 404
+}
+
+log {
+	output file /var/log/caddy/access.log
+	format json
+}

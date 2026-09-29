@@ -1,0 +1,148 @@
+# Development stack: docker compose -f deploy/docker-compose.yml up -d --build
+name: kantra
+
+x-service: &service
+  restart: unless-stopped
+  networks: [backend]
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-env: &env
+  DATABASE_URL: postgres://${POSTGRES_USER:-kantra}:${POSTGRES_PASSWORD:-kantra}@postgres:5432/${POSTGRES_DB:-kantra}?sslmode=disable
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-dev-secret-dev-secret-dev-secret}
+  TOKEN_TTL: ${TOKEN_TTL:-24h}
+
+x-s3: &s3
+  S3_ENDPOINT: minio:9000
+  S3_ACCESS_KEY: ${MINIO_ROOT_USER:-kantra}
+  S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-kantra-dev-password}
+
+x-health: &health
+  interval: 5s
+  timeout: 3s
+  retries: 20
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kantra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kantra}
+      POSTGRES_DB: ${POSTGRES_DB:-kantra}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      <<: *health
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-kantra}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-kantra-dev-password}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "127.0.0.1:9001:9001" # web console, local only
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/minio/health/live || wget -qO- http://localhost:9000/minio/health/live"]
+      <<: *health
+
+  # Creates the `history` and `media` buckets (idempotent).
+  s3init:
+    build: { context: .., args: { SERVICE: s3init } }
+    environment: *s3
+    networks: [backend]
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  auth-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: auth-service } }
+    environment:
+      <<: *env
+      LISTEN_ADDR: ":8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      <<: *health
+
+  directory-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: directory-service } }
+    environment:
+      <<: *env
+      LISTEN_ADDR: ":8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      <<: *health
+
+  delivery-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: delivery-service } }
+    environment:
+      <<: *env
+      LISTEN_ADDR: ":8082"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
+      <<: *health
+
+  history-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: history-service } }
+    environment:
+      <<: [*env, *s3]
+      LISTEN_ADDR: ":8083"
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"]
+      <<: *health
+
+  media-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: media-service } }
+    environment:
+      <<: [*env, *s3]
+      LISTEN_ADDR: ":8084"
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/healthz"]
+      <<: *health
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    command: caddy run --config /etc/caddy/Caddyfile.dev --adapter caddyfile
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile.dev:ro
+      - ./Caddyfile.routes:/etc/caddy/Caddyfile.routes:ro
+      - caddy_data:/data # certificates (and the dev CA): keep it persistent
+      - caddy_config:/config
+    networks: [backend]
+    depends_on:
+      auth-service: { condition: service_healthy }
+      directory-service: { condition: service_healthy }
+      delivery-service: { condition: service_healthy }
+      history-service: { condition: service_healthy }
+      media-service: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  minio_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  backend:

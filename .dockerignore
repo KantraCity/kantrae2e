@@ -1,0 +1,5 @@
+.git
+bin
+mls-ffi/target
+deploy/.env
+**/*.db

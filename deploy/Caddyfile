@@ -1,0 +1,10 @@
+{
+	# Let's Encrypt account email.
+	email {$ACME_EMAIL}
+}
+
+# Real hostname => automatic TLS (Let's Encrypt), HTTP/3 advertised via Alt-Svc
+# when UDP/443 is open.
+{$DOMAIN} {
+	import Caddyfile.routes
+}

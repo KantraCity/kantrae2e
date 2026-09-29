@@ -1,0 +1,135 @@
+# Production stack on one VPS:
+#   cp deploy/.env.example deploy/.env && edit
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+# Only Caddy publishes ports. Postgres, MinIO (API and console) stay on the
+# internal network. Firewall: open TCP 80/443 and UDP 443 (HTTP/3).
+name: kantra
+
+x-service: &service
+  restart: unless-stopped
+  networks: [backend]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+x-env: &env
+  DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
+  TOKEN_TTL: ${TOKEN_TTL:-24h}
+
+x-s3: &s3
+  S3_ENDPOINT: minio:9000
+  S3_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+  S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+
+x-health: &health
+  interval: 10s
+  timeout: 3s
+  retries: 30
+
+services:
+  postgres:
+    <<: *service
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      <<: *health
+
+  minio:
+    <<: *service
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data # the only copy of users' encrypted history: back it up
+    # No ports: the console is reachable via `ssh -L 9001:<minio-ip>:9001` only.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/minio/health/live || wget -qO- http://localhost:9000/minio/health/live"]
+      <<: *health
+
+  s3init:
+    build: { context: .., args: { SERVICE: s3init } }
+    environment: *s3
+    networks: [backend]
+    depends_on:
+      minio: { condition: service_healthy }
+
+  auth-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: auth-service } }
+    environment: { <<: *env, LISTEN_ADDR: ":8080" }
+    depends_on: { postgres: { condition: service_healthy } }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"], <<: *health }
+
+  directory-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: directory-service } }
+    environment: { <<: *env, LISTEN_ADDR: ":8081" }
+    depends_on: { postgres: { condition: service_healthy } }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"], <<: *health }
+
+  delivery-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: delivery-service } }
+    environment: { <<: *env, LISTEN_ADDR: ":8082" }
+    depends_on: { postgres: { condition: service_healthy } }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"], <<: *health }
+
+  history-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: history-service } }
+    environment: { <<: [*env, *s3], LISTEN_ADDR: ":8083" }
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3init: { condition: service_completed_successfully }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"], <<: *health }
+
+  media-service:
+    <<: *service
+    build: { context: .., args: { SERVICE: media-service } }
+    environment: { <<: [*env, *s3], LISTEN_ADDR: ":8084" }
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3init: { condition: service_completed_successfully }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8084/healthz"], <<: *health }
+
+  caddy:
+    <<: *service
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile.routes:/etc/caddy/Caddyfile.routes:ro
+      - caddy_data:/data # certificates: must be persistent (Let's Encrypt rate limits)
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      auth-service: { condition: service_healthy }
+      directory-service: { condition: service_healthy }
+      delivery-service: { condition: service_healthy }
+      history-service: { condition: service_healthy }
+      media-service: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  minio_data:
+  caddy_data:
+  caddy_config:
+  caddy_logs:
+
+networks:
+  backend:

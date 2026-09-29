@@ -7,7 +7,7 @@ fn empty() -> MlsBuf {
 
 fn take(b: MlsBuf) -> Vec<u8> {
     let v = unsafe { slice(b.ptr, b.len) }.to_vec();
-    mls_buf_free(b);
+    unsafe { mls_buf_free(b) };
     v
 }
 
@@ -17,7 +17,7 @@ fn ok(code: i32, e: MlsBuf) {
     }
 }
 
-fn new_client(name: &str) -> *mut MlsClient {
+unsafe fn new_client(name: &str) -> *mut MlsClient {
     let (mut sk, mut pk, mut e) = (empty(), empty(), empty());
     ok(mls_generate_signature_keypair(&mut sk, &mut pk, &mut e), e);
     let (sk, pk) = (take(sk), take(pk));
@@ -32,6 +32,10 @@ fn new_client(name: &str) -> *mut MlsClient {
 
 #[test]
 fn two_members_exchange_message() {
+    unsafe { two_members() }
+}
+
+unsafe fn two_members() {
     let alice = new_client("alice");
     let bob = new_client("bob");
     let gid = b"group-1";

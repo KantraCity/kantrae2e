@@ -1,0 +1,168 @@
+# kantrae2e — учебный E2EE-мессенджер на Go (MLS, self-hosted S3)
+
+Реализация роадмапа: микросервисы на Go, крипто-ядро — [`mls-rs`](https://github.com/awslabs/mls-rs)
+(RFC 9420) через cgo, зашифрованные бэкапы истории и медиа — в self-hosted MinIO.
+Сервер никогда не видит открытый текст и не выполняет MLS-логику: он только
+маршрутизирует байты и гарантирует порядок Commit'ов в группе.
+
+```
+cmd/kantra            CLI-клиент
+cmd/s3init            создание бакетов history/media (init-контейнер)
+client/mls            cgo-мост к mls-rs (единственный "не Go" кусок)
+client/store          SQLite клиента (modernc.org/sqlite, без cgo)
+client/crypto         seed-фраза -> Argon2id -> history-key, XChaCha20-Poly1305
+client/core           платформенно-независимое ядро клиента
+client/bind           фасад только на string/int/[]byte/error для gomobile / Wails
+mls-ffi/              Rust-крейт (staticlib) поверх mls-rs + C-заголовок
+proto/, gen/          protobuf + сгенерированный connect-go код (buf)
+pkg/                  общее: JWT, Postgres+миграции, bootstrap сервиса, blobstore (minio-go)
+services/{auth,directory,delivery,history,media}
+deploy/               docker-compose (dev/prod), Caddyfile(.dev), бэкап
+e2e/                  сквозной тест всех DoD
+```
+
+## Быстрый старт
+
+Нужны Go (версия из `go.mod`, тулчейн скачается сам), Rust и Docker.
+
+```bash
+make up          # Postgres, MinIO, 5 сервисов, Caddy на https://localhost
+make dev-ca      # экспорт локального CA Caddy в deploy/caddy-root.crt
+make cli         # собирает mls-ffi (cargo) и bin/kantra
+
+export KANTRA_SERVER=https://localhost KANTRA_CA=deploy/caddy-root.crt
+bin/kantra -db /tmp/alice.db register alice         # печатает seed-фразу
+bin/kantra -db /tmp/bob.db   register bob
+bin/kantra -db /tmp/alice.db create team
+bin/kantra -db /tmp/alice.db invite team bob
+bin/kantra -db /tmp/bob.db   chat team               # интерактивно, realtime через WebSocket
+bin/kantra -db /tmp/alice.db send team "привет"
+bin/kantra -db /tmp/alice.db sendfile team ./photo.jpg
+bin/kantra -db /tmp/alice.db backup                  # зашифрованный бэкап истории в MinIO
+```
+
+Новое устройство с восстановлением истории: `kantra -db new.db login alice` (спросит пароль и
+seed-фразу), затем `kantra -db new.db restore`. Чтобы новое устройство снова писало в группы,
+его должен пригласить любой участник (`invite <group> alice`).
+
+Проверка гейтвея из роадмапа (connect принимает JSON):
+
+```bash
+curl -k https://localhost/kantra.auth.v1.AuthService/Register \
+  -H 'Content-Type: application/json' -d '{"username":"test","password":"test1234"}'
+```
+
+## Тесты
+
+```bash
+make test-unit   # без внешних зависимостей
+make test        # + Rust, сервисы на Postgres и e2e; TEST_DATABASE_URL по умолчанию
+                 #   postgres://postgres:postgres@localhost:5432/postgres
+# с настоящим MinIO вместо in-memory S3:
+TEST_S3_ENDPOINT=127.0.0.1:9000 TEST_S3_ACCESS_KEY=... TEST_S3_SECRET_KEY=... make test
+make lint
+```
+
+`e2e/e2e_test.go` поднимает все сервисы в одном процессе и проверяет DoD фаз 3–7 реальными
+клиентами с отдельными SQLite: группа по сети, сервер видит только ciphertext, перезапуск
+клиента, WebSocket, группа из 3+ и удаление участника, параллельные Commit'ы, медиа, бэкап и
+восстановление истории на новом устройстве при выключенном старом.
+
+## Как это устроено
+
+**MLS-мост.** `mls-ffi` экспортирует C ABI (`include/mls_ffi.h`): `mls_create_group`,
+`mls_create_commit` (add/remove), `mls_apply_pending_commit` / `mls_clear_pending_commit`,
+`mls_join_group`, `mls_encrypt_application_message`, `mls_process_message` (обрабатывает и
+Commit, и application — в mls-rs это один вызов), и т.д. Состояние (группы, прошлые эпохи,
+секреты KeyPackage) держится в памяти Rust и каждое изменение пишется в change log, который Go
+забирает (`TakeChanges`) и атомарно сохраняет в SQLite вместе с данными приложения. При старте
+состояние загружается обратно — так клиент переживает перезапуск. Ошибки возвращаются кодом и
+буфером (без thread-local: горутины мигрируют между потоками). Шифронабор
+`CURVE25519_AES128`, провайдер `mls-rs-crypto-rustcrypto` (чистый Rust — проще кросс-компиляция
+под мобильные платформы).
+
+**Порядок Commit'ов** (delivery-service): `UPDATE groups SET current_epoch = current_epoch + 1
+WHERE id = $1 AND current_epoch = $2`; 0 строк → `connect.CodeAborted` (HTTP 409). Клиент
+создаёт Commit как *pending*, применяет его только после успеха; при конфликте сбрасывает,
+догоняет пропущенные Commit'ы и пересобирает Commit на новой эпохе. Тест: 8 устройств × 5
+раундов параллельных Commit'ов — в каждом раунде ровно один победитель.
+
+**Выдача KeyPackage** атомарна: `UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED)
+RETURNING payload`. Тест: 60 параллельных запросов за 20 KeyPackage'ами — каждый выдан ровно раз.
+Клиент дополнительно проверяет, что identity внутри KeyPackage совпадает с запрошенным
+устройством.
+
+**Доставка.** Fan-out в `message_queue` (ссылка на `group_messages`, без копирования payload),
+WebSocket `/v1/ws` шлёт `Envelope` (protobuf), клиент подтверждает `Ack`; неподтверждённое
+передоставляется при реконнекте (at-least-once, клиент дедуплицирует по id). Есть и pull-режим
+(`FetchPending`/`Ack`) — им пользуются CLI-команды.
+
+**История.** history-key = Argon2id(seed-фраза BIP-39, соль = user_id), независим от MLS-эпох.
+Чанк = пачка сообщений, XChaCha20-Poly1305, ключ объекта = BLAKE3(ciphertext); сервис
+проверяет хеш, кладёт в бакет `history`, манифест — в Postgres.
+
+**Медиа.** Файл шифруется случайным ключом, ciphertext → бакет `media`, ссылка
+(hash + ключ) уходит внутри MLS application-сообщения.
+
+## Решения и отклонения от роадмапа
+
+Согласовано заранее:
+- **connect-go + protobuf** для всех RPC. Пути — `/kantra.<svc>.v1.<Service>/<Method>` вместо
+  REST-таблиц роадмапа; соответствие: `POST /v1/register` → `AuthService/Register`,
+  `GET /v1/keypackages/{user}/{device}` → `DirectoryService/FetchKeyPackage`,
+  `POST /v1/groups/{id}/commit` → `DeliveryService/SendCommit` (409 → `Aborted`),
+  `PUT/GET /v1/history/chunks/{hash}` → `HistoryService/PutChunk|GetChunk` и т.д.
+  WebSocket остался на `/v1/ws`.
+- **Caddy `handle` с полными путями** (без обрезки префикса) — сервисы обслуживают одни и те же
+  пути и за гейтвеем, и напрямую.
+- **`group_members`** в delivery-service; Commit несёт открытые метаданные маршрутизации
+  (`added_device_ids` / `removed_device_ids`), не контент.
+- **CLI-клиент** поверх переносимого ядра `client/core`; `client/bind` — готовый фасад для
+  `gomobile bind` и Wails.
+
+Решено по ходу (мелкие, стоит знать):
+- **Go 1.26** вместо 1.23: актуальные pgx, minio-go, x/crypto и modernc/sqlite требуют ≥1.25/1.26.
+- `key_packages.user_id` — нужен для `FetchKeyPackage(user, device)` и выдачи по всем устройствам
+  пользователя без кросс-схемных join'ов.
+- `group_members.joined_epoch`: application-сообщения прошлых эпох (допустим лаг в 2 эпохи) не
+  рассылаются устройствам, вступившим позже — они всё равно не смогли бы их расшифровать.
+- В auth добавлены `LookupUser` (username ↔ user_id) и `RefreshToken` (не выдаётся отозванным
+  устройствам); токены бывают «аккаунтные» и «привязанные к устройству» (claim `did`).
+- Бакеты создаёт init-контейнер `s3init` (minio-go) вместо ручного `mc mb`.
+- **Образ MinIO:** по умолчанию `minio/minio:latest`, как в роадмапе, но переопределяется
+  `MINIO_IMAGE`; `deploy/minio.Dockerfile` собирает MinIO из исходников, если upstream-образ
+  недоступен (в этом окружении он не скачивался; MinIO сместил community-редакцию
+  к распространению из исходников).
+
+## Деплой (фаза 8)
+
+```bash
+cp deploy/.env.example deploy/.env    # домен, email, секреты
+make prod-up                          # docker compose -f deploy/docker-compose.prod.yml ...
+```
+
+Наружу публикуется только Caddy (80, 443/tcp, 443/udp для HTTP/3), TLS автоматический.
+Postgres и MinIO (API и консоль) — только во внутренней сети; консоль — через
+`ssh -L`. `caddy_data` — persistent volume (лимиты Let's Encrypt). `deploy/backup.sh` делает
+операционный бэкап Postgres и тома MinIO — это не то же самое, что E2EE-бэкап пользователей.
+
+## Чеклист «это не настоящий продакшен, пока...» (раздел 7)
+
+- [x] MLS-логика не написана самостоятельно — только `mls-rs` через FFI
+- [x] history-key и MLS epoch-секреты не пересекаются (Argon2id от seed-фразы)
+- [x] Выдача KeyPackage атомарна и одноразова (тест на гонку)
+- [x] Commit принимается только с проверкой `current_epoch` (тест на гонку)
+- [x] Сервер не логирует plaintext и состояние групп (access-лог без тел; проверено на живом стеке)
+- [x] Хранилище истории бэкапится отдельно от Postgres (`deploy/backup.sh`)
+- [ ] Реального security-аудита нет
+
+Известные ограничения учебной версии:
+- **BasicCredential**: identity (`user_id:device_id`) не подписана доверенной стороной, поэтому
+  злонамеренный сервер может подменить KeyPackage (MITM при добавлении). В продакшене нужны
+  X.509-креденшалы или key transparency и сверка отпечатков.
+- Отзыв устройства не удаляет его из MLS-групп автоматически и не аннулирует уже выданный JWT
+  до истечения (`TOKEN_TTL`); `RefreshToken` для отозванных устройств отказывает.
+- Локальная SQLite клиента не зашифрована (содержит расшифрованные сообщения и history-key).
+- Realtime-уведомления внутри одного экземпляра delivery-service (плюс опрос раз в 15 с);
+  для нескольких экземпляров — Postgres LISTEN/NOTIFY.
+- Rate limiting на гейтвее (Апгрейд 2) не включён — нужен кастомный Caddy через `xcaddy`.

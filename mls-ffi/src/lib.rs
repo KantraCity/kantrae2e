@@ -11,6 +11,15 @@
 //!   `out_err` buffer (no thread-locals: goroutines can migrate between OS
 //!   threads between two cgo calls).
 //! * Every buffer handed out by Rust must be released with `mls_buf_free`.
+//!
+//! # Safety
+//! All exported functions are `unsafe`: pointer/length pairs must describe
+//! readable memory (or be NULL/0), out-pointers must be writable, and client
+//! handles must come from `mls_client_new` and not be used after
+//! `mls_client_free`.
+
+// The contract above applies to every exported function.
+#![allow(clippy::missing_safety_doc)]
 
 mod codec;
 mod store;
@@ -169,7 +178,7 @@ fn identity_of(si: &SigningIdentity) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 
 #[no_mangle]
-pub extern "C" fn mls_buf_free(buf: MlsBuf) {
+pub unsafe extern "C" fn mls_buf_free(buf: MlsBuf) {
     if !buf.ptr.is_null() {
         unsafe { drop(Vec::from_raw_parts(buf.ptr, buf.len, buf.cap)) };
     }
@@ -181,7 +190,7 @@ pub extern "C" fn mls_buf_free(buf: MlsBuf) {
 
 /// Generates a new signature key pair for the configured cipher suite.
 #[no_mangle]
-pub extern "C" fn mls_generate_signature_keypair(
+pub unsafe extern "C" fn mls_generate_signature_keypair(
     out_secret: *mut MlsBuf,
     out_public: *mut MlsBuf,
     out_err: *mut MlsBuf,
@@ -201,7 +210,7 @@ pub extern "C" fn mls_generate_signature_keypair(
 
 /// Creates a client for one device. `identity` becomes the basic credential.
 #[no_mangle]
-pub extern "C" fn mls_client_new(
+pub unsafe extern "C" fn mls_client_new(
     identity: *const u8,
     identity_len: usize,
     secret: *const u8,
@@ -240,7 +249,7 @@ pub extern "C" fn mls_client_new(
 }
 
 #[no_mangle]
-pub extern "C" fn mls_client_free(c: *mut MlsClient) {
+pub unsafe extern "C" fn mls_client_free(c: *mut MlsClient) {
     if !c.is_null() {
         unsafe { drop(Box::from_raw(c)) };
     }
@@ -249,7 +258,7 @@ pub extern "C" fn mls_client_free(c: *mut MlsClient) {
 /// Loads a persisted group. `epochs` is encoded as
 /// `u32 count, (u64 epoch_id, bytes data)*` (see codec.rs).
 #[no_mangle]
-pub extern "C" fn mls_client_load_group(
+pub unsafe extern "C" fn mls_client_load_group(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -277,7 +286,7 @@ pub extern "C" fn mls_client_load_group(
 }
 
 #[no_mangle]
-pub extern "C" fn mls_client_load_key_package(
+pub unsafe extern "C" fn mls_client_load_key_package(
     c: *mut MlsClient,
     id: *const u8,
     id_len: usize,
@@ -296,7 +305,7 @@ pub extern "C" fn mls_client_load_key_package(
 
 /// Drains the change log accumulated since the previous call.
 #[no_mangle]
-pub extern "C" fn mls_client_take_changes(
+pub unsafe extern "C" fn mls_client_take_changes(
     c: *mut MlsClient,
     out: *mut MlsBuf,
     out_err: *mut MlsBuf,
@@ -316,7 +325,7 @@ pub extern "C" fn mls_client_take_changes(
 
 /// Generates one KeyPackage (MLSMessage encoding). Its secrets are stored.
 #[no_mangle]
-pub extern "C" fn mls_generate_key_package(
+pub unsafe extern "C" fn mls_generate_key_package(
     c: *mut MlsClient,
     out: *mut MlsBuf,
     out_err: *mut MlsBuf,
@@ -335,7 +344,7 @@ pub extern "C" fn mls_generate_key_package(
 
 /// Creates a new group (epoch 0) with the given id, containing only us.
 #[no_mangle]
-pub extern "C" fn mls_create_group(
+pub unsafe extern "C" fn mls_create_group(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -362,7 +371,7 @@ pub extern "C" fn mls_create_group(
 /// delivery service accepted it, or `mls_clear_pending_commit` on conflict.
 /// `out_welcome` is empty when nobody is added.
 #[no_mangle]
-pub extern "C" fn mls_create_commit(
+pub unsafe extern "C" fn mls_create_commit(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -415,7 +424,7 @@ pub extern "C" fn mls_create_commit(
 }
 
 #[no_mangle]
-pub extern "C" fn mls_apply_pending_commit(
+pub unsafe extern "C" fn mls_apply_pending_commit(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -433,7 +442,7 @@ pub extern "C" fn mls_apply_pending_commit(
 }
 
 #[no_mangle]
-pub extern "C" fn mls_clear_pending_commit(
+pub unsafe extern "C" fn mls_clear_pending_commit(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -450,7 +459,7 @@ pub extern "C" fn mls_clear_pending_commit(
 
 /// Joins a group from a Welcome message; returns the group id.
 #[no_mangle]
-pub extern "C" fn mls_join_group(
+pub unsafe extern "C" fn mls_join_group(
     c: *mut MlsClient,
     welcome: *const u8,
     welcome_len: usize,
@@ -471,7 +480,7 @@ pub extern "C" fn mls_join_group(
 }
 
 #[no_mangle]
-pub extern "C" fn mls_encrypt_application_message(
+pub unsafe extern "C" fn mls_encrypt_application_message(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -496,7 +505,7 @@ pub extern "C" fn mls_encrypt_application_message(
 /// Processes any incoming group message: decrypts application messages,
 /// applies commits, caches proposals.
 #[no_mangle]
-pub extern "C" fn mls_process_message(
+pub unsafe extern "C" fn mls_process_message(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -545,7 +554,7 @@ pub extern "C" fn mls_process_message(
 
 /// Current epoch and member identities (length-prefixed list) of a group.
 #[no_mangle]
-pub extern "C" fn mls_group_info(
+pub unsafe extern "C" fn mls_group_info(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -572,7 +581,7 @@ pub extern "C" fn mls_group_info(
 
 /// Forgets a group in memory (the host deletes persisted rows itself).
 #[no_mangle]
-pub extern "C" fn mls_forget_group(
+pub unsafe extern "C" fn mls_forget_group(
     c: *mut MlsClient,
     gid: *const u8,
     gid_len: usize,
@@ -591,7 +600,7 @@ pub extern "C" fn mls_forget_group(
 /// Stateless inspection of an MLS message (for routing on the client).
 /// kind: 1 application/private, 2 commit/public, 4 welcome, 5 key package, 0 other.
 #[no_mangle]
-pub extern "C" fn mls_message_info(
+pub unsafe extern "C" fn mls_message_info(
     msg: *const u8,
     msg_len: usize,
     out_kind: *mut i32,
@@ -624,7 +633,7 @@ pub extern "C" fn mls_message_info(
 
 /// Returns the credential identity inside a KeyPackage message.
 #[no_mangle]
-pub extern "C" fn mls_key_package_identity(
+pub unsafe extern "C" fn mls_key_package_identity(
     kp: *const u8,
     kp_len: usize,
     out_identity: *mut MlsBuf,
