@@ -356,3 +356,42 @@ func KeyPackageIdentity(kp []byte) ([]byte, error) {
 	out := takeBuf(id)
 	return out, check(code, e)
 }
+
+// Member is a group member with its signature public key.
+type Member struct {
+	Identity     []byte
+	SignatureKey []byte
+}
+
+// Members lists the group members with their signature keys.
+func (c *Client) Members(groupID []byte) ([]Member, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	gp, gn := cbytes(groupID)
+	defer free(gp)
+	var out, e C.MlsBuf
+	code := C.mls_group_members(c.c, gp, gn, &out, &e)
+	raw := takeBuf(out)
+	if err := check(code, e); err != nil {
+		return nil, err
+	}
+	items, err := decodeList(raw)
+	if err != nil || len(items)%2 != 0 {
+		return nil, errTruncated
+	}
+	ms := make([]Member, 0, len(items)/2)
+	for i := 0; i < len(items); i += 2 {
+		ms = append(ms, Member{Identity: items[i], SignatureKey: items[i+1]})
+	}
+	return ms, nil
+}
+
+// KeyPackageInfo returns the identity and signature key inside a KeyPackage.
+func KeyPackageInfo(kp []byte) (identity, signatureKey []byte, err error) {
+	p, n := cbytes(kp)
+	defer free(p)
+	var id, key, e C.MlsBuf
+	code := C.mls_key_package_info(p, n, &id, &key, &e)
+	identity, signatureKey = takeBuf(id), takeBuf(key)
+	return identity, signatureKey, check(code, e)
+}

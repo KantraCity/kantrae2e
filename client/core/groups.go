@@ -142,10 +142,14 @@ func (c *Client) Invite(ctx context.Context, groupID string, usernames ...string
 			return err
 		}
 		for _, dk := range r.KeyPackages {
-			// The KeyPackage must belong to the device the directory claims.
-			id, err := mls.KeyPackageIdentity(dk.KeyPackage)
+			// The KeyPackage must belong to the device the directory claims,
+			// with the key we know for it (if any).
+			id, key, err := mls.KeyPackageInfo(dk.KeyPackage)
 			if err != nil || !bytes.Equal(id, identity(uid, dk.DeviceId)) {
 				return fmt.Errorf("directory returned a key package with unexpected identity %q", id)
+			}
+			if err := c.checkKeyPackageLocked(ctx, uid, dk.DeviceId, key); err != nil {
+				return fmt.Errorf("%s: %w", u, err)
 			}
 			if inGroup[string(id)] {
 				continue // device already a member (its KeyPackage is wasted)
@@ -192,8 +196,10 @@ func (c *Client) Remove(ctx context.Context, groupID, username string) error {
 	}
 	var ids [][]byte
 	var devices []string
+	seen := map[string]bool{}
 	for _, m := range members {
-		if u, d := splitIdentity(m); u == uid {
+		if u, d := splitIdentity(m); u == uid && !seen[string(m)] {
+			seen[string(m)] = true
 			ids = append(ids, m)
 			devices = append(devices, d)
 		}
@@ -260,8 +266,19 @@ func (c *Client) commitLocked(ctx context.Context, groupID string, spec commitSp
 		if err := c.m.ApplyPendingCommit(gid); err != nil {
 			return err
 		}
+		observe, events := c.observeGroupLocked(ctx, groupID)
+		defer func() {
+			for _, e := range events {
+				c.emit(e)
+			}
+		}()
 		now := time.Now().UnixMilli()
 		return c.persistLocked(ctx, func(tx *store.Tx) error {
+			if observe != nil {
+				if err := observe(tx); err != nil {
+					return err
+				}
+			}
 			for _, u := range spec.addedUsers {
 				if err := tx.SeenMember(groupID, u, now); err != nil {
 					return err
@@ -295,6 +312,9 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 		return nil, err
 	}
 	gid := []byte(groupID)
+	if conflict, err := c.conflictInGroupLocked(ctx, groupID); err == nil && conflict {
+		return nil, ErrKeyConflict
+	}
 	for attempt := 0; ; attempt++ {
 		epoch, _, err := c.m.GroupInfo(gid)
 		if errors.Is(err, mls.ErrNotFound) {

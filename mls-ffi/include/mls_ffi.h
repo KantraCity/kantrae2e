@@ -75,6 +75,10 @@ int32_t mls_group_info_message(MlsClient *c, const uint8_t *gid, size_t gid_len,
 int32_t mls_external_join(MlsClient *c, const uint8_t *group_info, size_t group_info_len,
                           MlsBuf *out_gid, MlsBuf *out_commit, MlsBuf *out_group_info,
                           MlsBuf *out_err);
+int32_t mls_group_members(MlsClient *c, const uint8_t *gid, size_t gid_len,
+                          MlsBuf *out, MlsBuf *out_err);
+int32_t mls_key_package_info(const uint8_t *kp, size_t kp_len, MlsBuf *out_identity,
+                             MlsBuf *out_key, MlsBuf *out_err);
 int32_t mls_key_package_identity(const uint8_t *kp, size_t kp_len, MlsBuf *out_identity, MlsBuf *out_err);
 
 #endif

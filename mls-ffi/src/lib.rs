@@ -412,14 +412,19 @@ pub unsafe extern "C" fn mls_create_commit(
         };
         with_client(c, |inner| {
             let g = inner.group(gid)?;
+            // Every leaf with a listed identity is removed (normally one; more
+            // if a forged leaf re-uses an identity).
             let mut remove_idx = Vec::new();
             for id in &removes {
-                let m = g
-                    .roster()
-                    .members_iter()
-                    .find(|m| identity_of(&m.signing_identity) == *id)
-                    .ok_or_else(|| (MLS_ERR_NOT_FOUND, "member to remove not in group".to_string()))?;
-                remove_idx.push(m.index);
+                let before = remove_idx.len();
+                for m in g.roster().members_iter() {
+                    if identity_of(&m.signing_identity) == *id && !remove_idx.contains(&m.index) {
+                        remove_idx.push(m.index);
+                    }
+                }
+                if remove_idx.len() == before {
+                    return Err((MLS_ERR_NOT_FOUND, "member to remove not in group".to_string()));
+                }
             }
             let mut b = g.commit_builder();
             for kp in adds {
@@ -706,6 +711,54 @@ pub unsafe extern "C" fn mls_external_join(
             inner.groups.insert(gid, g);
             Ok(())
         })
+    })
+}
+
+/// Members of a group with their signature public keys, encoded as a list
+/// alternating identity, key (identity_0, key_0, identity_1, key_1, ...).
+#[no_mangle]
+pub unsafe extern "C" fn mls_group_members(
+    c: *mut MlsClient,
+    gid: *const u8,
+    gid_len: usize,
+    out: *mut MlsBuf,
+    out_err: *mut MlsBuf,
+) -> i32 {
+    guard(out_err, || {
+        let gid = unsafe { slice(gid, gid_len) };
+        with_client(c, |inner| {
+            let g = inner.group(gid)?;
+            let mut items = Vec::new();
+            for m in g.roster().members_iter() {
+                items.push(identity_of(&m.signing_identity));
+                items.push(m.signing_identity.signature_key.as_bytes().to_vec());
+            }
+            unsafe { put(out, codec::encode_list(&items)) };
+            Ok(())
+        })
+    })
+}
+
+/// Credential identity and signature public key inside a KeyPackage message.
+#[no_mangle]
+pub unsafe extern "C" fn mls_key_package_info(
+    kp: *const u8,
+    kp_len: usize,
+    out_identity: *mut MlsBuf,
+    out_key: *mut MlsBuf,
+    out_err: *mut MlsBuf,
+) -> i32 {
+    guard(out_err, || {
+        let m = MlsMessage::from_bytes(unsafe { slice(kp, kp_len) }).map_err(err)?;
+        let kp = m
+            .as_key_package()
+            .ok_or_else(|| (MLS_ERR, "not a key package".to_string()))?;
+        let si = kp.signing_identity();
+        unsafe {
+            put(out_identity, identity_of(si));
+            put(out_key, si.signature_key.as_bytes().to_vec());
+        }
+        Ok(())
     })
 }
 

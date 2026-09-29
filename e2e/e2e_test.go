@@ -6,8 +6,10 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,7 +19,13 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/kantracity/kantrae2e/client/core"
+	"github.com/kantracity/kantrae2e/client/mls"
+	deliveryv1 "github.com/kantracity/kantrae2e/gen/kantra/delivery/v1"
+	"github.com/kantracity/kantrae2e/gen/kantra/delivery/v1/deliveryv1connect"
+	directoryv1 "github.com/kantracity/kantrae2e/gen/kantra/directory/v1"
+	"github.com/kantracity/kantrae2e/gen/kantra/directory/v1/directoryv1connect"
 	"github.com/kantracity/kantrae2e/internal/testutil"
+	"github.com/kantracity/kantrae2e/pkg/authmiddleware"
 	"github.com/kantracity/kantrae2e/pkg/blobstore"
 	"github.com/kantracity/kantrae2e/pkg/devicestatus"
 	"github.com/kantracity/kantrae2e/services/auth"
@@ -537,5 +545,119 @@ func TestStrangerExternalJoinIsRemoved(t *testing.T) {
 		if m == "mallory must not read this" {
 			t.Fatal("stranger read the message")
 		}
+	}
+}
+
+func TestKeyVerification(t *testing.T) {
+	c := newCluster(t)
+	ctx := context.Background()
+	alice, _ := c.register("alice")
+	bob, bobPhrase := c.register("bob")
+	gid, err := alice.CreateGroup(ctx, "verified")
+	ok(t, err)
+	ok(t, alice.Invite(ctx, gid, "bob"))
+	ok(t, bob.Sync(ctx))
+
+	// Both sides compute the same fingerprints.
+	bobFP, err := bob.MyFingerprint(ctx)
+	ok(t, err)
+	keys, err := alice.Keys(ctx, "bob")
+	ok(t, err)
+	if len(keys) != 1 || keys[0].Fingerprint != bobFP || keys[0].Status != "seen" {
+		t.Fatalf("alice sees bob: %+v (bob says %s)", keys, bobFP)
+	}
+	aliceFP, _ := alice.MyFingerprint(ctx)
+	if k, _ := bob.Keys(ctx, "alice"); len(k) != 1 || k[0].Fingerprint != aliceFP {
+		t.Fatalf("bob sees alice: %+v", k)
+	}
+	if n, err := alice.Trust(ctx, "bob", ""); err != nil || n != 1 {
+		t.Fatalf("trust: %d %v", n, err)
+	}
+
+	// New device of a verified contact -> event, still usable.
+	phone := c.open("bob-phone", "bob-phone.db")
+	_, err = phone.Login(ctx, "bob", "password-bob", "bob-phone", bobPhrase)
+	ok(t, err)
+	ok(t, alice.Sync(ctx))
+	if len(alice.eventsOf(core.EventNewDevice)) != 1 {
+		t.Fatalf("new device events: %+v", alice.eventsOf(core.EventNewDevice))
+	}
+	_, err = alice.SendText(ctx, gid, "still fine")
+	ok(t, err)
+
+	// Compromised server: a forged device claiming to be bob's laptop (same
+	// device id, attacker's key). mls-rs already refuses two leaves with the
+	// same identity in one group, so the attack targets a group the real
+	// laptop is not in: bob's laptop has no KeyPackages left, only his phone
+	// gets invited, then the "laptop" joins by itself.
+	bobAcct := bob.Account()
+	sk, pk, err := mls.GenerateSignatureKeyPair()
+	ok(t, err)
+	fake, err := mls.NewClient([]byte(bobAcct.UserID+":"+bobAcct.DeviceID), sk, pk)
+	ok(t, err)
+	defer fake.Close()
+	tok, _ := authmiddleware.Issue(testutil.Secret, bobAcct.UserID, bobAcct.DeviceID, time.Hour)
+	withTok := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {
+			r.Header().Set("Authorization", "Bearer "+tok)
+			return next(ctx, r)
+		}
+	}))
+	fakeDel := deliveryv1connect.NewDeliveryServiceClient(c.hc, c.url, withTok)
+	fakeDir := directoryv1connect.NewDirectoryServiceClient(c.hc, c.url, withTok)
+	drainLaptop := func() {
+		for {
+			if _, err := fakeDir.FetchKeyPackage(ctx, &directoryv1.FetchKeyPackageRequest{UserId: bobAcct.UserID, DeviceId: bobAcct.DeviceID}); err != nil {
+				return
+			}
+		}
+	}
+	drainLaptop()
+	gid2, err := alice.CreateGroup(ctx, "phone only")
+	ok(t, err)
+	ok(t, alice.Invite(ctx, gid2, "bob")) // adds bob's phone only
+	gi, err := fakeDel.GetGroupInfo(ctx, &deliveryv1.GetGroupInfoRequest{GroupId: gid2})
+	ok(t, err)
+	_, commit, newGI, err := fake.ExternalJoin(gi.GroupInfo)
+	ok(t, err)
+	_, err = fakeDel.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: gid2, Epoch: gi.Epoch, Commit: commit, GroupInfo: newGI})
+	ok(t, err)
+
+	ok(t, alice.Sync(ctx))
+	alice.Settle(5 * time.Second)
+	sec := alice.eventsOf(core.EventSecurity)
+	if len(sec) == 0 || !strings.Contains(sec[len(sec)-1].Detail, "different key") {
+		t.Fatalf("no key-change alert: %+v", sec)
+	}
+	if _, err := alice.SendText(ctx, gid2, "secret"); !errors.Is(err, core.ErrKeyConflict) {
+		t.Fatalf("send with conflict: %v", err)
+	}
+	// Groups without the forged key are unaffected.
+	_, err = alice.SendText(ctx, gid, "other group still fine")
+	ok(t, err)
+	keys, _ = alice.Keys(ctx, "bob")
+	var conflict bool
+	for _, k := range keys {
+		conflict = conflict || (k.DeviceID == bobAcct.DeviceID && k.Status == "conflict" && k.ConflictFingerprint != "")
+	}
+	if !conflict {
+		t.Fatalf("keys: %+v", keys)
+	}
+
+	// Resolution: remove bob from that group (incl. the forged device).
+	ok(t, alice.Remove(ctx, gid2, "bob"))
+	_, err = alice.SendText(ctx, gid2, "after cleanup")
+	ok(t, err)
+
+	// Inviting with a KeyPackage whose key differs from the known one fails.
+	gid3, err := alice.CreateGroup(ctx, "third")
+	ok(t, err)
+	fakeKP, err := fake.GenerateKeyPackage()
+	ok(t, err)
+	drainLaptop()
+	_, err = fakeDir.PublishKeyPackages(ctx, &directoryv1.PublishKeyPackagesRequest{KeyPackages: [][]byte{fakeKP}})
+	ok(t, err)
+	if err := alice.Invite(ctx, gid3, "bob"); !errors.Is(err, core.ErrKeyChanged) {
+		t.Fatalf("invite with forged key package: %v", err)
 	}
 }

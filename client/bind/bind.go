@@ -62,6 +62,9 @@ func Open(serverURL, dbPath string, handler EventHandler) (*Messenger, error) {
 			if e.Count > 0 {
 				out["count"] = e.Count
 			}
+			if e.Detail != "" {
+				out["detail"] = e.Detail
+			}
 			if e.Err != nil {
 				out["error"] = e.Err.Error()
 			}
@@ -211,3 +214,20 @@ func (m *Messenger) DownloadMedia(groupID string, seq int) ([]byte, error) {
 
 func (m *Messenger) BackupHistory() (int, error)  { return m.c.BackupHistory(context.Background()) }
 func (m *Messenger) RestoreHistory() (int, error) { return m.c.RestoreHistory(context.Background()) }
+
+// Fingerprint returns this device's fingerprint.
+func (m *Messenger) Fingerprint() (string, error) { return m.c.MyFingerprint(context.Background()) }
+
+// KeysJSON lists a user's known devices with fingerprints and status.
+func (m *Messenger) KeysJSON(username string) (string, error) {
+	k, err := m.c.Keys(context.Background(), username)
+	if err != nil {
+		return "", err
+	}
+	return marshal(k)
+}
+
+// Trust marks devices as verified ("" = all devices seen so far).
+func (m *Messenger) Trust(username, deviceID string) (int, error) {
+	return m.c.Trust(context.Background(), username, deviceID)
+}

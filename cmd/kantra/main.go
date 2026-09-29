@@ -35,6 +35,11 @@ Account:
   relogin                             renew the session of this device
   whoami                              show account
   devices                             list the account's devices
+
+Verification (compare fingerprints out of band, e.g. in person or by voice):
+  fingerprint                         this device's fingerprint
+  keys <username>                     devices of a user with fingerprints and status
+  trust <username> [device-id]        mark devices as verified (a changed key needs device-id)
   revoke <device-id>                  revoke a device (e.g. lost phone) and remove it from groups
 
 Groups:
@@ -268,6 +273,54 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 		}
 		return nil
 
+	case "fingerprint":
+		fp, err := a.c.MyFingerprint(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "fingerprint of this device:\n  %s\n", fp)
+		return nil
+
+	case "keys":
+		if err := need(args, 1, "keys <username>"); err != nil {
+			return err
+		}
+		_ = a.c.Sync(ctx)
+		keys, err := a.c.Keys(ctx, args[0])
+		if err != nil {
+			return err
+		}
+		if len(keys) == 0 {
+			fmt.Fprintln(a.out, "no known devices (you share no group yet)")
+		}
+		for _, k := range keys {
+			note := ""
+			if k.ThisDevice {
+				note = "  (this device)"
+			}
+			fmt.Fprintf(a.out, "%s %s  %s%s\n", statusMark(k.Status), k.DeviceID, k.Fingerprint, note)
+			if k.ConflictFingerprint != "" {
+				fmt.Fprintf(a.out, "    NEW KEY, unconfirmed:                 %s\n", k.ConflictFingerprint)
+			}
+		}
+		fmt.Fprintln(a.out, "legend: ✓ verified   ? not verified   ! key changed (possible MITM)")
+		return nil
+
+	case "trust":
+		if err := need(args, 1, "trust <username> [device-id]"); err != nil {
+			return err
+		}
+		dev := ""
+		if len(args) > 1 {
+			dev = args[1]
+		}
+		n, err := a.c.Trust(ctx, args[0], dev)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "%d device(s) of %s marked as verified\n", n, args[0])
+		return nil
+
 	case "revoke":
 		if err := need(args, 1, "revoke <device-id>"); err != nil {
 			return err
@@ -355,7 +408,15 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 		for _, m := range ms {
-			fmt.Fprintf(a.out, "%-20s device %s\n", m.Username, m.DeviceID)
+			status := ""
+			if keys, err := a.c.Keys(ctx, m.Username); err == nil {
+				for _, k := range keys {
+					if k.DeviceID == m.DeviceID {
+						status = statusMark(k.Status)
+					}
+				}
+			}
+			fmt.Fprintf(a.out, "%s %-20s device %s\n", status, m.Username, m.DeviceID)
 		}
 		return nil
 
@@ -501,6 +562,17 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 	return fmt.Errorf("unknown command %q (see kantra -h)", cmd)
 }
 
+func statusMark(status string) string {
+	switch status {
+	case "verified":
+		return "✓"
+	case "conflict":
+		return "!"
+	default:
+		return "?"
+	}
+}
+
 func deviceName(args []string) string {
 	if len(args) > 1 {
 		return strings.Join(args[1:], " ")
@@ -553,6 +625,19 @@ func (a *app) onEvent(e core.Event) {
 			fmt.Fprintf(os.Stderr, "* %d missed messages received from another member\n", e.Count)
 		}
 	}
+	// Security-relevant events are always shown.
+	switch e.Type {
+	case core.EventSecurity, core.EventNewDevice:
+		msg := e.Detail
+		if msg == "" && e.Err != nil {
+			msg = e.Err.Error()
+		}
+		label := "SECURITY"
+		if e.Type == core.EventNewDevice {
+			label = "new device"
+		}
+		fmt.Fprintf(os.Stderr, "* %s: %s\n", label, msg)
+	}
 	if !a.live {
 		return
 	}
@@ -580,8 +665,6 @@ func (a *app) onEvent(e core.Event) {
 		fmt.Fprintf(os.Stderr, "* joined group %s\n", e.GroupID)
 	case core.EventRemoved:
 		fmt.Fprintf(os.Stderr, "* removed from group %s\n", e.GroupID)
-	case core.EventSecurity:
-		fmt.Fprintf(os.Stderr, "* SECURITY in %s: %v\n", e.GroupID, e.Err)
 	case core.EventDisconnected:
 		fmt.Fprintf(os.Stderr, "* disconnected: %v\n", e.Err)
 	}

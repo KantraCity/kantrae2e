@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS processed_envelopes (
 CREATE TABLE IF NOT EXISTS restored_chunks (
     hash TEXT PRIMARY KEY
 );
+-- Known signature keys of devices (trust on first use + manual verification).
+-- status: 'seen' (TOFU), 'verified' (compared out of band), 'conflict' (the
+-- device appeared with another key: conflict_key; possible MITM).
+CREATE TABLE IF NOT EXISTS device_keys (
+    user_id      TEXT NOT NULL,
+    device_id    TEXT NOT NULL,
+    sig_key      BLOB NOT NULL,
+    status       TEXT NOT NULL,
+    conflict_key BLOB,
+    first_seen   INTEGER NOT NULL,
+    PRIMARY KEY (user_id, device_id)
+);
 -- Earliest time (unix ms) this device knows a user to be in a group. History
 -- is only shared with a user's new devices from this point on.
 CREATE TABLE IF NOT EXISTS member_first_seen (
@@ -463,6 +475,60 @@ func (s *Store) HasPendingBackup(ctx context.Context) (bool, error) {
 	var ok bool
 	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM messages WHERE backed_up=0)`).Scan(&ok)
 	return ok, err
+}
+
+// ---- device keys ---------------------------------------------------------------
+
+const (
+	KeySeen     = "seen"
+	KeyVerified = "verified"
+	KeyConflict = "conflict"
+)
+
+type DeviceKey struct {
+	UserID      string
+	DeviceID    string
+	Key         []byte
+	Status      string
+	ConflictKey []byte
+	FirstSeen   int64
+}
+
+func (s *Store) DeviceKeys(ctx context.Context, userID string) ([]DeviceKey, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id, device_id, sig_key, status, conflict_key, first_seen
+		FROM device_keys WHERE user_id=? ORDER BY first_seen, device_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DeviceKey
+	for rows.Next() {
+		var k DeviceKey
+		if err := rows.Scan(&k.UserID, &k.DeviceID, &k.Key, &k.Status, &k.ConflictKey, &k.FirstSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeviceKey(ctx context.Context, userID, deviceID string) (*DeviceKey, error) {
+	k := DeviceKey{}
+	err := s.db.QueryRowContext(ctx, `SELECT user_id, device_id, sig_key, status, conflict_key, first_seen
+		FROM device_keys WHERE user_id=? AND device_id=?`, userID, deviceID).
+		Scan(&k.UserID, &k.DeviceID, &k.Key, &k.Status, &k.ConflictKey, &k.FirstSeen)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &k, err
+}
+
+func (t *Tx) PutDeviceKey(k DeviceKey) error {
+	_, err := t.tx.Exec(`INSERT INTO device_keys (user_id, device_id, sig_key, status, conflict_key, first_seen)
+		VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, device_id) DO UPDATE SET
+		sig_key=excluded.sig_key, status=excluded.status, conflict_key=excluded.conflict_key`,
+		k.UserID, k.DeviceID, k.Key, k.Status, k.ConflictKey, k.FirstSeen)
+	return err
 }
 
 // ---- delivery de-duplication ------------------------------------------------

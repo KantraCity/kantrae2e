@@ -192,9 +192,15 @@ func (c *Client) joinExternalLocked(ctx context.Context, groupID string) error {
 		}
 		_, members, _ := c.m.GroupInfo(gid)
 		seen := c.seenWrites(groupID, members, time.Now().UnixMilli(), "")
+		observe, events := c.observeGroupLocked(ctx, groupID)
 		err = c.persistLocked(ctx, func(tx *store.Tx) error {
 			if err := seen(tx); err != nil {
 				return err
+			}
+			if observe != nil {
+				if err := observe(tx); err != nil {
+					return err
+				}
 			}
 			return tx.UpsertGroup(store.Group{ID: groupID, Epoch: gi.Epoch + 1, Active: true, CreatedAt: time.Now().Unix()})
 		})
@@ -203,6 +209,9 @@ func (c *Client) joinExternalLocked(ctx context.Context, groupID string) error {
 		}
 		delete(c.joinRequested, groupID)
 		c.emit(Event{Type: EventGroupJoined, GroupID: groupID})
+		for _, e := range events {
+			c.emit(e)
+		}
 		c.deferHistoryRequestLocked(groupID)
 		return nil
 	}
@@ -230,10 +239,13 @@ func (c *Client) handleJoinRequestLocked(e *deliveryv1.Envelope) {
 		return
 	}
 	want := identity(uid, did)
-	kpID, err := mls.KeyPackageIdentity(e.Payload)
+	kpID, kpKey, err := mls.KeyPackageInfo(e.Payload)
 	if err != nil || string(kpID) != string(want) {
 		c.logf("join request with mismatching key package in %s ignored", e.GroupId)
 		return
+	}
+	if c.checkKeyPackageLocked(context.Background(), uid, did, kpKey) != nil {
+		return // known device with a different key: refuse (event emitted)
 	}
 	_, members, err := c.m.GroupInfo([]byte(e.GroupId))
 	if err != nil || hasIdentity(members, want) || !c.otherDevicesOf(members, uid, did) {

@@ -284,3 +284,21 @@ func TestExternalJoin(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 }
+
+func TestMembersAndKeys(t *testing.T) {
+	a, b := newDevice(t, "a:1"), newDevice(t, "b:1")
+	gid := []byte("g6")
+	ok(t, a.c.CreateGroup(gid))
+	kp := must(b.c.GenerateKeyPackage())
+	id, key, err := KeyPackageInfo(kp)
+	if err != nil || string(id) != "b:1" || !bytes.Equal(key, b.pk) {
+		t.Fatalf("kp info %q %v", id, err)
+	}
+	_, _, _, err = a.c.CreateCommit(gid, [][]byte{kp}, nil)
+	ok(t, err)
+	ok(t, a.c.ApplyPendingCommit(gid))
+	ms := must(a.c.Members(gid))
+	if len(ms) != 2 || !bytes.Equal(ms[0].SignatureKey, a.pk) || !bytes.Equal(ms[1].SignatureKey, b.pk) {
+		t.Fatalf("members %+v", ms)
+	}
+}

@@ -69,7 +69,8 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 	}
 	var events []Event
 	var writes func(*store.Tx) error
-	var histEv *Event // counted inside the transaction, emitted after it
+	var histEv *Event   // counted inside the transaction, emitted after it
+	var observed string // group whose member keys must be checked
 
 	switch e.Type {
 	case deliveryv1.MessageType_MESSAGE_TYPE_WELCOME:
@@ -87,6 +88,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 			return tx.UpsertGroup(store.Group{ID: string(gid), Epoch: epoch, Active: true, CreatedAt: time.Now().Unix()})
 		}
 		events = append(events, Event{Type: EventGroupJoined, GroupID: string(gid)})
+		observed = string(gid)
 		// Joined as an additional device of this account: fetch what we missed.
 		if c.otherDevicesOf(members, c.acct.UserID, c.acct.DeviceID) {
 			c.deferHistoryRequestLocked(string(gid))
@@ -139,6 +141,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 					return tx.UpsertGroup(store.Group{ID: e.GroupId, Epoch: p.Epoch, Active: true})
 				}
 				events = append(events, Event{Type: EventGroupUpdated, GroupID: e.GroupId})
+				observed = e.GroupId
 			}
 		case mls.KindApplication:
 			var pl payload
@@ -177,10 +180,18 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 		}
 	}
 
+	var observe func(*store.Tx) error
+	if observed != "" {
+		var evs []Event
+		observe, evs = c.observeGroupLocked(ctx, observed)
+		events = append(events, evs...)
+	}
 	err = c.persistLocked(ctx, func(tx *store.Tx) error {
-		if writes != nil {
-			if err := writes(tx); err != nil {
-				return err
+		for _, w := range []func(*store.Tx) error{writes, observe} {
+			if w != nil {
+				if err := w(tx); err != nil {
+					return err
+				}
 			}
 		}
 		return tx.MarkProcessed(e.Id)

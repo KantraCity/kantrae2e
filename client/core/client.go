@@ -74,8 +74,11 @@ const (
 	// EventHistory: another member answered a history request (Count new
 	// messages, possibly 0).
 	EventHistory EventType = "history"
-	// EventSecurity: something suspicious was detected and handled.
+	// EventSecurity: something suspicious was detected (see Detail).
 	EventSecurity EventType = "security"
+	// EventNewDevice: an unverified new device of a verified contact or of
+	// the own account appeared (compare fingerprints, then Trust).
+	EventNewDevice EventType = "new_device"
 )
 
 type Event struct {
@@ -85,6 +88,8 @@ type Event struct {
 	Err     error
 	// Count of messages for EventHistory.
 	Count int
+	// Detail is a human-readable description (security events).
+	Detail string
 }
 
 // Account is the identity of this device.
@@ -346,7 +351,7 @@ func (c *Client) loadAccount(ctx context.Context) error {
 		return fmt.Errorf("restore MLS state: %w", err)
 	}
 	c.acct, c.m, c.token = acct, m, string(vals[kvToken])
-	return nil
+	return c.rememberOwnKey(ctx)
 }
 
 // ---- tokens -------------------------------------------------------------------
@@ -523,6 +528,9 @@ func (c *Client) setupDevice(ctx context.Context, userID, username, accountToken
 	c.tokMu.Lock()
 	c.token = dev.Token
 	c.tokMu.Unlock()
+	if err := c.rememberOwnKey(ctx); err != nil {
+		return err
+	}
 	return c.EnsureKeyPackages(ctx)
 }
 
