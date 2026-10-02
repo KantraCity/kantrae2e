@@ -45,6 +45,45 @@ Environment:
 | `KANTRA_INSECURE=1` | skip TLS verification (development only) |
 | `WAILS_SERVER_PORT` / `WAILS_SERVER_HOST` | web mode listen address (default `localhost:8090`) |
 
+## Windows
+
+The MLS library is linked through cgo, so Windows builds use the Rust GNU
+target and MinGW gcc. The resulting `kantra-desktop.exe` only depends on
+system DLLs; the UI uses the WebView2 runtime that ships with Windows 10/11.
+
+**Ready-made exe:** every CI run uploads `kantra-windows-amd64`
+(GitHub → Actions → run → Artifacts).
+
+**Cross-compile on Linux:**
+
+```bash
+sudo apt install gcc-mingw-w64-x86-64
+rustup target add x86_64-pc-windows-gnu
+make desktop-windows        # -> desktop/bin/kantra-desktop.exe
+```
+
+**Build on Windows** (PowerShell, then an MSYS2 "MINGW64" shell):
+
+```powershell
+winget install GoLang.Go Rustlang.Rustup OpenJS.NodeJS.LTS MSYS2.MSYS2 Git.Git
+rustup target add x86_64-pc-windows-gnu
+```
+
+```bash
+# MSYS2 MINGW64 shell
+pacman -S --needed mingw-w64-x86_64-gcc make
+export PATH="$PATH:/c/Program Files/Go/bin:$HOME/go/bin:$USERPROFILE/.cargo/bin"
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
+cd kantrae2e/mls-ffi && cargo build --release --target x86_64-pc-windows-gnu
+cd ../desktop && CGO_ENABLED=1 wails3 task build CGO_ENABLED=1   # -> bin/kantra-desktop.exe
+```
+
+**Run against a local dev server** (Caddy's self-signed CA): either trust it
+once — `certutil -addstore -user Root caddy-root.crt` — or start with
+`$env:KANTRA_CA="C:\path\caddy-root.crt"; .\kantra-desktop.exe`. A server with
+a real domain (Let's Encrypt) needs neither: just enter its address on the
+login screen. The profile lives in `%AppData%\kantra\kantra.db`.
+
 ## Structure
 
 - `messenger.go` — the bound service (typed methods + `kantra` event stream)

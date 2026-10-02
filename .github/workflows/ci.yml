@@ -62,3 +62,43 @@ jobs:
       - name: Build web (server mode) and desktop
         working-directory: desktop
         run: wails3 task build:server && wails3 task build
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          install: mingw-w64-x86_64-gcc make
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mls-ffi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
+      - name: MLS library (Rust, GNU target)
+        run: cd mls-ffi && cargo build --release --target x86_64-pc-windows-gnu
+      - name: MLS bridge tests on Windows
+        env:
+          CGO_ENABLED: "1"
+        run: go test ./client/mls ./client/crypto
+      - name: Build desktop exe
+        env:
+          CGO_ENABLED: "1"
+        run: cd desktop && "$(go env GOPATH)/bin/wails3" task build CGO_ENABLED=1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kantra-windows-amd64
+          path: desktop/bin/kantra-desktop.exe

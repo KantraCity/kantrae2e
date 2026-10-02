@@ -62,7 +62,11 @@ curl -k https://localhost/kantra.auth.v1.AuthService/Register \
 ```bash
 make desktop       # окно (WebKitGTK / WebView2 / WKWebView)
 make desktop-web   # Wails server mode: тот же UI в браузере на http://localhost:8090
+make desktop-windows  # kantra-desktop.exe для Windows (кросс-сборка с Linux через MinGW)
 ```
+
+Готовый `.exe` для Windows собирает CI на `windows-latest`: артефакт `kantra-windows-amd64`
+в каждом прогоне (Actions → прогон → Artifacts).
 
 Веб-вариант — это ваш MLS-клиент, запущенный локально: он хранит ключи этого устройства и
 расшифрованные сообщения, поэтому по умолчанию слушает только `localhost`. Подробности — в

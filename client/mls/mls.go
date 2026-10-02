@@ -1,13 +1,17 @@
 // Package mls is the cgo bridge to the Rust mls_ffi crate (mls-rs).
 //
-// Build the static library first: `make mls-ffi` (cargo build --release in
-// mls-ffi/). All MLS protocol logic stays in mls-rs; this package only
-// marshals bytes and exposes a Go-friendly API.
+// Build the static library first: `make mls-ffi` (Linux/macOS:
+// cargo build --release) or `make mls-ffi-windows` (Windows, GNU toolchain:
+// cargo build --release --target x86_64-pc-windows-gnu). All MLS protocol
+// logic stays in mls-rs; this package only marshals bytes and exposes a
+// Go-friendly API.
 package mls
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../mls-ffi/include
-#cgo LDFLAGS: ${SRCDIR}/../../mls-ffi/target/release/libmls_ffi.a -lm -ldl -lpthread
+#cgo linux LDFLAGS: ${SRCDIR}/../../mls-ffi/target/release/libmls_ffi.a -lm -ldl -lpthread
+#cgo darwin LDFLAGS: ${SRCDIR}/../../mls-ffi/target/release/libmls_ffi.a -lm
+#cgo windows LDFLAGS: ${SRCDIR}/../../mls-ffi/target/x86_64-pc-windows-gnu/release/libmls_ffi.a -lbcrypt -ladvapi32 -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp
 #include <stdlib.h>
 #include "mls_ffi.h"
 */
