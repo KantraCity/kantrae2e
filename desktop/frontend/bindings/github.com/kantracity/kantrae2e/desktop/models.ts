@@ -76,6 +76,22 @@ export interface FileData {
 export interface FileInfo {
     "name": string;
     "size": number;
+
+    /**
+     * Kind: "photo", "video", "voice", "round" or "file".
+     */
+    "kind": string;
+    "mime"?: string;
+    "w"?: number;
+    "h"?: number;
+    "dur"?: number;
+
+    /**
+     * Thumb: tiny preview as a data: URL; Waveform: voice bars 0..255.
+     */
+    "thumb"?: string;
+    "wave"?: number[] | null;
+    "caption"?: string;
 }
 
 /**
@@ -102,6 +118,30 @@ export interface LoginResult {
 export interface LogoutInfo {
     "lastDevice": boolean;
     "hasRecovery": boolean;
+}
+
+/**
+ * MediaUpload is a file chosen or recorded in the UI.
+ */
+export interface MediaUpload {
+    "name": string;
+    "base64": string;
+    "mime": string;
+
+    /**
+     * photo, video, voice, round, file
+     */
+    "kind": string;
+    "w": number;
+    "h": number;
+    "dur": number;
+
+    /**
+     * ThumbBase64: small JPEG preview made by the UI.
+     */
+    "thumb": string;
+    "wave": number[] | null;
+    "caption": string;
 }
 
 export interface Member {
@@ -146,6 +186,37 @@ export interface Message {
      * Origin: "" direct, "backup" restored, "shared" re-sent by another member.
      */
     "origin": string;
+    "reply"?: ReplyInfo | null;
+    "edited"?: boolean;
+
+    /**
+     * "Переслано от …"
+     */
+    "forwarded"?: string;
+    "reactions"?: ReactionInfo[] | null;
+
+    /**
+     * Read: an outgoing message someone else has read (✓✓).
+     */
+    "read"?: boolean;
+}
+
+/**
+ * ReactionInfo is one emoji under a message.
+ */
+export interface ReactionInfo {
+    "emoji": string;
+    "count": number;
+    "mine": boolean;
+}
+
+/**
+ * ReplyInfo is the quoted message above a reply.
+ */
+export interface ReplyInfo {
+    "id": string;
+    "sender": string;
+    "text": string;
 }
 
 /**

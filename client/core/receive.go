@@ -217,6 +217,14 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 			if GroupKind(e.GroupId) == KindSelf {
 				break // nothing else is expected in the self-group
 			}
+			if w, ev := c.applyControlLocked(e.GroupId, uid, &pl); ev != nil {
+				writes = w
+				events = append(events, *ev)
+				if pl.Type != "read" {
+					c.scheduleBackup()
+				}
+				break
+			}
 			if pl.Type == "meta" {
 				if pl.Meta != nil {
 					writes = func(tx *store.Tx) error {
@@ -227,7 +235,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 				break
 			}
 			msg := store.Message{UID: pl.ID, GroupID: e.GroupId, SenderUser: uid, SenderDevice: did,
-				Kind: pl.Type, Body: pl.Body, SentAt: pl.TS}
+				Kind: pl.Type, Body: pl.Body, SentAt: pl.TS, ReplyTo: pl.ReplyTo, FwdFrom: pl.Fwd}
 			if pl.Media != nil {
 				b, _ := json.Marshal(pl.Media)
 				msg.Body = string(b)
@@ -385,6 +393,12 @@ func (c *Client) listenOnce(ctx context.Context) error {
 		var e deliveryv1.Envelope
 		if err := proto.Unmarshal(data, &e); err != nil {
 			continue
+		}
+		if e.Ephemeral {
+			if e.Type == deliveryv1.MessageType_MESSAGE_TYPE_TYPING && e.SenderUserId != "" {
+				c.emit(Event{Type: EventTyping, GroupID: e.GroupId, UserID: e.SenderUserId})
+			}
+			continue // not queued: nothing to ack
 		}
 		if e.Id == 0 {
 			continue // heartbeat

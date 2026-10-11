@@ -40,25 +40,31 @@ func keepAliveFrom(r *http.Request) time.Duration {
 // (e.g. messages accepted by another instance of the service).
 const pollInterval = 15 * time.Second
 
-// Hub wakes up WebSocket connections of devices that have new queue entries.
+// Hub wakes up WebSocket connections of devices that have new queue entries
+// and carries ephemeral envelopes (typing) to connected devices.
 type Hub struct {
 	mu    sync.Mutex
-	conns map[string]map[chan struct{}]struct{}
+	conns map[string]map[*sub]struct{}
 }
 
-func NewHub() *Hub { return &Hub{conns: map[string]map[chan struct{}]struct{}{}} }
+type sub struct {
+	wake chan struct{}
+	eph  chan *deliveryv1.Envelope
+}
 
-func (h *Hub) subscribe(deviceID string) (chan struct{}, func()) {
-	ch := make(chan struct{}, 1)
+func NewHub() *Hub { return &Hub{conns: map[string]map[*sub]struct{}{}} }
+
+func (h *Hub) subscribe(deviceID string) (*sub, func()) {
+	sb := &sub{wake: make(chan struct{}, 1), eph: make(chan *deliveryv1.Envelope, 16)}
 	h.mu.Lock()
 	if h.conns[deviceID] == nil {
-		h.conns[deviceID] = map[chan struct{}]struct{}{}
+		h.conns[deviceID] = map[*sub]struct{}{}
 	}
-	h.conns[deviceID][ch] = struct{}{}
+	h.conns[deviceID][sb] = struct{}{}
 	h.mu.Unlock()
-	return ch, func() {
+	return sb, func() {
 		h.mu.Lock()
-		delete(h.conns[deviceID], ch)
+		delete(h.conns[deviceID], sb)
 		if len(h.conns[deviceID]) == 0 {
 			delete(h.conns, deviceID)
 		}
@@ -71,9 +77,24 @@ func (h *Hub) Notify(deviceIDs ...string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, d := range deviceIDs {
-		for ch := range h.conns[d] {
+		for sb := range h.conns[d] {
 			select {
-			case ch <- struct{}{}:
+			case sb.wake <- struct{}{}:
+			default:
+			}
+		}
+	}
+}
+
+// Push hands an ephemeral envelope to the connected devices; it is dropped
+// for devices that are offline or too slow (best effort, like "typing").
+func (h *Hub) Push(e *deliveryv1.Envelope, deviceIDs ...string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, d := range deviceIDs {
+		for sb := range h.conns[d] {
+			select {
+			case sb.eph <- e:
 			default:
 			}
 		}
@@ -107,7 +128,7 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	wake, unsubscribe := s.hub.subscribe(did)
+	sb, unsubscribe := s.hub.subscribe(did)
 	defer unsubscribe()
 
 	// Reader: acks from the client.
@@ -181,8 +202,14 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-wake:
+		case <-sb.wake:
 		case <-ticker.C:
+		case e := <-sb.eph:
+			b, _ := proto.Marshal(e)
+			if !write(b) {
+				return
+			}
+			goto wait
 		case <-heartbeat:
 			// Only when silent: traffic already keeps the connection alive.
 			if time.Since(lastWrite) >= keepAlive-time.Second {

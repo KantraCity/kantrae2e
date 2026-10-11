@@ -83,6 +83,30 @@ type UserHit struct {
 type FileInfo struct {
 	Name string `json:"name"`
 	Size int    `json:"size"`
+	// Kind: "photo", "video", "voice", "round" or "file".
+	Kind     string  `json:"kind"`
+	Mime     string  `json:"mime,omitempty"`
+	Width    int     `json:"w,omitempty"`
+	Height   int     `json:"h,omitempty"`
+	Duration float64 `json:"dur,omitempty"`
+	// Thumb: tiny preview as a data: URL; Waveform: voice bars 0..255.
+	Thumb    string `json:"thumb,omitempty"`
+	Waveform []int  `json:"wave,omitempty"`
+	Caption  string `json:"caption,omitempty"`
+}
+
+// ReplyInfo is the quoted message above a reply.
+type ReplyInfo struct {
+	ID     string `json:"id"`
+	Sender string `json:"sender"`
+	Text   string `json:"text"`
+}
+
+// ReactionInfo is one emoji under a message.
+type ReactionInfo struct {
+	Emoji string `json:"emoji"`
+	Count int    `json:"count"`
+	Mine  bool   `json:"mine"`
 }
 
 type Message struct {
@@ -100,6 +124,13 @@ type Message struct {
 	Outgoing     bool      `json:"outgoing"`
 	// Origin: "" direct, "backup" restored, "shared" re-sent by another member.
 	Origin string `json:"origin"`
+
+	Reply     *ReplyInfo     `json:"reply,omitempty"`
+	Edited    bool           `json:"edited,omitempty"`
+	Forwarded string         `json:"forwarded,omitempty"` // "Переслано от …"
+	Reactions []ReactionInfo `json:"reactions,omitempty"`
+	// Read: an outgoing message someone else has read (✓✓).
+	Read bool `json:"read,omitempty"`
 }
 
 type Chat struct {
@@ -301,6 +332,9 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 	if e.Err != nil && ev.Detail == "" {
 		ev.Detail = e.Err.Error()
 	}
+	if e.Type == core.EventTyping && s.c != nil {
+		ev.Detail = core.DisplayName(s.c.CachedProfile(context.Background(), e.UserID))
+	}
 	if e.Type == core.EventMessage && e.Message != nil && s.c != nil {
 		c := s.c
 		// Re-read to get the local sequence number.
@@ -318,18 +352,6 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 		m.maybeNotify(s, c, ev.Message)
 	}
 	m.emit(ev)
-}
-
-func (m *Messenger) toMessage(c *core.Client, s *store.Message) *Message {
-	p := profileOf(c, s.SenderUser)
-	msg := &Message{Seq: s.Seq, ID: s.UID, ChatID: s.GroupID, SenderID: s.SenderUser,
-		Sender: core.DisplayName(p), SenderAvatar: p.AvatarID, Kind: "text", Text: s.Body,
-		SentAt: s.SentAt, Outgoing: s.Outgoing, Origin: s.Origin}
-	if ref, err := core.ParseMedia(s); err == nil {
-		msg.Kind, msg.Text = "file", ""
-		msg.File = &FileInfo{Name: ref.Name, Size: ref.Size}
-	}
-	return msg
 }
 
 // ---- account ----------------------------------------------------------------
@@ -650,25 +672,6 @@ func (m *Messenger) OpenDirect(username string) (*Chat, error) {
 	return m.Chat(id)
 }
 
-func (m *Messenger) Messages(chatID string, limit int) ([]Message, error) {
-	c, err := m.loggedIn()
-	if err != nil {
-		return nil, err
-	}
-	if limit <= 0 || limit > 5000 {
-		limit = 200
-	}
-	ms, err := c.Messages(context.Background(), chatID, limit)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Message, 0, len(ms))
-	for i := range ms {
-		out = append(out, *m.toMessage(c, &ms[i]))
-	}
-	return out, nil
-}
-
 // CreateGroup creates a group chat with the given members.
 func (m *Messenger) CreateGroup(name string, usernames []string) (string, error) {
 	c, err := m.loggedIn()
@@ -751,35 +754,6 @@ func (m *Messenger) Members(chatID string) ([]Member, error) {
 
 // ---- messages -----------------------------------------------------------------
 
-func (m *Messenger) Send(chatID, text string) (*Message, error) {
-	c, err := m.loggedIn()
-	if err != nil {
-		return nil, err
-	}
-	s, err := c.SendText(context.Background(), chatID, text)
-	if err != nil {
-		return nil, friendly(err)
-	}
-	return m.lookup(c, chatID, s.UID, s), nil
-}
-
-// SendFile sends a file given as base64.
-func (m *Messenger) SendFile(chatID, name, dataBase64 string) (*Message, error) {
-	c, err := m.loggedIn()
-	if err != nil {
-		return nil, err
-	}
-	data, err := base64.StdEncoding.DecodeString(dataBase64)
-	if err != nil {
-		return nil, err
-	}
-	s, err := c.SendFile(context.Background(), chatID, filepath.Base(name), data)
-	if err != nil {
-		return nil, friendly(err)
-	}
-	return m.lookup(c, chatID, s.UID, s), nil
-}
-
 func (m *Messenger) lookup(c *core.Client, chatID, uid string, fallback *store.Message) *Message {
 	if ms, err := c.Messages(context.Background(), chatID, 20); err == nil {
 		for i := len(ms) - 1; i >= 0; i-- {
@@ -823,6 +797,10 @@ func friendly(err error) error {
 	switch {
 	case errors.Is(err, core.ErrKeyConflict):
 		return errors.New("отправка заблокирована: у участника сменился ключ — сверьте отпечатки в информации о группе")
+	case errors.Is(err, core.ErrNotYours):
+		return errors.New("это можно сделать только со своим сообщением")
+	case errors.Is(err, core.ErrNotEditable):
+		return errors.New("редактировать можно только текстовые сообщения")
 	case errors.Is(err, core.ErrPendingApproval):
 		return errors.New("устройство ещё не подтверждено")
 	case errors.Is(err, core.ErrDirectInvite):

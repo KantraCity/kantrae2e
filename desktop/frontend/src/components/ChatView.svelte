@@ -74,8 +74,38 @@
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault()
       send()
+    } else if (e.key === 'Escape' && (app.reply || app.editing)) {
+      cancelCompose()
+    } else if (e.key === 'ArrowUp' && !text) {
+      // Like Telegram Desktop: ↑ in an empty field edits your last message.
+      const last = [...messages].reverse().find((x) => x.outgoing && x.kind === 'text')
+      if (last) {
+        e.preventDefault()
+        app.startEdit(last)
+      }
     }
   }
+
+  function cancelCompose() {
+    if (app.editing) text = ''
+    app.reply = null
+    app.editing = null
+    resize()
+  }
+
+  // Editing puts the message's text into the field.
+  let editingId = ''
+  $effect(() => {
+    const ed = app.editing
+    if (ed && ed.id !== editingId) {
+      editingId = ed.id
+      text = ed.text
+      tick().then(() => { resize(); input?.focus() })
+    } else if (!ed) {
+      editingId = ''
+    }
+  })
+  $effect(() => { if (app.reply) input?.focus() })
 
   function resize() {
     if (!input) return
@@ -108,6 +138,7 @@
           <div class="status muted">
             {#if !chat.active}{chat.kind === 'direct' ? 'чат недоступен' : 'вы не участник этой группы'}
             {:else if !app.online}соединение…
+            {:else if app.typingIn(chat.id)}<span class="typing">{chat.kind === 'direct' ? 'печатает' : `${app.typingIn(chat.id)} печатает`}<span class="dots"></span></span>
             {:else if chat.kind === 'direct'}@{chat.peer}
             {:else if memberCount !== null}{memberCount} {plural(memberCount, 'участник', 'участника', 'участников')}
             {:else}&nbsp;{/if}
@@ -130,11 +161,22 @@
       </div>
     </div>
 
+    {#if chat.active && (app.reply || app.editing)}
+      {@const ref = app.editing ?? app.reply}
+      <div class="compose-bar">
+        <span class="cb-icon"><Icon name={app.editing ? 'pencil' : 'reply'} size={22} /></span>
+        <div class="cb-text">
+          <div class="cb-title">{app.editing ? 'Редактирование' : `В ответ ${ref?.sender ?? ''}`}</div>
+          <div class="cb-body">{ref?.text || (ref?.file ? (ref.file.caption || ref.file.name) : '')}</div>
+        </div>
+        <button class="icon-btn" aria-label="Отмена" onclick={cancelCompose}><Icon name="close" size={20} /></button>
+      </div>
+    {/if}
     {#if chat.active}
       <footer>
         <div class="composer">
           <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => fileInput?.click()}><Icon name="clip" /></button>
-          <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} oninput={resize}></textarea>
+          <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} oninput={() => { resize(); app.typingTick() }}></textarea>
           <input type="file" multiple hidden bind:this={fileInput} onchange={(e) => pick((e.currentTarget as HTMLInputElement).files)} />
         </div>
         <button class="send" aria-label="Отправить" disabled={!text.trim()} onclick={send}><Icon name="send" /></button>
@@ -181,6 +223,15 @@
     flex-shrink: 0; transition: filter .15s, transform .15s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   .send:hover:not(:disabled) { filter: brightness(1.1); }
   .send:disabled { background: var(--bg-sidebar); color: var(--text-muted); cursor: default; }
+  .compose-bar { display: flex; align-items: center; gap: 12px; max-width: 760px; width: calc(100% - 32px); margin: 0 auto -4px; padding: 8px 12px;
+    background: var(--bg-sidebar); border-radius: 12px 12px 0 0; }
+  .cb-icon { color: var(--accent-light); display: inline-flex; }
+  .cb-text { flex: 1; min-width: 0; border-left: 2px solid var(--accent-light); padding-left: 10px; }
+  .cb-title { color: var(--accent-light); font-weight: 500; font-size: 14px; }
+  .cb-body { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
+  .typing { color: var(--accent-light); }
+  .dots::after { content: '…'; animation: dots 1.2s steps(3) infinite; display: inline-block; width: 1em; overflow: hidden; vertical-align: bottom; }
+  @keyframes dots { from { width: 0; } to { width: 1em; } }
   .readonly { justify-content: center; padding: 18px; font-size: 14px; background: var(--bg-header); max-width: none; }
   .placeholder { align-items: center; justify-content: center; }
   .pill { background: rgba(0, 0, 0, 0.35); padding: 6px 14px; border-radius: 14px; font-size: 14px; color: #d4dde6; }

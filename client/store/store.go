@@ -106,6 +106,26 @@ var migrations = []string{
 	 ALTER TABLE users ADD COLUMN avatar BLOB;
 	 ALTER TABLE users ADD COLUMN avatar_cached TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE users ADD COLUMN fetched_at INTEGER NOT NULL DEFAULT 0;`,
+	// Telegram-like message features: replies, edits, deletion for
+	// everyone (a tombstone stops restored/shared copies from coming back),
+	// forwards, reactions and read marks.
+	`ALTER TABLE messages ADD COLUMN reply_to TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE messages ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE messages ADD COLUMN fwd_from TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE reactions (
+	     group_id TEXT NOT NULL,
+	     msg_uid  TEXT NOT NULL,
+	     user_id  TEXT NOT NULL,
+	     emoji    TEXT NOT NULL,
+	     PRIMARY KEY (group_id, msg_uid, user_id)
+	 );
+	 CREATE TABLE read_marks (
+	     group_id TEXT NOT NULL,
+	     user_id  TEXT NOT NULL,
+	     upto     INTEGER NOT NULL,
+	     PRIMARY KEY (group_id, user_id)
+	 );`,
 }
 
 func migrate(db *sql.DB) error {
@@ -348,22 +368,25 @@ type Message struct {
 	Outgoing     bool
 	Origin       string // "", "backup" or "shared"
 	SharedBy     string // user id of the member who re-sent it (Origin "shared")
+	ReplyTo      string `json:",omitempty"` // uid of the message this one answers
+	EditedAt     int64  `json:",omitempty"` // unix ms of the last edit
+	Deleted      bool   `json:",omitempty"` // deleted for everyone (tombstone)
+	FwdFrom      string `json:",omitempty"` // forwarded: name of the original author
 }
 
 // InsertMessage stores a message; duplicates (group_id, uid) are ignored.
 func (t *Tx) InsertMessage(m Message) error {
-	_, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
-		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing)
+	_, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, reply_to, fwd_from)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.FwdFrom)
 	return err
 }
 
-// InsertRestoredMessage stores a message restored from a backup (already
-// backed up) and reports whether it was new.
-func (t *Tx) InsertRestoredMessage(m Message) (bool, error) {
-	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, backed_up, origin)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'backup') ON CONFLICT(group_id, uid) DO NOTHING`,
-		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing)
+// EditMessage replaces the text of a message by its author (a newer edit
+// wins); the message is backed up again.
+func (t *Tx) EditMessage(groupID, uid, sender, body string, at int64) (bool, error) {
+	r, err := t.tx.Exec(`UPDATE messages SET body=?, edited_at=?, backed_up=0
+		WHERE group_id=? AND uid=? AND sender_user=? AND deleted=0 AND edited_at < ?`, body, at, groupID, uid, sender, at)
 	if err != nil {
 		return false, err
 	}
@@ -371,12 +394,135 @@ func (t *Tx) InsertRestoredMessage(m Message) (bool, error) {
 	return n > 0, nil
 }
 
+// DeleteMessage turns a message into a tombstone. sender "" deletes any
+// message (local "delete for me"); otherwise only the author's own.
+func (t *Tx) DeleteMessage(groupID, uid, sender string) (bool, error) {
+	q := `UPDATE messages SET body='', deleted=1, backed_up=0 WHERE group_id=? AND uid=? AND deleted=0`
+	args := []any{groupID, uid}
+	if sender != "" {
+		q += ` AND sender_user=?`
+		args = append(args, sender)
+	}
+	r, err := t.tx.Exec(q, args...)
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	if n > 0 {
+		_, err = t.tx.Exec(`DELETE FROM reactions WHERE group_id=? AND msg_uid=?`, groupID, uid)
+	}
+	return n > 0, err
+}
+
+// SetReaction sets (emoji "" removes) a user's reaction to a message.
+func (t *Tx) SetReaction(groupID, uid, userID, emoji string) error {
+	if emoji == "" {
+		_, err := t.tx.Exec(`DELETE FROM reactions WHERE group_id=? AND msg_uid=? AND user_id=?`, groupID, uid, userID)
+		return err
+	}
+	_, err := t.tx.Exec(`INSERT INTO reactions (group_id, msg_uid, user_id, emoji) VALUES (?, ?, ?, ?)
+		ON CONFLICT(group_id, msg_uid, user_id) DO UPDATE SET emoji=excluded.emoji`, groupID, uid, userID, emoji)
+	return err
+}
+
+// Reaction is one user's reaction.
+type Reaction struct {
+	MsgUID string
+	UserID string
+	Emoji  string
+}
+
+// Reactions of a group's messages.
+func (s *Store) Reactions(ctx context.Context, groupID string) ([]Reaction, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT msg_uid, user_id, emoji FROM reactions WHERE group_id=?`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Reaction
+	for rows.Next() {
+		var r Reaction
+		if err := rows.Scan(&r.MsgUID, &r.UserID, &r.Emoji); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// SetReadMark records that userID has read groupID up to ts (keeps the max).
+func (t *Tx) SetReadMark(groupID, userID string, ts int64) error {
+	_, err := t.tx.Exec(`INSERT INTO read_marks (group_id, user_id, upto) VALUES (?, ?, ?)
+		ON CONFLICT(group_id, user_id) DO UPDATE SET upto=max(upto, excluded.upto)`, groupID, userID, ts)
+	return err
+}
+
+// ReadMarks returns, per user, up to when they have read the group.
+func (s *Store) ReadMarks(ctx context.Context, groupID string) (map[string]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id, upto FROM read_marks WHERE group_id=?`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var u string
+		var ts int64
+		if err := rows.Scan(&u, &ts); err != nil {
+			return nil, err
+		}
+		out[u] = ts
+	}
+	return out, rows.Err()
+}
+
+// Message returns one message (deleted ones included).
+func (s *Store) Message(ctx context.Context, groupID, uid string) (*Message, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND uid=?`, groupID, uid)
+	if err != nil {
+		return nil, err
+	}
+	ms, err := scanMessages(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(ms) == 0 {
+		return nil, ErrNotFound
+	}
+	return &ms[0], nil
+}
+
+// InsertRestoredMessage stores a message restored from a backup (already
+// backed up) and reports whether it was new.
+func (t *Tx) InsertRestoredMessage(m Message) (bool, error) {
+	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, backed_up, origin,
+			reply_to, edited_at, deleted, fwd_from)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'backup', ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.EditedAt, m.Deleted, m.FwdFrom)
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	if n == 0 {
+		// Known already: a later edit or deletion in the backup still applies.
+		if m.Deleted {
+			_, err = t.tx.Exec(`UPDATE messages SET body='', deleted=1 WHERE group_id=? AND uid=?`, m.GroupID, m.UID)
+		} else if m.EditedAt > 0 {
+			_, err = t.tx.Exec(`UPDATE messages SET body=?, edited_at=? WHERE group_id=? AND uid=? AND deleted=0 AND edited_at < ?`,
+				m.Body, m.EditedAt, m.GroupID, m.UID, m.EditedAt)
+		}
+		return false, err
+	}
+	return !m.Deleted, nil
+}
+
 // InsertSharedMessage stores a message re-sent by another member; it reports
 // whether the message was new.
 func (t *Tx) InsertSharedMessage(m Message, sharedBy string) (bool, error) {
-	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shared', ?) ON CONFLICT(group_id, uid) DO NOTHING`,
-		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, sharedBy)
+	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by,
+			reply_to, edited_at, fwd_from)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shared', ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, sharedBy, m.ReplyTo, m.EditedAt, m.FwdFrom)
 	if err != nil {
 		return false, err
 	}
@@ -389,7 +535,8 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	var out []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.Seq, &m.UID, &m.GroupID, &m.SenderUser, &m.SenderDevice, &m.Kind, &m.Body, &m.SentAt, &m.Outgoing, &m.Origin, &m.SharedBy); err != nil {
+		if err := rows.Scan(&m.Seq, &m.UID, &m.GroupID, &m.SenderUser, &m.SenderDevice, &m.Kind, &m.Body, &m.SentAt, &m.Outgoing, &m.Origin, &m.SharedBy,
+			&m.ReplyTo, &m.EditedAt, &m.Deleted, &m.FwdFrom); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -397,11 +544,12 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	return out, rows.Err()
 }
 
-const msgCols = `seq, uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by`
+const msgCols = `seq, uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by,
+	reply_to, edited_at, deleted, fwd_from`
 
 // Messages returns the last `limit` messages of a group, oldest first.
 func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Message, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT * FROM (SELECT `+msgCols+` FROM messages WHERE group_id=?
+	rows, err := s.db.QueryContext(ctx, `SELECT * FROM (SELECT `+msgCols+` FROM messages WHERE group_id=? AND deleted=0
 		ORDER BY sent_at DESC, seq DESC LIMIT ?) ORDER BY sent_at, seq`, groupID, limit)
 	if err != nil {
 		return nil, err
@@ -412,7 +560,7 @@ func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Mess
 // MessagesSince returns up to limit messages of a group with sent_at >= from,
 // oldest first.
 func (s *Store) MessagesSince(ctx context.Context, groupID string, from int64, limit int) ([]Message, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND sent_at >= ?
+	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND sent_at >= ? AND deleted=0
 		ORDER BY sent_at, seq LIMIT ?`, groupID, from, limit)
 	if err != nil {
 		return nil, err
@@ -423,7 +571,7 @@ func (s *Store) MessagesSince(ctx context.Context, groupID string, from int64, l
 // LastMessageTime returns the newest sent_at of a group (0 if none).
 func (s *Store) LastMessageTime(ctx context.Context, groupID string) (int64, error) {
 	var ts sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT max(sent_at) FROM messages WHERE group_id=?`, groupID).Scan(&ts)
+	err := s.db.QueryRowContext(ctx, `SELECT max(sent_at) FROM messages WHERE group_id=? AND deleted=0`, groupID).Scan(&ts)
 	return ts.Int64, err
 }
 

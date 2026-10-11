@@ -9,6 +9,26 @@
   let { m, first, last, group }: { m: Message; first: boolean; last: boolean; group: boolean } = $props()
   let downloading = $state(false)
 
+  // Context menu: right click, or a long press on touch screens.
+  function openMenu(e: MouseEvent | { clientX: number; clientY: number }) {
+    if ('preventDefault' in e) e.preventDefault()
+    app.menu = { m, x: e.clientX, y: e.clientY }
+  }
+  let pressTimer: ReturnType<typeof setTimeout> | undefined
+  function touchStart(e: TouchEvent) {
+    const t = e.touches[0]
+    pressTimer = setTimeout(() => openMenu({ clientX: t.clientX, clientY: t.clientY }), 450)
+  }
+  function touchEnd() { clearTimeout(pressTimer) }
+
+  function jumpTo(id: string) {
+    const el = document.getElementById('msg-' + id)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('flash')
+    setTimeout(() => el.classList.remove('flash'), 1200)
+  }
+
   async function download() {
     if (downloading) return
     downloading = true
@@ -18,13 +38,23 @@
   }
 </script>
 
-<div class="line" class:out={m.outgoing} class:last>
+<div class="line" class:out={m.outgoing} class:last id={'msg-' + m.id}>
   {#if group && !m.outgoing}
     <div class="avatar-slot">{#if last}<Avatar name={m.sender} id={m.senderId} user={m.senderId} photo={m.senderAvatar} size={34} />{/if}</div>
   {/if}
-  <div class="bubble" class:tail={last}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="bubble" class:tail={last} oncontextmenu={openMenu} ontouchstart={touchStart} ontouchend={touchEnd} ontouchmove={touchEnd}>
     {#if group && first && !m.outgoing}
       <div class="sender" style="color:{nameColor(m.senderId)}">{m.sender}</div>
+    {/if}
+    {#if m.forwarded}
+      <div class="fwd">Переслано от <b>{m.forwarded}</b></div>
+    {/if}
+    {#if m.reply}
+      <button class="quote" onclick={() => jumpTo(m.reply!.id)}>
+        <span class="q-name">{m.reply.sender || 'Сообщение'}</span>
+        <span class="q-text">{m.reply.text}</span>
+      </button>
     {/if}
     {#if m.origin === 'shared'}
       <div class="origin" title="Пересланo другим участником, пока ваших устройств не было в сети">
@@ -42,9 +72,17 @@
     {:else}
       <span class="text">{m.text}</span>
     {/if}
+    {#if m.reactions?.length}
+      <div class="reacts">
+        {#each m.reactions as r (r.emoji)}
+          <button class="react" class:mine={r.mine} onclick={() => app.react(m, r.emoji)}>{r.emoji}{#if r.count > 1} {r.count}{/if}</button>
+        {/each}
+      </div>
+    {/if}
     <span class="time">
+      {#if m.edited}<span class="edited">изменено</span>{/if}
       {timeHM(m.sentAt)}
-      {#if m.outgoing}<span class="check"><Icon name="check" size={14} /></span>{/if}
+      {#if m.outgoing}<span class="check" title={m.read ? 'Прочитано' : 'Доставлено'}><Icon name={m.read ? 'double' : 'check'} size={15} /></span>{/if}
     </span>
   </div>
 </div>
@@ -70,6 +108,22 @@
   }
   .out .bubble.tail::before { left: auto; right: -7px; background: radial-gradient(circle at 100% 0, transparent 11px, var(--bubble-out) 12px); }
   .text { white-space: pre-wrap; }
+  .fwd { font-size: 14px; color: var(--accent-light); margin-bottom: 2px; }
+  .out .fwd { color: #b2d7ff; }
+  .quote { display: flex; flex-direction: column; width: 100%; text-align: left; border-left: 3px solid var(--accent-light); background: rgba(255,255,255,.06);
+    border-radius: 4px; padding: 3px 8px; margin: 2px 0 4px; font-size: 14px; line-height: 1.3; }
+  .out .quote { border-left-color: #fff; background: rgba(255,255,255,.1); }
+  .q-name { font-weight: 600; color: var(--accent-light); }
+  .out .q-name { color: #fff; }
+  .q-text { color: var(--text); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+  .reacts { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
+  .react { background: rgba(82, 136, 193, .25); border-radius: 14px; padding: 2px 8px; font-size: 14px; line-height: 1.4; }
+  .react.mine { background: var(--accent); color: #fff; }
+  .out .react { background: rgba(255,255,255,.15); }
+  .out .react.mine { background: #fff; color: var(--bubble-out); }
+  .edited { font-style: italic; }
+  :global(.line.flash .bubble) { animation: flash 1.2s; }
+  @keyframes flash { 30% { filter: brightness(1.6); } }
   .sender { font-weight: 600; font-size: 14px; margin-bottom: 2px; white-space: nowrap; }
   .origin { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-bubble-muted); margin-bottom: 3px; white-space: nowrap; }
   .time { float: right; margin: 8px 0 -4px 12px; font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; user-select: none; }

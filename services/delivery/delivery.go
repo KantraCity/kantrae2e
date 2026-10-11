@@ -351,6 +351,44 @@ func (s *Service) SendApplication(ctx context.Context, req *deliveryv1.SendAppli
 	return &deliveryv1.SendApplicationResponse{MessageId: msgID}, nil
 }
 
+// Typing pushes an ephemeral "typing" signal to the other members' online
+// devices. Nothing is stored; the server learns nothing it does not see
+// anyway (who is active in which group).
+func (s *Service) Typing(ctx context.Context, req *deliveryv1.TypingRequest) (*deliveryv1.TypingResponse, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := validGroupID(req.GroupId); err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT device_id::text FROM group_members WHERE group_id=$1`, req.GroupId)
+	if err != nil {
+		return nil, asConnect(err)
+	}
+	var devices []string
+	member := false
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			rows.Close()
+			return nil, asConnect(err)
+		}
+		if d == did {
+			member = true
+		} else {
+			devices = append(devices, d)
+		}
+	}
+	rows.Close()
+	if !member {
+		return nil, errf(connect.CodePermissionDenied, "not a member of the group")
+	}
+	s.hub.Push(&deliveryv1.Envelope{GroupId: req.GroupId, Type: deliveryv1.MessageType_MESSAGE_TYPE_TYPING,
+		SenderUserId: uid, SenderDeviceId: did, CreatedAt: time.Now().Unix(), Ephemeral: true}, devices...)
+	return &deliveryv1.TypingResponse{}, nil
+}
+
 func (s *Service) FetchWelcome(ctx context.Context, req *deliveryv1.FetchWelcomeRequest) (*deliveryv1.FetchWelcomeResponse, error) {
 	_, did, err := authmiddleware.RequireDevice(ctx)
 	if err != nil {

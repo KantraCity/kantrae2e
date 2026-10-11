@@ -65,6 +65,8 @@ const (
 	// DeliveryServiceRequestJoinProcedure is the fully-qualified name of the DeliveryService's
 	// RequestJoin RPC.
 	DeliveryServiceRequestJoinProcedure = "/kantra.delivery.v1.DeliveryService/RequestJoin"
+	// DeliveryServiceTypingProcedure is the fully-qualified name of the DeliveryService's Typing RPC.
+	DeliveryServiceTypingProcedure = "/kantra.delivery.v1.DeliveryService/Typing"
 )
 
 // DeliveryServiceClient is a client for the kantra.delivery.v1.DeliveryService service.
@@ -95,6 +97,9 @@ type DeliveryServiceClient interface {
 	// Fallback: asks online members to add this device (sends its KeyPackage
 	// to the group as a JOIN_REQUEST envelope).
 	RequestJoin(context.Context, *v1.RequestJoinRequest) (*v1.RequestJoinResponse, error)
+	// "Typing…": pushed to the other members' connected devices only, never
+	// stored (an ephemeral Envelope of type TYPING without payload).
+	Typing(context.Context, *v1.TypingRequest) (*v1.TypingResponse, error)
 }
 
 // NewDeliveryServiceClient constructs a client for the kantra.delivery.v1.DeliveryService service.
@@ -174,6 +179,12 @@ func NewDeliveryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(deliveryServiceMethods.ByName("RequestJoin")),
 			connect.WithClientOptions(opts...),
 		),
+		typing: connect.NewClient[v1.TypingRequest, v1.TypingResponse](
+			httpClient,
+			baseURL+DeliveryServiceTypingProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("Typing")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -190,6 +201,7 @@ type deliveryServiceClient struct {
 	getGroupInfo    *connect.Client[v1.GetGroupInfoRequest, v1.GetGroupInfoResponse]
 	externalJoin    *connect.Client[v1.ExternalJoinRequest, v1.ExternalJoinResponse]
 	requestJoin     *connect.Client[v1.RequestJoinRequest, v1.RequestJoinResponse]
+	typing          *connect.Client[v1.TypingRequest, v1.TypingResponse]
 }
 
 // CreateGroup calls kantra.delivery.v1.DeliveryService.CreateGroup.
@@ -291,6 +303,15 @@ func (c *deliveryServiceClient) RequestJoin(ctx context.Context, req *v1.Request
 	return nil, err
 }
 
+// Typing calls kantra.delivery.v1.DeliveryService.Typing.
+func (c *deliveryServiceClient) Typing(ctx context.Context, req *v1.TypingRequest) (*v1.TypingResponse, error) {
+	response, err := c.typing.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // DeliveryServiceHandler is an implementation of the kantra.delivery.v1.DeliveryService service.
 type DeliveryServiceHandler interface {
 	// Registers a new group at epoch 0 with the caller's device as only member.
@@ -319,6 +340,9 @@ type DeliveryServiceHandler interface {
 	// Fallback: asks online members to add this device (sends its KeyPackage
 	// to the group as a JOIN_REQUEST envelope).
 	RequestJoin(context.Context, *v1.RequestJoinRequest) (*v1.RequestJoinResponse, error)
+	// "Typing…": pushed to the other members' connected devices only, never
+	// stored (an ephemeral Envelope of type TYPING without payload).
+	Typing(context.Context, *v1.TypingRequest) (*v1.TypingResponse, error)
 }
 
 // NewDeliveryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -394,6 +418,12 @@ func NewDeliveryServiceHandler(svc DeliveryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(deliveryServiceMethods.ByName("RequestJoin")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deliveryServiceTypingHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceTypingProcedure,
+		svc.Typing,
+		connect.WithSchema(deliveryServiceMethods.ByName("Typing")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.delivery.v1.DeliveryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeliveryServiceCreateGroupProcedure:
@@ -418,6 +448,8 @@ func NewDeliveryServiceHandler(svc DeliveryServiceHandler, opts ...connect.Handl
 			deliveryServiceExternalJoinHandler.ServeHTTP(w, r)
 		case DeliveryServiceRequestJoinProcedure:
 			deliveryServiceRequestJoinHandler.ServeHTTP(w, r)
+		case DeliveryServiceTypingProcedure:
+			deliveryServiceTypingHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -469,4 +501,8 @@ func (UnimplementedDeliveryServiceHandler) ExternalJoin(context.Context, *v1.Ext
 
 func (UnimplementedDeliveryServiceHandler) RequestJoin(context.Context, *v1.RequestJoinRequest) (*v1.RequestJoinResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.RequestJoin is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) Typing(context.Context, *v1.TypingRequest) (*v1.TypingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.Typing is not implemented"))
 }

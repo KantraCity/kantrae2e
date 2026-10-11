@@ -967,3 +967,103 @@ func TestProfilesAndLogout(t *testing.T) {
 		t.Fatalf("after logout: %v", err)
 	}
 }
+
+// Replies, edits, deletion, reactions, forwards, read receipts and typing.
+func TestMessageFeatures(t *testing.T) {
+	c := newCluster(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	alice := c.register("alice")
+	bob := c.register("bob")
+	dm, err := alice.OpenDirect(ctx, "bob")
+	ok(t, err)
+	q, err := alice.SendText(ctx, dm, "Пойдём гулять?")
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+
+	ans, err := bob.SendMessage(ctx, dm, "Да!", core.SendOptions{ReplyTo: q.UID})
+	ok(t, err)
+	ok(t, alice.Sync(ctx))
+	got, err := alice.Message(ctx, dm, ans.UID)
+	ok(t, err)
+	if got.ReplyTo != q.UID {
+		t.Fatalf("reply: %+v", got)
+	}
+
+	// Edit (only the author).
+	if err := bob.EditMessage(ctx, dm, q.UID, "hack"); !errors.Is(err, core.ErrNotYours) {
+		t.Fatalf("edit someone else's: %v", err)
+	}
+	ok(t, alice.EditMessage(ctx, dm, q.UID, "Пойдём гулять в 6?"))
+	ok(t, bob.Sync(ctx))
+	if m, _ := bob.Message(ctx, dm, q.UID); m.Body != "Пойдём гулять в 6?" || m.EditedAt == 0 {
+		t.Fatalf("edited: %+v", m)
+	}
+
+	// Reactions.
+	ok(t, bob.React(ctx, dm, q.UID, "👍"))
+	ok(t, alice.Sync(ctx))
+	rs, _ := alice.Reactions(ctx, dm)
+	if rs[q.UID][bob.Account().UserID] != "👍" {
+		t.Fatalf("reactions: %+v", rs)
+	}
+	ok(t, bob.React(ctx, dm, q.UID, ""))
+	ok(t, alice.Sync(ctx))
+	if rs, _ := alice.Reactions(ctx, dm); len(rs[q.UID]) != 0 {
+		t.Fatalf("reaction not removed: %+v", rs)
+	}
+
+	// Read receipts.
+	ok(t, alice.MarkRead(ctx, dm))
+	ok(t, bob.Sync(ctx))
+	marks, _ := bob.ReadMarks(ctx, dm)
+	if marks[alice.Account().UserID] < ans.SentAt {
+		t.Fatalf("read marks: %+v", marks)
+	}
+
+	// Forward into a group.
+	gid, err := alice.CreateGroup(ctx, "друзья")
+	ok(t, err)
+	ok(t, alice.Invite(ctx, gid, "bob"))
+	fw, err := alice.Forward(ctx, dm, ans.UID, gid)
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+	if m, _ := bob.Message(ctx, gid, fw.UID); m == nil || m.FwdFrom != "bob" || m.Body != "Да!" {
+		t.Fatalf("forward: %+v", m)
+	}
+
+	// Deleting for everyone: in a group only one's own messages...
+	gm, err := alice.SendText(ctx, gid, "в группе")
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+	if err := bob.DeleteMessage(ctx, gid, gm.UID, true); !errors.Is(err, core.ErrNotYours) {
+		t.Fatalf("delete other's in group: %v", err)
+	}
+	// ...in a direct chat any message (as in Telegram).
+	ok(t, bob.DeleteMessage(ctx, dm, q.UID, true))
+	ok(t, alice.Sync(ctx))
+	eq(t, texts(t, alice, dm), "Да!")
+	eq(t, texts(t, bob, dm), "Да!")
+	// Delete for me only.
+	ok(t, alice.DeleteMessage(ctx, gid, gm.UID, false))
+	if m := texts(t, alice, gid); len(m) != 1 {
+		t.Fatalf("local delete: %q", m)
+	}
+	ok(t, bob.Sync(ctx))
+	if m := texts(t, bob, gid); len(m) != 2 {
+		t.Fatalf("bob's copy must stay: %q", m)
+	}
+
+	// Typing reaches a connected device, ephemerally.
+	go bob.Listen(ctx)
+	waitFor(t, func() bool { return len(bob.eventsOf(core.EventConnected)) > 0 })
+	ok(t, alice.Typing(ctx, dm))
+	waitFor(t, func() bool {
+		for _, e := range bob.eventsOf(core.EventTyping) {
+			if e.GroupID == dm && e.UserID == alice.Account().UserID {
+				return true
+			}
+		}
+		return false
+	})
+}

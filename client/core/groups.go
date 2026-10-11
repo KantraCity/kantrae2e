@@ -33,6 +33,12 @@ type payload struct {
 	HistShare *historyShare   `json:"hshare,omitempty"`
 	// Device linking (see linking.go).
 	AccountKey *accountKey `json:"akey,omitempty"`
+	// Message features (see messages.go).
+	ReplyTo string `json:"re,omitempty"`    // text/media: uid answered
+	Fwd     string `json:"fwd,omitempty"`   // text/media: forwarded from (author's name)
+	Target  string `json:"tgt,omitempty"`   // edit/delete/reaction: uid
+	Emoji   string `json:"emoji,omitempty"` // reaction ("" removes)
+	UpTo    int64  `json:"upto,omitempty"`  // read: read up to (unix ms)
 }
 
 // storable reports whether a payload type is a user-visible message.
@@ -307,6 +313,11 @@ func (c *Client) commitLocked(ctx context.Context, groupID string, spec commitSp
 
 // SendText sends a text message to a group.
 func (c *Client) SendText(ctx context.Context, groupID, text string) (*store.Message, error) {
+	return c.SendMessage(ctx, groupID, text, SendOptions{})
+}
+
+// SendMessage sends a text message, optionally as a reply.
+func (c *Client) SendMessage(ctx context.Context, groupID, text string, opt SendOptions) (*store.Message, error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("empty message")
 	}
@@ -318,7 +329,7 @@ func (c *Client) SendText(ctx context.Context, groupID, text string) (*store.Mes
 	if err := c.requireLogin(); err != nil {
 		return nil, err
 	}
-	return c.sendLocked(ctx, groupID, payload{Type: "text", Body: text})
+	return c.sendLocked(ctx, groupID, payload{Type: "text", Body: text, ReplyTo: opt.ReplyTo})
 }
 
 func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*store.Message, error) {
@@ -374,7 +385,7 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 // localMessage converts an outgoing payload to a stored message.
 func (c *Client) localMessage(groupID string, p payload) *store.Message {
 	m := &store.Message{UID: p.ID, GroupID: groupID, SenderUser: c.acct.UserID, SenderDevice: c.acct.DeviceID,
-		Kind: p.Type, Body: p.Body, SentAt: p.TS, Outgoing: true}
+		Kind: p.Type, Body: p.Body, SentAt: p.TS, Outgoing: true, ReplyTo: p.ReplyTo, FwdFrom: p.Fwd}
 	if p.Media != nil {
 		b, _ := json.Marshal(p.Media)
 		m.Body = string(b)

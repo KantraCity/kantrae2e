@@ -84,6 +84,13 @@ export function CreateGroup(name: string, usernames: string[] | null): $Cancella
     return $Call.ByID(956109340, name, usernames);
 }
 
+/**
+ * DeleteMessages deletes messages on this device or for everyone.
+ */
+export function DeleteMessages(chatID: string, ids: string[] | null, forAll: boolean): $CancellablePromise<void> {
+    return $Call.ByID(153955614, chatID, ids, forAll);
+}
+
 export function Devices(): $CancellablePromise<$models.Device[] | null> {
     return $Call.ByID(1826830584);
 }
@@ -95,8 +102,26 @@ export function DownloadFile(chatID: string, seq: number): $CancellablePromise<$
     return $Call.ByID(268098135, chatID, seq);
 }
 
+export function EditMessage(chatID: string, id: string, text: string): $CancellablePromise<void> {
+    return $Call.ByID(3972089584, chatID, id, text);
+}
+
+/**
+ * Forward copies messages to other chats.
+ */
+export function Forward(chatID: string, ids: string[] | null, toChats: string[] | null): $CancellablePromise<void> {
+    return $Call.ByID(224956562, chatID, ids, toChats);
+}
+
 export function GetLogoutInfo(): $CancellablePromise<$models.LogoutInfo | null> {
     return $Call.ByID(2063889561);
+}
+
+/**
+ * GetMessage returns one message (nil if it was deleted).
+ */
+export function GetMessage(chatID: string, id: string): $CancellablePromise<$models.Message | null> {
+    return $Call.ByID(2521578046, chatID, id);
 }
 
 /**
@@ -144,6 +169,13 @@ export function Logout(): $CancellablePromise<void> {
     return $Call.ByID(3541579155);
 }
 
+/**
+ * MarkRead sends a read receipt for the chat if there is something new.
+ */
+export function MarkRead(chatID: string): $CancellablePromise<void> {
+    return $Call.ByID(3221322284, chatID);
+}
+
 export function Members(chatID: string): $CancellablePromise<$models.Member[] | null> {
     return $Call.ByID(1310962584, chatID);
 }
@@ -187,6 +219,20 @@ export function OpenSystemSettings(what: string): $CancellablePromise<void> {
 
 export function PendingLinks(): $CancellablePromise<$models.LinkRequest[] | null> {
     return $Call.ByID(3055171637);
+}
+
+/**
+ * React sets (or with "" removes) this user's reaction.
+ */
+export function React(chatID: string, id: string, emoji: string): $CancellablePromise<void> {
+    return $Call.ByID(1905926180, chatID, id, emoji);
+}
+
+/**
+ * ReadUpTo: outgoing messages sent up to this time (unix ms) are read.
+ */
+export function ReadUpTo(chatID: string): $CancellablePromise<number> {
+    return $Call.ByID(338921681, chatID);
 }
 
 /**
@@ -237,15 +283,25 @@ export function SearchUsers(query: string): $CancellablePromise<$models.UserHit[
     return $Call.ByID(4144624503, query);
 }
 
-export function Send(chatID: string, text: string): $CancellablePromise<$models.Message | null> {
-    return $Call.ByID(1304675479, chatID, text);
+/**
+ * Send sends a text message (replyTo: uid of the answered message or "").
+ */
+export function Send(chatID: string, text: string, replyTo: string): $CancellablePromise<$models.Message | null> {
+    return $Call.ByID(1304675479, chatID, text, replyTo);
 }
 
 /**
- * SendFile sends a file given as base64.
+ * SendFile sends a file given as base64 (kept for simple callers).
  */
 export function SendFile(chatID: string, name: string, dataBase64: string): $CancellablePromise<$models.Message | null> {
     return $Call.ByID(1589692329, chatID, name, dataBase64);
+}
+
+/**
+ * SendMedia sends a photo, video, voice or video message, or a file.
+ */
+export function SendMedia(chatID: string, up: $models.MediaUpload, replyTo: string): $CancellablePromise<$models.Message | null> {
+    return $Call.ByID(3225930153, chatID, up, replyTo);
 }
 
 /**
@@ -316,6 +372,13 @@ export function TakeOpenChat(): $CancellablePromise<string> {
 
 export function Trust(username: string, deviceID: string): $CancellablePromise<number> {
     return $Call.ByID(3758595485, username, deviceID);
+}
+
+/**
+ * Typing signals "typing…" (the UI calls it at most every few seconds).
+ */
+export function Typing(chatID: string): $CancellablePromise<void> {
+    return $Call.ByID(1049831854, chatID);
 }
 
 /**

@@ -107,6 +107,8 @@ type Event struct {
 	Detail string
 	// DeviceID of the device a link event is about.
 	DeviceID string
+	// UserID for EventTyping.
+	UserID string
 }
 
 // Account is the identity of this device.

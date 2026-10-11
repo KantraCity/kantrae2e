@@ -9,6 +9,8 @@ export type Modal =
   | { kind: 'approveLink'; deviceId: string }
   | { kind: 'recovery'; phrase: string }
   | { kind: 'drawer' }
+  | { kind: 'forward'; chatId: string; ids: string[] }
+  | { kind: 'deleteMsg'; chatId: string; ids: string[]; canAll: boolean }
   | { kind: 'editProfile' }
   | { kind: 'logout' }
   | { kind: 'chatInfo'; chatId: string }
@@ -34,6 +36,13 @@ class AppState {
   currentId = $state<string | null>(null)
   messages = $state<Record<string, Message[]>>({})
   unread = $state<Record<string, number>>({})
+  /** Composer state: replying to / editing a message of the open chat. */
+  reply = $state<Message | null>(null)
+  editing = $state<Message | null>(null)
+  /** "typing…" per chat: who and until when. */
+  typing = $state<Record<string, { name: string; until: number }>>({})
+  /** Message context menu. */
+  menu = $state<{ m: Message; x: number; y: number } | null>(null)
   /** This account's profile and all accounts on this device. */
   me = $state<UserProfile | null>(null)
   accounts = $state<AccountInfo[]>([])
@@ -64,6 +73,7 @@ class AppState {
     // Web mode: the tab's visibility is "foreground" for notifications.
     document.addEventListener('visibilitychange', () => {
       if (this.state?.webMode) Messenger.SetForeground(!document.hidden).catch(() => {})
+      if (!document.hidden && this.currentId) this.markRead()
     })
     await this.loadAccount()
     this.loaded = true
@@ -226,11 +236,16 @@ class AppState {
       return
     }
     if (id && !this.currentId) history.pushState({ chat: true }, '')
+    if (id !== this.currentId) {
+      this.reply = null
+      this.editing = null
+    }
     this.setCurrent(id)
     if (!id) return
     this.unread[id] = 0
     this.saveUnread()
     await this.loadMessages(id)
+    this.markRead()
   }
 
   async loadMessages(id: string) {
@@ -248,8 +263,18 @@ class AppState {
   send(text: string): Promise<boolean> {
     const id = this.currentId
     if (!id || !text.trim()) return Promise.resolve(false)
+    const editing = this.editing
+    const replyTo = this.reply?.id ?? ''
+    this.reply = null
+    this.editing = null
     const p = this.sendQueue.then(async () => {
-      const msg = await this.try(() => Messenger.Send(id, text))
+      if (editing) {
+        const ok = await this.try(() => Messenger.EditMessage(id, editing.id, text))
+        if (ok === undefined) return false
+        await this.refreshMessage(id, editing.id)
+        return true
+      }
+      const msg = await this.try(() => Messenger.Send(id, text, replyTo))
       if (!msg) return false
       this.addMessage(msg)
       return true
@@ -257,6 +282,73 @@ class AppState {
     this.sendQueue = p
     return p
   }
+
+  /** Re-reads one message after an edit/deletion/reaction (null: deleted). */
+  async refreshMessage(chatId: string, id: string) {
+    const list = this.messages[chatId]
+    const m = await Messenger.GetMessage(chatId, id).catch(() => undefined)
+    if (m === undefined) return
+    if (list) {
+      const i = list.findIndex((x) => x.id === id)
+      if (m === null) {
+        if (i >= 0) list.splice(i, 1)
+      } else if (i >= 0) {
+        list[i] = m
+      }
+      // Replies quoting it show the new text.
+      for (let j = 0; j < list.length; j++) {
+        if (list[j].reply?.id === id) {
+          const r = await Messenger.GetMessage(chatId, list[j].id).catch(() => null)
+          if (r) list[j] = r
+        }
+      }
+    }
+    const chat = this.chats.find((c) => c.id === chatId)
+    if (chat?.last?.id === id) this.refreshChats()
+  }
+
+  async react(m: Message, emoji: string) {
+    const mine = m.reactions?.find((r) => r.mine)
+    const next = mine?.emoji === emoji ? '' : emoji // tapping your reaction again removes it
+    if ((await this.try(() => Messenger.React(m.chatId, m.id, next))) !== undefined) await this.refreshMessage(m.chatId, m.id)
+  }
+
+  startReply(m: Message) {
+    this.editing = null
+    this.reply = m
+  }
+
+  startEdit(m: Message) {
+    this.reply = null
+    this.editing = m
+  }
+
+  private readTimer: ReturnType<typeof setTimeout> | undefined
+
+  /** Read receipt for the open chat (debounced; only when really visible). */
+  markRead() {
+    clearTimeout(this.readTimer)
+    this.readTimer = setTimeout(() => {
+      const id = this.currentId
+      if (id && !document.hidden) Messenger.MarkRead(id).catch(() => {})
+    }, 400)
+  }
+
+  private lastTyping = 0
+
+  /** Called on input: at most one "typing" signal per 4 s. */
+  typingTick() {
+    const id = this.currentId
+    if (!id || Date.now() - this.lastTyping < 4000) return
+    this.lastTyping = Date.now()
+    Messenger.Typing(id).catch(() => {})
+  }
+
+  typingIn(chatId: string): string | null {
+    const t = this.typing[chatId]
+    return t && t.until > Date.now() ? t.name : null
+  }
+
 
   async sendFile(file: File) {
     const id = this.currentId
@@ -314,10 +406,29 @@ class AppState {
       case 'message':
         if (e.message) {
           this.addMessage(e.message)
+          if (e.chatId) delete this.typing[e.chatId] // the message arrived: no longer typing
           if (!e.message.outgoing && (e.chatId !== this.currentId || document.hidden)) {
             this.unread[e.chatId!] = (this.unread[e.chatId!] ?? 0) + 1
             this.saveUnread()
+          } else if (!e.message.outgoing && e.chatId === this.currentId) {
+            this.markRead()
           }
+        }
+        break
+      case 'message_updated':
+        if (e.chatId && e.detail) await this.refreshMessage(e.chatId, e.detail)
+        break
+      case 'read':
+        if (e.chatId && this.messages[e.chatId]) {
+          const upto = await Messenger.ReadUpTo(e.chatId).catch(() => 0)
+          for (const m of this.messages[e.chatId]) if (m.outgoing && m.sentAt <= upto) m.read = true
+        }
+        break
+      case 'typing':
+        if (e.chatId) {
+          this.typing[e.chatId] = { name: e.detail ?? '', until: Date.now() + 6000 }
+          const chat = e.chatId
+          setTimeout(() => { if ((this.typing[chat]?.until ?? 0) <= Date.now()) delete this.typing[chat] }, 6100)
         }
         break
       case 'group_joined':

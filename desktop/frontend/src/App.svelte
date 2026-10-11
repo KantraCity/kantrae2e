@@ -5,7 +5,10 @@
   import ChatInfo from './components/ChatInfo.svelte'
   import ChatView from './components/ChatView.svelte'
   import ApproveLink from './components/ApproveLink.svelte'
+  import DeleteMessages from './components/DeleteMessages.svelte'
   import Drawer from './components/Drawer.svelte'
+  import Forward from './components/Forward.svelte'
+  import MessageMenu from './components/MessageMenu.svelte'
   import EditProfile from './components/EditProfile.svelte'
   import Logout from './components/Logout.svelte'
   import NewDirect from './components/NewDirect.svelte'
@@ -36,6 +39,8 @@
 
 {#if app.pending}{#if app.modal?.kind === 'relogin'}<Relogin />{/if}
 {:else if app.modal?.kind === 'drawer'}<Drawer />
+{:else if app.modal?.kind === 'forward'}<Forward chatId={app.modal.chatId} ids={app.modal.ids} />
+{:else if app.modal?.kind === 'deleteMsg'}<DeleteMessages chatId={app.modal.chatId} ids={app.modal.ids} canAll={app.modal.canAll} />
 {:else if app.modal?.kind === 'editProfile'}<EditProfile />
 {:else if app.modal?.kind === 'logout'}<Logout />
 {:else if app.modal?.kind === 'newGroup'}<NewGroup />
@@ -47,6 +52,8 @@
 {:else if app.modal?.kind === 'settings'}<Settings />
 {:else if app.modal?.kind === 'relogin'}<Relogin />
 {/if}
+
+{#if app.menu}<MessageMenu />{/if}
 
 <Toasts />
 

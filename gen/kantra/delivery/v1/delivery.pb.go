@@ -30,6 +30,8 @@ const (
 	MessageType_MESSAGE_TYPE_WELCOME     MessageType = 3
 	// payload: KeyPackage of the requesting device (plaintext routing data).
 	MessageType_MESSAGE_TYPE_JOIN_REQUEST MessageType = 4
+	// Ephemeral activity signal (no payload, not queued).
+	MessageType_MESSAGE_TYPE_TYPING MessageType = 5
 )
 
 // Enum value maps for MessageType.
@@ -40,6 +42,7 @@ var (
 		2: "MESSAGE_TYPE_APPLICATION",
 		3: "MESSAGE_TYPE_WELCOME",
 		4: "MESSAGE_TYPE_JOIN_REQUEST",
+		5: "MESSAGE_TYPE_TYPING",
 	}
 	MessageType_value = map[string]int32{
 		"MESSAGE_TYPE_UNSPECIFIED":  0,
@@ -47,6 +50,7 @@ var (
 		"MESSAGE_TYPE_APPLICATION":  2,
 		"MESSAGE_TYPE_WELCOME":      3,
 		"MESSAGE_TYPE_JOIN_REQUEST": 4,
+		"MESSAGE_TYPE_TYPING":       5,
 	}
 )
 
@@ -88,8 +92,10 @@ type Envelope struct {
 	SenderDeviceId string                 `protobuf:"bytes,6,opt,name=sender_device_id,json=senderDeviceId,proto3" json:"sender_device_id,omitempty"`
 	CreatedAt      int64                  `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	SenderUserId   string                 `protobuf:"bytes,8,opt,name=sender_user_id,json=senderUserId,proto3" json:"sender_user_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Not queued: do not ack or de-duplicate (id is 0).
+	Ephemeral     bool `protobuf:"varint,9,opt,name=ephemeral,proto3" json:"ephemeral,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Envelope) Reset() {
@@ -176,6 +182,13 @@ func (x *Envelope) GetSenderUserId() string {
 		return x.SenderUserId
 	}
 	return ""
+}
+
+func (x *Envelope) GetEphemeral() bool {
+	if x != nil {
+		return x.Ephemeral
+	}
+	return false
 }
 
 // Frames sent by the client over the WebSocket.
@@ -1430,11 +1443,91 @@ func (*RequestJoinResponse) Descriptor() ([]byte, []int) {
 	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{25}
 }
 
+type TypingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypingRequest) Reset() {
+	*x = TypingRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypingRequest) ProtoMessage() {}
+
+func (x *TypingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypingRequest.ProtoReflect.Descriptor instead.
+func (*TypingRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *TypingRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+type TypingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypingResponse) Reset() {
+	*x = TypingResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypingResponse) ProtoMessage() {}
+
+func (x *TypingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypingResponse.ProtoReflect.Descriptor instead.
+func (*TypingResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{27}
+}
+
 var File_kantra_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
-	"!kantra/delivery/v1/delivery.proto\x12\x12kantra.delivery.v1\"\x89\x02\n" +
+	"!kantra/delivery/v1/delivery.proto\x12\x12kantra.delivery.v1\"\xa7\x02\n" +
 	"\bEnvelope\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x14\n" +
@@ -1444,7 +1537,8 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\x10sender_device_id\x18\x06 \x01(\tR\x0esenderDeviceId\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\a \x01(\x03R\tcreatedAt\x12$\n" +
-	"\x0esender_user_id\x18\b \x01(\tR\fsenderUserId\"C\n" +
+	"\x0esender_user_id\x18\b \x01(\tR\fsenderUserId\x12\x1c\n" +
+	"\tephemeral\x18\t \x01(\bR\tephemeral\"C\n" +
 	"\vClientFrame\x12+\n" +
 	"\x03ack\x18\x01 \x01(\v2\x17.kantra.delivery.v1.AckH\x00R\x03ackB\a\n" +
 	"\x05frame\"\x17\n" +
@@ -1517,13 +1611,17 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1f\n" +
 	"\vkey_package\x18\x02 \x01(\fR\n" +
 	"keyPackage\"\x15\n" +
-	"\x13RequestJoinResponse*\x9b\x01\n" +
+	"\x13RequestJoinResponse\"*\n" +
+	"\rTypingRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"\x10\n" +
+	"\x0eTypingResponse*\xb4\x01\n" +
 	"\vMessageType\x12\x1c\n" +
 	"\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MESSAGE_TYPE_COMMIT\x10\x01\x12\x1c\n" +
 	"\x18MESSAGE_TYPE_APPLICATION\x10\x02\x12\x18\n" +
 	"\x14MESSAGE_TYPE_WELCOME\x10\x03\x12\x1d\n" +
-	"\x19MESSAGE_TYPE_JOIN_REQUEST\x10\x042\xbe\b\n" +
+	"\x19MESSAGE_TYPE_JOIN_REQUEST\x10\x04\x12\x17\n" +
+	"\x13MESSAGE_TYPE_TYPING\x10\x052\x91\t\n" +
 	"\x0fDeliveryService\x12`\n" +
 	"\vCreateGroup\x12&.kantra.delivery.v1.CreateGroupRequest\x1a'.kantra.delivery.v1.CreateGroupResponse\"\x00\x12]\n" +
 	"\n" +
@@ -1536,7 +1634,8 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\fListMyGroups\x12'.kantra.delivery.v1.ListMyGroupsRequest\x1a(.kantra.delivery.v1.ListMyGroupsResponse\"\x00\x12c\n" +
 	"\fGetGroupInfo\x12'.kantra.delivery.v1.GetGroupInfoRequest\x1a(.kantra.delivery.v1.GetGroupInfoResponse\"\x00\x12c\n" +
 	"\fExternalJoin\x12'.kantra.delivery.v1.ExternalJoinRequest\x1a(.kantra.delivery.v1.ExternalJoinResponse\"\x00\x12`\n" +
-	"\vRequestJoin\x12&.kantra.delivery.v1.RequestJoinRequest\x1a'.kantra.delivery.v1.RequestJoinResponse\"\x00B\xd4\x01\n" +
+	"\vRequestJoin\x12&.kantra.delivery.v1.RequestJoinRequest\x1a'.kantra.delivery.v1.RequestJoinResponse\"\x00\x12Q\n" +
+	"\x06Typing\x12!.kantra.delivery.v1.TypingRequest\x1a\".kantra.delivery.v1.TypingResponse\"\x00B\xd4\x01\n" +
 	"\x16com.kantra.delivery.v1B\rDeliveryProtoP\x01ZAgithub.com/kantracity/kantrae2e/gen/kantra/delivery/v1;deliveryv1\xa2\x02\x03KDX\xaa\x02\x12Kantra.Delivery.V1\xca\x02\x12Kantra\\Delivery\\V1\xe2\x02\x1eKantra\\Delivery\\V1\\GPBMetadata\xea\x02\x14Kantra::Delivery::V1b\x06proto3"
 
 var (
@@ -1552,7 +1651,7 @@ func file_kantra_delivery_v1_delivery_proto_rawDescGZIP() []byte {
 }
 
 var file_kantra_delivery_v1_delivery_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_kantra_delivery_v1_delivery_proto_goTypes = []any{
 	(MessageType)(0),                // 0: kantra.delivery.v1.MessageType
 	(*Envelope)(nil),                // 1: kantra.delivery.v1.Envelope
@@ -1581,6 +1680,8 @@ var file_kantra_delivery_v1_delivery_proto_goTypes = []any{
 	(*ExternalJoinResponse)(nil),    // 24: kantra.delivery.v1.ExternalJoinResponse
 	(*RequestJoinRequest)(nil),      // 25: kantra.delivery.v1.RequestJoinRequest
 	(*RequestJoinResponse)(nil),     // 26: kantra.delivery.v1.RequestJoinResponse
+	(*TypingRequest)(nil),           // 27: kantra.delivery.v1.TypingRequest
+	(*TypingResponse)(nil),          // 28: kantra.delivery.v1.TypingResponse
 }
 var file_kantra_delivery_v1_delivery_proto_depIdxs = []int32{
 	0,  // 0: kantra.delivery.v1.Envelope.type:type_name -> kantra.delivery.v1.MessageType
@@ -1598,19 +1699,21 @@ var file_kantra_delivery_v1_delivery_proto_depIdxs = []int32{
 	21, // 12: kantra.delivery.v1.DeliveryService.GetGroupInfo:input_type -> kantra.delivery.v1.GetGroupInfoRequest
 	23, // 13: kantra.delivery.v1.DeliveryService.ExternalJoin:input_type -> kantra.delivery.v1.ExternalJoinRequest
 	25, // 14: kantra.delivery.v1.DeliveryService.RequestJoin:input_type -> kantra.delivery.v1.RequestJoinRequest
-	5,  // 15: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
-	7,  // 16: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
-	9,  // 17: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
-	11, // 18: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
-	13, // 19: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
-	15, // 20: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
-	17, // 21: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
-	20, // 22: kantra.delivery.v1.DeliveryService.ListMyGroups:output_type -> kantra.delivery.v1.ListMyGroupsResponse
-	22, // 23: kantra.delivery.v1.DeliveryService.GetGroupInfo:output_type -> kantra.delivery.v1.GetGroupInfoResponse
-	24, // 24: kantra.delivery.v1.DeliveryService.ExternalJoin:output_type -> kantra.delivery.v1.ExternalJoinResponse
-	26, // 25: kantra.delivery.v1.DeliveryService.RequestJoin:output_type -> kantra.delivery.v1.RequestJoinResponse
-	15, // [15:26] is the sub-list for method output_type
-	4,  // [4:15] is the sub-list for method input_type
+	27, // 15: kantra.delivery.v1.DeliveryService.Typing:input_type -> kantra.delivery.v1.TypingRequest
+	5,  // 16: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
+	7,  // 17: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
+	9,  // 18: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
+	11, // 19: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
+	13, // 20: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
+	15, // 21: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
+	17, // 22: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
+	20, // 23: kantra.delivery.v1.DeliveryService.ListMyGroups:output_type -> kantra.delivery.v1.ListMyGroupsResponse
+	22, // 24: kantra.delivery.v1.DeliveryService.GetGroupInfo:output_type -> kantra.delivery.v1.GetGroupInfoResponse
+	24, // 25: kantra.delivery.v1.DeliveryService.ExternalJoin:output_type -> kantra.delivery.v1.ExternalJoinResponse
+	26, // 26: kantra.delivery.v1.DeliveryService.RequestJoin:output_type -> kantra.delivery.v1.RequestJoinResponse
+	28, // 27: kantra.delivery.v1.DeliveryService.Typing:output_type -> kantra.delivery.v1.TypingResponse
+	16, // [16:28] is the sub-list for method output_type
+	4,  // [4:16] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -1630,7 +1733,7 @@ func file_kantra_delivery_v1_delivery_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_delivery_v1_delivery_proto_rawDesc), len(file_kantra_delivery_v1_delivery_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
