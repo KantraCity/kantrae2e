@@ -64,6 +64,13 @@ export function DownloadFile(chatID: string, seq: number): $CancellablePromise<$
 }
 
 /**
+ * GetSettings returns the notification settings of this device.
+ */
+export function GetSettings(): $CancellablePromise<$models.Settings> {
+    return $Call.ByID(1633813906);
+}
+
+/**
  * GetState returns what the UI needs on start.
  */
 export function GetState(): $CancellablePromise<$models.State> {
@@ -110,6 +117,14 @@ export function MyFingerprint(): $CancellablePromise<string> {
  */
 export function OpenDirect(username: string): $CancellablePromise<$models.Chat | null> {
     return $Call.ByID(3064201712, username);
+}
+
+/**
+ * OpenSystemSettings opens the system screen for "notifications" or
+ * "battery" (Android).
+ */
+export function OpenSystemSettings(what: string): $CancellablePromise<void> {
+    return $Call.ByID(662245325, what);
 }
 
 export function PendingLinks(): $CancellablePromise<$models.LinkRequest[] | null> {
@@ -175,6 +190,29 @@ export function SendFile(chatID: string, name: string, dataBase64: string): $Can
 }
 
 /**
+ * SetActiveChat tells which chat is on screen ("" for none): its messages
+ * are not notified, and its notification is removed.
+ */
+export function SetActiveChat(chatID: string): $CancellablePromise<void> {
+    return $Call.ByID(1834515883, chatID);
+}
+
+/**
+ * SetForeground tells whether the user is looking at the app (window
+ * focused / activity resumed / browser tab visible).
+ */
+export function SetForeground(fg: boolean): $CancellablePromise<void> {
+    return $Call.ByID(2959033762, fg);
+}
+
+/**
+ * SetSettings stores the notification settings.
+ */
+export function SetSettings(s: $models.Settings): $CancellablePromise<void> {
+    return $Call.ByID(1226652630, s);
+}
+
+/**
  * SetupRecovery creates a new recovery phrase (replacing an older one).
  */
 export function SetupRecovery(): $CancellablePromise<string> {
@@ -186,6 +224,13 @@ export function SetupRecovery(): $CancellablePromise<string> {
  */
 export function Sync(): $CancellablePromise<void> {
     return $Call.ByID(4103508370);
+}
+
+/**
+ * TakeOpenChat returns (once) the chat whose notification was tapped.
+ */
+export function TakeOpenChat(): $CancellablePromise<string> {
+    return $Call.ByID(3921879584);
 }
 
 export function Trust(username: string, deviceID: string): $CancellablePromise<number> {

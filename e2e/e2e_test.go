@@ -867,3 +867,45 @@ func TestLinkingAndDirectChats(t *testing.T) {
 		t.Fatalf("bob: %q", m)
 	}
 }
+
+// Realtime connection with server heartbeats (phones) and an immediate
+// reconnect when the network comes back.
+func TestRealtimeKeepAliveAndReconnect(t *testing.T) {
+	delivery.MinKeepAlive = time.Second
+	defer func() { delivery.MinKeepAlive = 15 * time.Second }()
+	c := newCluster(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	alice := c.register("alice")
+	bob := c.register("bob")
+	dm, err := alice.OpenDirect(ctx, "bob")
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+
+	// Bob listens like the phone app: heartbeat every second.
+	u := &user{name: "bob-rt"}
+	ok(t, bob.Close())
+	rt, err := core.Open(ctx, core.Options{ServerURL: c.url, DBPath: bob.db, HTTPClient: c.hc,
+		KeepAlive: time.Second, DisableAutoBackup: true,
+		OnEvent: func(e core.Event) { u.mu.Lock(); u.events = append(u.events, e); u.mu.Unlock() }})
+	ok(t, err)
+	defer rt.Close()
+	go rt.Listen(ctx)
+	waitFor(t, func() bool { return len(u.eventsOf(core.EventConnected)) == 1 })
+
+	// Idle for several heartbeat periods, then a message still arrives live.
+	time.Sleep(3500 * time.Millisecond)
+	if n := len(u.eventsOf(core.EventDisconnected)); n != 0 {
+		t.Fatalf("connection dropped %d times while idle", n)
+	}
+	_, err = alice.SendText(ctx, dm, "still there?")
+	ok(t, err)
+	waitFor(t, func() bool { return len(u.eventsOf(core.EventMessage)) == 1 })
+
+	// Network came back: reconnect at once, no backoff.
+	rt.Reconnect()
+	waitFor(t, func() bool { return len(u.eventsOf(core.EventConnected)) == 2 })
+	_, err = alice.SendText(ctx, dm, "after reconnect")
+	ok(t, err)
+	waitFor(t, func() bool { return len(u.eventsOf(core.EventMessage)) == 2 })
+}

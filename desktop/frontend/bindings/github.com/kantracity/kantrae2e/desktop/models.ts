@@ -116,6 +116,35 @@ export interface Message {
 }
 
 /**
+ * Settings are this device's notification preferences.
+ */
+export interface Settings {
+    "notifications": boolean;
+
+    /**
+     * Preview shows the message text (otherwise only "new message").
+     */
+    "preview": boolean;
+
+    /**
+     * Background: Android keeps the connection while the app is closed;
+     * desktop closes to the tray instead of quitting.
+     */
+    "background": boolean;
+
+    /**
+     * Platform: "android", "desktop" or "web".
+     */
+    "platform": string;
+
+    /**
+     * Android only: system state the user may need to change.
+     */
+    "notificationsAllowed": boolean;
+    "batteryUnrestricted": boolean;
+}
+
+/**
  * State describes what the UI should show on start.
  */
 export interface State {
@@ -146,6 +175,12 @@ export interface UIEvent {
      * DeviceID for link_request / link_resolved.
      */
     "deviceId"?: string;
+
+    /**
+     * Title/Body of a "notify" event (web mode shows it as a browser notification).
+     */
+    "title"?: string;
+    "body"?: string;
 }
 
 /**

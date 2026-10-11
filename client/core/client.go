@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -59,6 +60,12 @@ type Options struct {
 	DisableAutoBackup bool
 	// BackupDelay debounces the automatic backup (default 2s).
 	BackupDelay time.Duration
+	// KeepAlive asks the server for a heartbeat after this much silence on
+	// the realtime connection; a connection silent for twice as long is
+	// considered dead and reopened. 0: no heartbeats. Phones use minutes
+	// (each packet wakes the radio); the interval is halved after a dead
+	// connection, down to a minute, to find what the network tolerates.
+	KeepAlive time.Duration
 }
 
 // EventType enumerates Event kinds.
@@ -139,6 +146,10 @@ type Client struct {
 	joinRequested map[string]time.Time    // groups we asked to be added to
 	links         map[string]*LinkRequest // own devices waiting for approval
 
+	// Realtime connection: current keep-alive and a "reconnect now" signal.
+	keepAlive atomic.Int64 // time.Duration
+	kick      chan struct{}
+
 	auth  authv1connect.AuthServiceClient
 	dir   directoryv1connect.DirectoryServiceClient
 	del   deliveryv1connect.DeliveryServiceClient
@@ -177,7 +188,8 @@ func Open(ctx context.Context, opts Options) (*Client, error) {
 		opts.BackupDelay = 2 * time.Second
 	}
 	c := &Client{opts: opts, st: st, hc: opts.HTTPClient,
-		answered: map[string]bool{}, joinRequested: map[string]time.Time{}, links: map[string]*LinkRequest{}}
+		answered: map[string]bool{}, joinRequested: map[string]time.Time{}, links: map[string]*LinkRequest{}, kick: make(chan struct{}, 1)}
+	c.keepAlive.Store(int64(opts.KeepAlive))
 	if c.hc == nil {
 		c.hc = http.DefaultClient
 	}
@@ -614,4 +626,19 @@ func (c *Client) persistLocked(ctx context.Context, fn func(*store.Tx) error) er
 		}
 		return nil
 	})
+}
+
+// Pref returns a local client preference ("" if unset). Preferences are
+// stored in the device's database and never leave it.
+func (c *Client) Pref(ctx context.Context, key string) string {
+	v, err := c.st.Get(ctx, "pref:"+key)
+	if err != nil {
+		return ""
+	}
+	return string(v)
+}
+
+// SetPref stores a local client preference.
+func (c *Client) SetPref(ctx context.Context, key, value string) error {
+	return c.st.Update(ctx, func(tx *store.Tx) error { return tx.Set("pref:"+key, []byte(value)) })
 }

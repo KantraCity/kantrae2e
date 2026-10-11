@@ -17,6 +17,7 @@ export type {
     LoginResult,
     Member,
     Message,
+    Settings,
     State,
     UIEvent,
     UserHit

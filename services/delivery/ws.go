@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -16,6 +17,24 @@ import (
 
 // WSPath is the realtime endpoint (roadmap 2.3).
 const WSPath = "/v1/ws"
+
+// Keep-alive bounds (seconds) for ?keepalive=N. A heartbeat is an empty
+// binary frame (an Envelope with id 0) sent when the connection was silent
+// for N seconds. Mobile clients choose a long interval: every packet wakes
+// the radio, but NAT/carrier timeouts must not kill the idle connection.
+var (
+	MinKeepAlive = 15 * time.Second // lowered by tests
+	MaxKeepAlive = 15 * time.Minute
+)
+
+// keepAliveFrom parses ?keepalive=N; 0 means no heartbeats.
+func keepAliveFrom(r *http.Request) time.Duration {
+	n, err := strconv.Atoi(r.URL.Query().Get("keepalive"))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return max(MinKeepAlive, min(time.Duration(n)*time.Second, MaxKeepAlive))
+}
 
 // pollInterval is a safety net for missed in-process notifications
 // (e.g. messages accepted by another instance of the service).
@@ -120,6 +139,23 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 	var lastSent int64
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
+	keepAlive := keepAliveFrom(r)
+	var heartbeat <-chan time.Time
+	if keepAlive > 0 {
+		t := time.NewTicker(keepAlive)
+		defer t.Stop()
+		heartbeat = t.C
+	}
+	lastWrite := time.Now()
+	write := func(b []byte) bool {
+		wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
+		defer wcancel()
+		if conn.Write(wctx, websocket.MessageBinary, b) != nil {
+			return false
+		}
+		lastWrite = time.Now()
+		return true
+	}
 	for {
 		for {
 			env, err := s.pending(ctx, did, lastSent, 100)
@@ -132,10 +168,7 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, e := range env {
 				b, _ := proto.Marshal(e)
-				wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
-				err := conn.Write(wctx, websocket.MessageBinary, b)
-				wcancel()
-				if err != nil {
+				if !write(b) {
 					return
 				}
 				lastSent = e.Id
@@ -144,11 +177,20 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+	wait:
 		select {
 		case <-ctx.Done():
 			return
 		case <-wake:
 		case <-ticker.C:
+		case <-heartbeat:
+			// Only when silent: traffic already keeps the connection alive.
+			if time.Since(lastWrite) >= keepAlive-time.Second {
+				if !write(nil) {
+					return
+				}
+			}
+			goto wait
 		}
 	}
 }

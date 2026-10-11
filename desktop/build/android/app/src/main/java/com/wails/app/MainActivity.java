@@ -30,7 +30,12 @@ import android.webkit.WebViewClient;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import org.json.JSONObject;
@@ -84,16 +89,69 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        applySystemBarInsets();
+
+        // Kantra's process-wide bridge (background connection, notifications)
+        // must exist before the Go app starts.
+        KantraNative.attach(this);
+        KantraNative.setActivity(this);
 
         // Initialize the native Go library
         bridge = new WailsBridge(this);
         bridge.initialize();
+
+        if (KantraNative.backgroundWanted(this)) {
+            try {
+                ContextCompat.startForegroundService(this, new Intent(this, KantraPushService.class));
+            } catch (Exception e) {
+                Log.w(TAG, "background service", e);
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 4200);
+        }
+        handleOpenChat(getIntent());
 
         // Set up WebView
         setupWebView();
 
         // Load the application
         loadApplication();
+    }
+
+    /**
+     * Edge-to-edge (enforced from Android 15): the content would be drawn
+     * under the status and navigation bars. Pad the container by the system
+     * bar, cutout and keyboard insets; the window background (same colour as
+     * the app) shows behind the bars.
+     */
+    private void applySystemBarInsets() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .setAppearanceLightStatusBars(false);
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .setAppearanceLightNavigationBars(false);
+        android.view.View root = findViewById(R.id.main_container);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
+            return WindowInsetsCompat.CONSUMED;
+        });
+    }
+
+    /** A tapped message notification opens its chat. */
+    private void handleOpenChat(Intent intent) {
+        if (intent != null) KantraNative.openChat(intent.getStringExtra(KantraNative.EXTRA_CHAT));
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleOpenChat(intent);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -765,6 +823,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        KantraNative.setActivity(this);
+        KantraNative.setForeground(true);
         if (bridge != null) {
             bridge.onResume();
         }
@@ -773,6 +833,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        KantraNative.setForeground(false);
         if (bridge != null) {
             bridge.onPause();
         }
@@ -802,8 +863,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         unregisterSystemEventReceivers();
+        // The Go side outlives the activity (the background connection keeps
+        // running in the process); just detach the WebView it talks to.
         if (bridge != null) {
-            bridge.shutdown();
+            bridge.setWebView(null);
         }
         if (webView != null) {
             webView.destroy();
@@ -815,7 +878,9 @@ public class MainActivity extends AppCompatActivity {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
-            super.onBackPressed();
+            // Like Telegram: leave the app running in the background instead
+            // of destroying the activity.
+            moveTaskToBack(true);
         }
     }
 }

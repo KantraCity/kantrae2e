@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -273,7 +274,23 @@ func (c *Client) wsURL() string {
 	case strings.HasPrefix(u, "http://"):
 		u = "ws://" + strings.TrimPrefix(u, "http://")
 	}
-	return u + "/v1/ws"
+	u += "/v1/ws"
+	if ka := time.Duration(c.keepAlive.Load()); ka > 0 {
+		u += fmt.Sprintf("?keepalive=%d", int(ka/time.Second))
+	}
+	return u
+}
+
+// minKeepAlive is the floor of the adaptive keep-alive.
+const minKeepAlive = time.Minute
+
+// Reconnect drops the realtime connection (if any) and connects again right
+// away, skipping the backoff: call it when the network comes back.
+func (c *Client) Reconnect() {
+	select {
+	case c.kick <- struct{}{}:
+	default:
+	}
 }
 
 // Listen keeps a WebSocket to the delivery service open and processes
@@ -281,15 +298,39 @@ func (c *Client) wsURL() string {
 func (c *Client) Listen(ctx context.Context) error {
 	backoff := time.Second
 	for {
-		err := c.listenOnce(ctx)
+		connCtx, cancel := context.WithCancel(ctx)
+		kicked := make(chan struct{})
+		go func() {
+			select {
+			case <-c.kick:
+				close(kicked)
+				cancel()
+			case <-connCtx.Done():
+			}
+		}()
+		start := time.Now()
+		err := c.listenOnce(connCtx)
+		cancel()
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		c.emit(Event{Type: EventDisconnected, Err: err})
+		select {
+		case <-kicked:
+			backoff = time.Second
+			continue // reconnect immediately
+		default:
+		}
+		if time.Since(start) > time.Minute {
+			backoff = time.Second // it worked for a while: not a persistent failure
+		}
 		c.logf("realtime connection lost: %v (retry in %s)", err, backoff)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-c.kick:
+			backoff = time.Second
+			continue
 		case <-time.After(backoff):
 		}
 		if backoff < 30*time.Second {
@@ -297,6 +338,8 @@ func (c *Client) Listen(ctx context.Context) error {
 		}
 	}
 }
+
+var errSilent = errors.New("realtime connection silent for too long")
 
 func (c *Client) listenOnce(ctx context.Context) error {
 	if err := c.refreshToken(ctx); err != nil {
@@ -319,13 +362,32 @@ func (c *Client) listenOnce(ctx context.Context) error {
 		c.maintain(ctx)
 	}()
 	for {
-		_, data, err := conn.Read(ctx)
+		readCtx, cancel := ctx, context.CancelFunc(func() {})
+		ka := time.Duration(c.keepAlive.Load())
+		if ka > 0 {
+			readCtx, cancel = context.WithTimeout(ctx, 2*ka+30*time.Second)
+		}
+		_, data, err := conn.Read(readCtx)
+		silent := ka > 0 && readCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+		cancel()
+		if silent {
+			// The network dropped the idle connection: ask for heartbeats
+			// more often from now on.
+			if next := max(ka/2, minKeepAlive); next < ka {
+				c.keepAlive.Store(int64(next))
+				c.logf("keep-alive lowered to %s", next)
+			}
+			return errSilent
+		}
 		if err != nil {
 			return err
 		}
 		var e deliveryv1.Envelope
 		if err := proto.Unmarshal(data, &e); err != nil {
 			continue
+		}
+		if e.Id == 0 {
+			continue // heartbeat
 		}
 		c.mu.Lock()
 		err = c.handleLocked(ctx, &e)

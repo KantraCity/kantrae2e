@@ -38,6 +38,9 @@ type UIEvent struct {
 	Count   int      `json:"count,omitempty"`
 	// DeviceID for link_request / link_resolved.
 	DeviceID string `json:"deviceId,omitempty"`
+	// Title/Body of a "notify" event (web mode shows it as a browser notification).
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body,omitempty"`
 }
 
 // Account is the logged-in identity of this device.
@@ -159,27 +162,52 @@ type Messenger struct {
 	server string
 	cancel context.CancelFunc
 	online bool
+
+	// startOnce: the profile is opened once per process, by the UI or (on
+	// Android) by the background service, whichever comes first.
+	startOnce sync.Once
+	startErr  error
+
+	// Notifications (notify.go), guarded by mu.
+	notif      notifier
+	foreground bool
+	activeChat string
+	unread     map[string]int
+	openChat   string // chat to open once the UI asks (tapped notification)
 }
 
 // NewMessenger: dbPath is resolved at startup (on Android the storage
 // directory is only known once the app runs).
 func NewMessenger(dbPath func() string, defaultServer string, hc *http.Client, web bool) *Messenger {
-	return &Messenger{dbFunc: dbPath, server: defaultServer, hc: hc, web: web}
+	m := &Messenger{dbFunc: dbPath, server: defaultServer, hc: hc, web: web, foreground: true, unread: map[string]int{}}
+	m.notif = newNotifier(m)
+	return m
 }
 
 func (m *Messenger) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	m.mu.Lock()
 	m.app = application.Get()
-	m.dbPath = m.dbFunc()
-	if _, err := os.Stat(m.dbPath); err == nil {
+	m.mu.Unlock()
+	return m.start()
+}
+
+// start opens an existing profile and connects. Safe to call repeatedly
+// and without the UI (Android background service).
+func (m *Messenger) start() error {
+	m.startOnce.Do(func() {
+		m.dbPath = m.dbFunc()
+		if _, err := os.Stat(m.dbPath); err != nil {
+			return // no profile yet: the UI registers or logs in
+		}
 		// Existing profile: the server URL is stored in it.
-		if err := m.open(""); err != nil {
-			return err
+		if m.startErr = m.open(""); m.startErr != nil {
+			return
 		}
 		if m.c.Account() != nil {
 			m.startListening()
 		}
-	}
-	return nil
+	})
+	return m.startErr
 }
 
 func (m *Messenger) ServiceShutdown() error {
@@ -195,8 +223,11 @@ func (m *Messenger) ServiceShutdown() error {
 }
 
 func (m *Messenger) emit(e UIEvent) {
-	if m.app != nil {
-		m.app.Event.Emit(EventName, e)
+	m.mu.Lock()
+	app := m.app
+	m.mu.Unlock()
+	if app != nil {
+		app.Event.Emit(EventName, e)
 	}
 }
 
@@ -211,6 +242,7 @@ func (m *Messenger) open(server string) error {
 		HTTPClient: m.hc,
 		OnEvent:    m.onCoreEvent,
 		Logf:       log.Printf, // diagnostics only, never plaintext
+		KeepAlive:  keepAlive,
 	})
 	if err != nil {
 		return err
@@ -306,6 +338,7 @@ func (m *Messenger) onCoreEvent(e core.Event) {
 			if ev.Message == nil {
 				ev.Message = m.toMessage(c, e.Message)
 			}
+			m.maybeNotify(c, ev.Message)
 		}
 	}
 	m.emit(ev)

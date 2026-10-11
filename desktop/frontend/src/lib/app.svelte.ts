@@ -52,7 +52,11 @@ class AppState {
     this.unsubscribe = onEvent((e) => this.handleEvent(e))
     window.addEventListener('popstate', () => {
       if (this.modal && this.modal.kind !== 'approveLink') this.modal = null
-      if (!history.state?.chat) this.currentId = null
+      if (!history.state?.chat) this.setCurrent(null)
+    })
+    // Web mode: the tab's visibility is "foreground" for notifications.
+    document.addEventListener('visibilitychange', () => {
+      if (this.state?.webMode) Messenger.SetForeground(!document.hidden).catch(() => {})
     })
     try {
       this.state = await Messenger.GetState()
@@ -60,11 +64,40 @@ class AppState {
       if (this.state.account && !this.state.pending) {
         await this.refreshChats()
         await this.refreshLinks()
+        await this.openTappedChat()
       }
     } catch (e) {
       this.toast(errorText(e), 'error')
     }
     this.loaded = true
+  }
+
+  private setCurrent(id: string | null) {
+    this.currentId = id
+    Messenger.SetActiveChat(id ?? '').catch(() => {})
+  }
+
+  /** A notification was tapped/clicked: show its chat. */
+  async openTappedChat() {
+    const id = await Messenger.TakeOpenChat().catch(() => '')
+    if (!id || this.state?.pending) return
+    if (!this.chats.some((c) => c.id === id)) await this.refreshChats()
+    this.modal = null
+    if (this.currentId !== id) {
+      if (this.currentId) this.setCurrent(null)
+      await this.openChat(id)
+    }
+  }
+
+  /** Web mode: a browser notification (the Go side decided it is due). */
+  private browserNotify(e: UIEvent) {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    const n = new Notification(e.title || 'Kantra', { body: e.body, tag: e.chatId, icon: '/icon.svg' })
+    n.onclick = () => {
+      window.focus()
+      if (e.chatId) this.openChat(e.chatId)
+      n.close()
+    }
   }
 
   async afterAuth() {
@@ -147,7 +180,7 @@ class AppState {
       return
     }
     if (id && !this.currentId) history.pushState({ chat: true }, '')
-    this.currentId = id
+    this.setCurrent(id)
     if (!id) return
     this.unread[id] = 0
     this.saveUnread()
@@ -262,6 +295,12 @@ class AppState {
         break
       case 'new_device':
         this.toast(`Новое устройство: ${e.detail ?? ''}. Сверьте отпечатки.`, 'warning', 9000)
+        break
+      case 'open_chat':
+        await this.openTappedChat()
+        break
+      case 'notify':
+        this.browserNotify(e)
         break
       case 'link_request':
       case 'link_resolved':
