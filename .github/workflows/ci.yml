@@ -167,7 +167,12 @@ jobs:
         shell: bash
         run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
       - name: Build Kantra.app (arm64, ad-hoc signed)
-        run: cd desktop && "$(go env GOPATH)/bin/wails3" task darwin:package
+        run: |
+          set -o pipefail
+          cd desktop && "$(go env GOPATH)/bin/wails3" task darwin:package 2>&1 | tee ../build.log
+      - name: Show build errors
+        if: failure()
+        run: grep -v "^\s*$" build.log | grep -iv "could not import C" | tail -40 | while IFS= read -r l; do echo "::error::$l"; done
       - name: Zip
         run: cd desktop/bin && mv kantra-desktop.app Kantra.app && ditto -c -k --keepParent Kantra.app Kantra-macos-arm64.zip
       - uses: actions/upload-artifact@v4
@@ -201,9 +206,13 @@ jobs:
       # your Apple certificate and provisioning profile as secrets.
       - name: Build Kantra.ipa (iPhone, unsigned)
         run: |
-          make mls-ffi-ios IOS_PLATFORM=device
-          cd desktop && "$(go env GOPATH)/bin/wails3" task ios:package:ipa IOS_PLATFORM=device CODESIGN_IDENTITY=-
+          set -o pipefail
+          make mls-ffi-ios IOS_PLATFORM=device 2>&1 | tee build.log
+          cd desktop && "$(go env GOPATH)/bin/wails3" task ios:package:ipa IOS_PLATFORM=device CODESIGN_IDENTITY=- 2>&1 | tee -a ../build.log
           mv bin/kantra-desktop.ipa bin/Kantra.ipa
+      - name: Show build errors
+        if: failure()
+        run: grep -v "^\s*$" build.log | grep -iv "could not import C" | tail -40 | while IFS= read -r l; do echo "::error::$l"; done
       - uses: actions/upload-artifact@v4
         with:
           name: kantra-ios
