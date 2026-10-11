@@ -40,7 +40,8 @@ const (
 
 // AuthInternalServiceClient is a client for the kantra.auth.v1.AuthInternalService service.
 type AuthInternalServiceClient interface {
-	// Which of the given devices exist and are not revoked.
+	// Which of the given devices exist and are not revoked, and which of
+	// those are approved.
 	DeviceStatus(context.Context, *v1.DeviceStatusRequest) (*v1.DeviceStatusResponse, error)
 }
 
@@ -81,7 +82,8 @@ func (c *authInternalServiceClient) DeviceStatus(ctx context.Context, req *v1.De
 // AuthInternalServiceHandler is an implementation of the kantra.auth.v1.AuthInternalService
 // service.
 type AuthInternalServiceHandler interface {
-	// Which of the given devices exist and are not revoked.
+	// Which of the given devices exist and are not revoked, and which of
+	// those are approved.
 	DeviceStatus(context.Context, *v1.DeviceStatusRequest) (*v1.DeviceStatusResponse, error)
 }
 

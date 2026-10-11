@@ -422,3 +422,44 @@ func TestRevokedDeviceIsLockedOut(t *testing.T) {
 		t.Fatalf("active device rejected: %v", err)
 	}
 }
+
+func TestPendingDeviceRestrictions(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	user := uuid.NewString()
+	laptop, phone := e.deviceOf(user), e.deviceOf(user)
+	self := delivery.SelfGroupPrefix + uuid.NewString()[:8]
+	chat := uuid.NewString()
+	for _, g := range []string{self, chat} {
+		if _, err := laptop.c.CreateGroup(ctx, &deliveryv1.CreateGroupRequest{GroupId: g, GroupInfo: []byte("gi")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.devices.SetPending(phone.id, true)
+	if _, err := phone.c.ListMyGroups(ctx, &deliveryv1.ListMyGroupsRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("pending list: %v", err)
+	}
+	if _, err := phone.c.ExternalJoin(ctx, &deliveryv1.ExternalJoinRequest{GroupId: chat, Epoch: 0, Commit: []byte("c"), GroupInfo: []byte("g")}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("pending external join: %v", err)
+	}
+	if _, err := phone.c.RequestJoin(ctx, &deliveryv1.RequestJoinRequest{GroupId: chat, KeyPackage: []byte("kp")}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("pending join request to a chat: %v", err)
+	}
+	if _, err := phone.c.RequestJoin(ctx, &deliveryv1.RequestJoinRequest{GroupId: self, KeyPackage: []byte("kp")}); err != nil {
+		t.Fatalf("pending join request to self group: %v", err)
+	}
+	if _, err := phone.c.FetchPending(ctx, &deliveryv1.FetchPendingRequest{}); err != nil {
+		t.Fatalf("pending fetch: %v", err)
+	}
+	var got bool
+	for _, env := range pending(t, laptop) {
+		got = got || (env.GroupId == self && env.Type == deliveryv1.MessageType_MESSAGE_TYPE_JOIN_REQUEST)
+	}
+	if !got {
+		t.Fatal("laptop did not get the link request")
+	}
+	e.devices.SetPending(phone.id, false)
+	if _, err := phone.c.ListMyGroups(ctx, &deliveryv1.ListMyGroupsRequest{}); err != nil {
+		t.Fatalf("approved list: %v", err)
+	}
+}

@@ -3,12 +3,14 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"errors"
 	"io/fs"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -135,9 +137,13 @@ func (s *Service) RegisterDevice(ctx context.Context, req *authv1.RegisterDevice
 	if req.DeviceName == "" || len(req.DeviceName) > 64 {
 		return nil, invalid("device_name must be 1-64 chars")
 	}
+	// The account's first device is approved; later devices are pending
+	// until an approved device (or the recovery key) approves them.
 	var id string
 	if err := s.pool.QueryRow(ctx,
-		`INSERT INTO devices (user_id, device_name) VALUES ($1, $2) RETURNING id`, uid, req.DeviceName).Scan(&id); err != nil {
+		`INSERT INTO devices (user_id, device_name, approved_at)
+		 SELECT $1, $2, CASE WHEN EXISTS (SELECT 1 FROM devices WHERE user_id = $1) THEN NULL ELSE now() END
+		 RETURNING id`, uid, req.DeviceName).Scan(&id); err != nil {
 		return nil, internal(err)
 	}
 	tok, err := authmiddleware.Issue(s.secret, uid, id, s.tokenTTL)
@@ -153,7 +159,7 @@ func (s *Service) ListDevices(ctx context.Context, _ *authv1.ListDevicesRequest)
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, device_name, created_at, revoked_at FROM devices WHERE user_id=$1 ORDER BY created_at`, uid)
+		`SELECT id, device_name, created_at, revoked_at, approved_at IS NOT NULL FROM devices WHERE user_id=$1 ORDER BY created_at`, uid)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -163,7 +169,7 @@ func (s *Service) ListDevices(ctx context.Context, _ *authv1.ListDevicesRequest)
 		var d authv1.Device
 		var created time.Time
 		var revoked *time.Time
-		if err := rows.Scan(&d.Id, &d.DeviceName, &created, &revoked); err != nil {
+		if err := rows.Scan(&d.Id, &d.DeviceName, &created, &revoked, &d.Approved); err != nil {
 			return nil, internal(err)
 		}
 		d.CreatedAt = created.Unix()
@@ -238,6 +244,137 @@ func (s *Service) RefreshToken(ctx context.Context, _ *authv1.RefreshTokenReques
 	return &authv1.RefreshTokenResponse{Token: tok}, nil
 }
 
+// ---- device linking and recovery ------------------------------------------------
+
+// requireApprovedDevice returns the caller's user and device id if the token
+// is bound to an approved, non-revoked device.
+func (s *Service) requireApprovedDevice(ctx context.Context) (string, string, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	var approved bool
+	err = s.pool.QueryRow(ctx,
+		`SELECT approved_at IS NOT NULL FROM devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, did, uid).Scan(&approved)
+	if err != nil || !approved {
+		return "", "", connect.NewError(connect.CodePermissionDenied, errors.New("device is not approved"))
+	}
+	return uid, did, nil
+}
+
+func (s *Service) GetAccountStatus(ctx context.Context, _ *authv1.GetAccountStatusRequest) (*authv1.GetAccountStatusResponse, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp := &authv1.GetAccountStatusResponse{}
+	err = s.pool.QueryRow(ctx,
+		`SELECT COALESCE((SELECT approved_at IS NOT NULL FROM devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL), false),
+		        EXISTS (SELECT 1 FROM recovery WHERE user_id=$2)`, did, uid).Scan(&resp.DeviceApproved, &resp.HasRecovery)
+	if err != nil {
+		return nil, internal(err)
+	}
+	return resp, nil
+}
+
+func (s *Service) ApproveDevice(ctx context.Context, req *authv1.ApproveDeviceRequest) (*authv1.ApproveDeviceResponse, error) {
+	uid, _, err := s.requireApprovedDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := uuid.Parse(req.DeviceId); err != nil {
+		return nil, invalid("bad device id")
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE devices SET approved_at = now()
+		 WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND approved_at IS NULL`, req.DeviceId, uid)
+	if err != nil {
+		return nil, internal(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("no pending device with this id"))
+	}
+	return &authv1.ApproveDeviceResponse{}, nil
+}
+
+const (
+	verifierSize   = 32
+	maxWrappedSize = 1024
+)
+
+func verifierHash(v []byte) []byte {
+	h := sha256.Sum256(append([]byte("kantra/recovery-verifier/v1"), v...))
+	return h[:]
+}
+
+func (s *Service) SetRecovery(ctx context.Context, req *authv1.SetRecoveryRequest) (*authv1.SetRecoveryResponse, error) {
+	uid, _, err := s.requireApprovedDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(req.Verifier) != verifierSize || len(req.WrappedKey) == 0 || len(req.WrappedKey) > maxWrappedSize {
+		return nil, invalid("bad recovery data")
+	}
+	if _, err := s.pool.Exec(ctx,
+		`INSERT INTO recovery (user_id, verifier_hash, wrapped_key) VALUES ($1, $2, $3)
+		 ON CONFLICT (user_id) DO UPDATE SET verifier_hash=excluded.verifier_hash, wrapped_key=excluded.wrapped_key, updated_at=now()`,
+		uid, verifierHash(req.Verifier), req.WrappedKey); err != nil {
+		return nil, internal(err)
+	}
+	return &authv1.SetRecoveryResponse{}, nil
+}
+
+func (s *Service) Recover(ctx context.Context, req *authv1.RecoverRequest) (*authv1.RecoverResponse, error) {
+	uid, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wrong := connect.NewError(connect.CodePermissionDenied, errors.New("wrong recovery key"))
+	var hash, wrapped []byte
+	err = s.pool.QueryRow(ctx, `SELECT verifier_hash, wrapped_key FROM recovery WHERE user_id=$1`, uid).Scan(&hash, &wrapped)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("no recovery key set up for this account"))
+	}
+	if err != nil {
+		return nil, internal(err)
+	}
+	if subtle.ConstantTimeCompare(hash, verifierHash(req.Verifier)) != 1 {
+		return nil, wrong
+	}
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE devices SET approved_at = COALESCE(approved_at, now()) WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, did, uid); err != nil {
+		return nil, internal(err)
+	}
+	return &authv1.RecoverResponse{WrappedKey: wrapped}, nil
+}
+
+func (s *Service) SearchUsers(ctx context.Context, req *authv1.SearchUsersRequest) (*authv1.SearchUsersResponse, error) {
+	if _, err := authmiddleware.RequireUser(ctx); err != nil {
+		return nil, err
+	}
+	q := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(req.Query), "@"))
+	resp := &authv1.SearchUsersResponse{}
+	if len(q) < 2 || len(q) > 32 {
+		return resp, nil
+	}
+	pattern := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(q) + "%"
+	rows, err := s.pool.Query(ctx,
+		`SELECT id::text, username FROM users WHERE lower(username) LIKE $1 ESCAPE '\'
+		 ORDER BY lower(username) = $2 DESC, length(username), username LIMIT 20`, pattern, q)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var u authv1.User
+		if err := rows.Scan(&u.UserId, &u.Username); err != nil {
+			return nil, internal(err)
+		}
+		resp.Users = append(resp.Users, &u)
+	}
+	return resp, rows.Err()
+}
+
 // ---- internal API -------------------------------------------------------------
 
 // Internal implements AuthInternalService for other services.
@@ -284,13 +421,22 @@ func (s *Internal) DeviceStatus(ctx context.Context, req *authv1.DeviceStatusReq
 	if len(ids) == 0 {
 		return resp, nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id::text FROM devices WHERE id = ANY($1::uuid[]) AND revoked_at IS NULL`, ids)
+	rows, err := s.pool.Query(ctx,
+		`SELECT id::text, approved_at IS NOT NULL FROM devices WHERE id = ANY($1::uuid[]) AND revoked_at IS NULL`, ids)
 	if err != nil {
 		return nil, internal(err)
 	}
-	resp.ActiveDeviceIds, err = pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return nil, internal(err)
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var approved bool
+		if err := rows.Scan(&id, &approved); err != nil {
+			return nil, internal(err)
+		}
+		resp.ActiveDeviceIds = append(resp.ActiveDeviceIds, id)
+		if approved {
+			resp.ApprovedDeviceIds = append(resp.ApprovedDeviceIds, id)
+		}
 	}
-	return resp, nil
+	return resp, rows.Err()
 }

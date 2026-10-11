@@ -31,7 +31,7 @@ import (
 var (
 	ErrNotLoggedIn   = errors.New("not logged in")
 	ErrAlreadySetUp  = errors.New("this client database already has an account")
-	ErrNoHistoryKey  = errors.New("no history key: log in with the seed phrase")
+	ErrNoHistoryKey  = errors.New("this device has no history key yet")
 	ErrNotMember     = errors.New("not an active member of this group")
 	ErrNoKeyPackages = errors.New("user has no devices with available key packages")
 )
@@ -79,6 +79,14 @@ const (
 	// EventNewDevice: an unverified new device of a verified contact or of
 	// the own account appeared (compare fingerprints, then Trust).
 	EventNewDevice EventType = "new_device"
+	// EventLinkRequest: a new device of this account waits for approval
+	// (DeviceID, Detail = code to compare). See PendingLinks/ApproveLink.
+	EventLinkRequest EventType = "link_request"
+	// EventLinkResolved: a link request was approved or rejected (DeviceID).
+	EventLinkResolved EventType = "link_resolved"
+	// EventApproved: this device was approved and is now fully set up
+	// (Count = messages restored from the backup).
+	EventApproved EventType = "approved"
 )
 
 type Event struct {
@@ -90,6 +98,8 @@ type Event struct {
 	Count int
 	// Detail is a human-readable description (security events).
 	Detail string
+	// DeviceID of the device a link event is about.
+	DeviceID string
 }
 
 // Account is the identity of this device.
@@ -125,8 +135,9 @@ type Client struct {
 	backupPending bool
 	closed        bool
 	// Multi-device bookkeeping, guarded by c.mu.
-	answered      map[string]bool      // history requests already answered by someone
-	joinRequested map[string]time.Time // groups we asked to be added to
+	answered      map[string]bool         // history requests already answered by someone
+	joinRequested map[string]time.Time    // groups we asked to be added to
+	links         map[string]*LinkRequest // own devices waiting for approval
 
 	auth  authv1connect.AuthServiceClient
 	dir   directoryv1connect.DirectoryServiceClient
@@ -166,7 +177,7 @@ func Open(ctx context.Context, opts Options) (*Client, error) {
 		opts.BackupDelay = 2 * time.Second
 	}
 	c := &Client{opts: opts, st: st, hc: opts.HTTPClient,
-		answered: map[string]bool{}, joinRequested: map[string]time.Time{}}
+		answered: map[string]bool{}, joinRequested: map[string]time.Time{}, links: map[string]*LinkRequest{}}
 	if c.hc == nil {
 		c.hc = http.DefaultClient
 	}
@@ -412,38 +423,43 @@ func (c *Client) refreshToken(ctx context.Context) error {
 
 // ---- onboarding -------------------------------------------------------------
 
-// Register creates an account and this device. It returns the seed phrase
-// that protects the history backup: show it to the user exactly once.
-func (c *Client) Register(ctx context.Context, username, password, deviceName string) (string, error) {
+// Register creates an account and this device. The account's history key
+// (protecting the server-side backup) is random; it reaches the account's
+// future devices when they are approved here, or via the optional recovery
+// phrase (SetupRecovery).
+func (c *Client) Register(ctx context.Context, username, password, deviceName string) error {
 	if c.Account() != nil {
-		return "", ErrAlreadySetUp
+		return ErrAlreadySetUp
 	}
 	r, err := c.auth.Register(ctx, &authv1.RegisterRequest{Username: username, Password: password})
 	if err != nil {
-		return "", err
+		return err
 	}
-	phrase, err := crypto.NewSeedPhrase()
-	if err != nil {
-		return "", err
+	if err := c.setupDevice(ctx, r.UserId, username, r.Token, deviceName, crypto.NewKey()); err != nil {
+		return err
 	}
-	if err := c.setupDevice(ctx, r.UserId, username, r.Token, deviceName, phrase); err != nil {
-		return "", err
-	}
-	return phrase, nil
+	_, err = c.finishSetup(ctx)
+	return err
 }
 
 // LoginResult summarizes what a new device picked up on login.
 type LoginResult struct {
+	// Pending: the device must be approved on another device of the account
+	// (compare Code there) or with the recovery phrase (Recover).
+	Pending bool
+	Code    string
+
 	Restored  int // messages restored from the history backup
 	Joined    int // groups joined by itself (External Commit)
 	Requested int // groups where online members were asked to add it
 }
 
-// Login adds this client as a new device of an existing account and makes it
-// a full participant right away: it restores the history backup (with the
-// seed phrase), joins every group of the account by itself and asks the other
-// members for messages that are missing from the backup.
-func (c *Client) Login(ctx context.Context, username, password, deviceName, seedPhrase string) (*LoginResult, error) {
+// Login adds this client as a new device of an existing account. Unless it
+// is the account's only device, it starts out pending: the account's other
+// devices are asked to approve it (they show LinkCode). Once approved it
+// receives the history key, restores the backup, joins every chat by itself
+// and asks for missing messages (EventApproved).
+func (c *Client) Login(ctx context.Context, username, password, deviceName string) (*LoginResult, error) {
 	if c.Account() != nil {
 		return nil, ErrAlreadySetUp
 	}
@@ -451,14 +467,34 @@ func (c *Client) Login(ctx context.Context, username, password, deviceName, seed
 	if err != nil {
 		return nil, err
 	}
-	if err := c.setupDevice(ctx, r.UserId, username, r.Token, deviceName, seedPhrase); err != nil {
+	if err := c.setupDevice(ctx, r.UserId, username, r.Token, deviceName, nil); err != nil {
 		return nil, err
 	}
+	return c.finishSetup(ctx)
+}
+
+// finishSetup either completes an approved device or asks for approval.
+func (c *Client) finishSetup(ctx context.Context) (*LoginResult, error) {
 	res := &LoginResult{}
-	if seedPhrase != "" {
-		if res.Restored, err = c.RestoreHistory(ctx); err != nil {
-			return res, fmt.Errorf("restore history: %w", err)
+	ok, err := c.IsApproved(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		res.Pending = true
+		if res.Code, err = c.MyLinkCode(ctx); err != nil {
+			return nil, err
 		}
+		if err := c.RequestLink(ctx); err != nil {
+			c.logf("link request: %v", err)
+		}
+		return res, nil
+	}
+	c.mu.Lock()
+	err = c.ensureSelfGroupLocked(ctx)
+	c.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
 	res.Joined, res.Requested, err = c.JoinMyGroups(ctx)
 	return res, err
@@ -477,15 +513,7 @@ func (c *Client) Relogin(ctx context.Context, password string) error {
 	return c.setToken(ctx, r.Token)
 }
 
-func (c *Client) setupDevice(ctx context.Context, userID, username, accountToken, deviceName, phrase string) error {
-	var histKey []byte
-	if phrase != "" {
-		k, err := crypto.HistoryKey(phrase, userID)
-		if err != nil {
-			return err
-		}
-		histKey = k
-	}
+func (c *Client) setupDevice(ctx context.Context, userID, username, accountToken, deviceName string, histKey []byte) error {
 	c.tokMu.Lock()
 	c.token = accountToken // RegisterDevice is called with the account token
 	c.tokMu.Unlock()

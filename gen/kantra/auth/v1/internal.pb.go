@@ -68,8 +68,10 @@ func (x *DeviceStatusRequest) GetDeviceIds() []string {
 type DeviceStatusResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ActiveDeviceIds []string               `protobuf:"bytes,1,rep,name=active_device_ids,json=activeDeviceIds,proto3" json:"active_device_ids,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Subset of active devices that have been approved (not pending).
+	ApprovedDeviceIds []string `protobuf:"bytes,2,rep,name=approved_device_ids,json=approvedDeviceIds,proto3" json:"approved_device_ids,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *DeviceStatusResponse) Reset() {
@@ -109,6 +111,13 @@ func (x *DeviceStatusResponse) GetActiveDeviceIds() []string {
 	return nil
 }
 
+func (x *DeviceStatusResponse) GetApprovedDeviceIds() []string {
+	if x != nil {
+		return x.ApprovedDeviceIds
+	}
+	return nil
+}
+
 var File_kantra_auth_v1_internal_proto protoreflect.FileDescriptor
 
 const file_kantra_auth_v1_internal_proto_rawDesc = "" +
@@ -116,9 +125,10 @@ const file_kantra_auth_v1_internal_proto_rawDesc = "" +
 	"\x1dkantra/auth/v1/internal.proto\x12\x0ekantra.auth.v1\"4\n" +
 	"\x13DeviceStatusRequest\x12\x1d\n" +
 	"\n" +
-	"device_ids\x18\x01 \x03(\tR\tdeviceIds\"B\n" +
+	"device_ids\x18\x01 \x03(\tR\tdeviceIds\"r\n" +
 	"\x14DeviceStatusResponse\x12*\n" +
-	"\x11active_device_ids\x18\x01 \x03(\tR\x0factiveDeviceIds2r\n" +
+	"\x11active_device_ids\x18\x01 \x03(\tR\x0factiveDeviceIds\x12.\n" +
+	"\x13approved_device_ids\x18\x02 \x03(\tR\x11approvedDeviceIds2r\n" +
 	"\x13AuthInternalService\x12[\n" +
 	"\fDeviceStatus\x12#.kantra.auth.v1.DeviceStatusRequest\x1a$.kantra.auth.v1.DeviceStatusResponse\"\x00B\xb8\x01\n" +
 	"\x12com.kantra.auth.v1B\rInternalProtoP\x01Z9github.com/kantracity/kantrae2e/gen/kantra/auth/v1;authv1\xa2\x02\x03KAX\xaa\x02\x0eKantra.Auth.V1\xca\x02\x0eKantra\\Auth\\V1\xe2\x02\x1aKantra\\Auth\\V1\\GPBMetadata\xea\x02\x10Kantra::Auth::V1b\x06proto3"

@@ -27,6 +27,16 @@ handle /kantra.auth.v1.AuthService/Register {
 	}
 	reverse_proxy auth-service:8080
 }
+handle /kantra.auth.v1.AuthService/Recover {
+	rate_limit {
+		zone auth_recover {
+			key {client_ip}
+			events 5
+			window 1m
+		}
+	}
+	reverse_proxy auth-service:8080
+}
 handle /kantra.auth.v1.AuthService/RegisterDevice {
 	rate_limit {
 		zone auth_register_device {

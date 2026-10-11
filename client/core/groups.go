@@ -31,6 +31,8 @@ type payload struct {
 	// History sharing (see multidevice.go).
 	HistReq   *historyRequest `json:"hreq,omitempty"`
 	HistShare *historyShare   `json:"hshare,omitempty"`
+	// Device linking (see linking.go).
+	AccountKey *accountKey `json:"akey,omitempty"`
 }
 
 // storable reports whether a payload type is a user-visible message.
@@ -50,7 +52,7 @@ func (c *Client) requireLogin() error {
 	return nil
 }
 
-// CreateGroup creates an MLS group (epoch 0) with only this device.
+// CreateGroup creates a group chat (MLS epoch 0) with only this device.
 func (c *Client) CreateGroup(ctx context.Context, name string) (string, error) {
 	if err := c.refreshToken(ctx); err != nil {
 		return "", err
@@ -60,7 +62,10 @@ func (c *Client) CreateGroup(ctx context.Context, name string) (string, error) {
 	if err := c.requireLogin(); err != nil {
 		return "", err
 	}
-	gid := uuid.NewString()
+	return c.createGroupLocked(ctx, uuid.NewString(), name, "")
+}
+
+func (c *Client) createGroupLocked(ctx context.Context, gid, name, peer string) (string, error) {
 	if err := c.m.CreateGroup([]byte(gid)); err != nil {
 		return "", err
 	}
@@ -78,7 +83,7 @@ func (c *Client) CreateGroup(ctx context.Context, name string) (string, error) {
 		if err := tx.SeenMember(gid, c.acct.UserID, now.UnixMilli()); err != nil {
 			return err
 		}
-		return tx.UpsertGroup(store.Group{ID: gid, Name: name, Active: true, CreatedAt: now.Unix()})
+		return tx.UpsertGroup(store.Group{ID: gid, Name: name, Peer: peer, Active: true, CreatedAt: now.Unix()})
 	})
 	return gid, err
 }
@@ -111,11 +116,18 @@ func (c *Client) Invite(ctx context.Context, groupID string, usernames ...string
 	if err := c.refreshToken(ctx); err != nil {
 		return err
 	}
+	if GroupKind(groupID) != KindGroup {
+		return ErrDirectInvite
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err := c.requireLogin(); err != nil {
 		return err
 	}
+	return c.inviteLocked(ctx, groupID, usernames)
+}
+
+func (c *Client) inviteLocked(ctx context.Context, groupID string, usernames []string) error {
 	_, current, err := c.m.GroupInfo([]byte(groupID))
 	if errors.Is(err, mls.ErrNotFound) {
 		return ErrNotMember
@@ -367,7 +379,17 @@ func (c *Client) localMessage(groupID string, p payload) *store.Message {
 }
 
 // Groups lists known groups.
-func (c *Client) Groups(ctx context.Context) ([]store.Group, error) { return c.st.Groups(ctx) }
+// The account's hidden self-group is not listed.
+func (c *Client) Groups(ctx context.Context) ([]store.Group, error) {
+	all, err := c.st.Groups(ctx)
+	out := all[:0]
+	for _, g := range all {
+		if GroupKind(g.ID) != KindSelf {
+			out = append(out, g)
+		}
+	}
+	return out, err
+}
 
 // Messages returns the last limit messages of a group.
 func (c *Client) Messages(ctx context.Context, groupID string, limit int) ([]store.Message, error) {
@@ -412,6 +434,15 @@ func (c *Client) ResolveGroup(ctx context.Context, ref string) (*store.Group, er
 	}
 	var found []store.Group
 	for _, g := range gs {
+		if GroupKind(g.ID) == KindSelf {
+			continue
+		}
+		if strings.HasPrefix(ref, "@") && g.Peer != "" {
+			if n, err := c.st.Username(ctx, g.Peer); err == nil && "@"+n == ref {
+				found = append(found, g)
+			}
+			continue
+		}
 		if g.ID == ref || g.Name == ref || (len(ref) >= 4 && strings.HasPrefix(g.ID, ref)) {
 			found = append(found, g)
 		}

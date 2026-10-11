@@ -134,14 +134,51 @@ func (c *cluster) open(name, db string) *user {
 	return u
 }
 
-func (c *cluster) register(name string) (*user, string) {
+func (c *cluster) register(name string) *user {
 	c.t.Helper()
 	u := c.open(name, name+".db")
-	phrase, err := u.Register(context.Background(), name, "password-"+name, name+"-laptop")
+	if err := u.Register(context.Background(), name, "password-"+name, name+"-laptop"); err != nil {
+		c.t.Fatal(err)
+	}
+	return u
+}
+
+// link logs a new device into old's account and approves it on old after
+// comparing the codes.
+func (c *cluster) link(old *user, name, db, deviceName string) *user {
+	c.t.Helper()
+	ctx := context.Background()
+	u := c.open(name, db)
+	res, err := u.Login(ctx, old.Account().Username, "password-"+old.Account().Username, deviceName)
 	if err != nil {
 		c.t.Fatal(err)
 	}
-	return u, phrase
+	if !res.Pending || res.Code == "" {
+		c.t.Fatalf("new device not pending: %+v", res)
+	}
+	if err := old.Sync(ctx); err != nil {
+		c.t.Fatal(err)
+	}
+	var req *core.LinkRequest
+	for _, l := range old.PendingLinks(ctx) {
+		if l.DeviceName == deviceName {
+			req = &l
+		}
+	}
+	if req == nil || req.Code != res.Code {
+		c.t.Fatalf("link request on %s: %+v, want code %q", old.name, req, res.Code)
+	}
+	if err := old.ApproveLink(ctx, req.DeviceID); err != nil {
+		c.t.Fatal(err)
+	}
+	if err := u.Sync(ctx); err != nil {
+		c.t.Fatal(err)
+	}
+	u.Settle(10 * time.Second)
+	if len(u.eventsOf(core.EventApproved)) == 0 {
+		c.t.Fatal("new device not approved")
+	}
+	return u
 }
 
 func texts(t *testing.T, u *user, gid string) []string {
@@ -179,9 +216,9 @@ func eq(t *testing.T, got []string, want ...string) {
 func TestMessengerEndToEnd(t *testing.T) {
 	c := newCluster(t)
 	ctx := context.Background()
-	alice, alicePhrase := c.register("alice")
-	bob, _ := c.register("bob")
-	carol, _ := c.register("carol")
+	alice := c.register("alice")
+	bob := c.register("bob")
+	carol := c.register("carol")
 
 	// Phase 3: group over the network, messages in both directions.
 	gid, err := alice.CreateGroup(ctx, "friends")
@@ -266,8 +303,8 @@ func TestMessengerEndToEnd(t *testing.T) {
 	}
 
 	// Concurrent commits: both try to add dave at the same epoch.
-	dave, _ := c.register("dave")
-	erin, _ := c.register("erin")
+	dave := c.register("dave")
+	erin := c.register("erin")
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	wg.Add(2)
@@ -307,16 +344,23 @@ func TestMessengerEndToEnd(t *testing.T) {
 		t.Fatal("nothing backed up")
 	}
 	want := texts(t, alice, gid)
+	alicePhrase, err := alice.SetupRecovery(ctx)
+	ok(t, err)
 	ok(t, alice.Close())
 
+	// No other device online: the recovery phrase approves the new one.
 	alice2 := c.open("alice2", "alice-phone.db")
-	if _, err := alice2.Login(ctx, "alice", "password-alice", "alice-phone", "wrong words"); err == nil {
-		t.Fatal("bad seed phrase accepted")
-	}
-	alice2 = c.open("alice2", "alice-phone2.db")
-	res, err := alice2.Login(ctx, "alice", "password-alice", "alice-phone", alicePhrase)
+	pre, err := alice2.Login(ctx, "alice", "password-alice", "alice-phone")
 	ok(t, err)
-	if res.Restored != n || res.Joined != 1 {
+	if !pre.Pending {
+		t.Fatal("second device approved without confirmation")
+	}
+	if _, err := alice2.Recover(ctx, "wrong words"); err == nil {
+		t.Fatal("bad recovery phrase accepted")
+	}
+	res, err := alice2.Recover(ctx, alicePhrase)
+	ok(t, err)
+	if res.Restored != n || res.Joined != 2 { // "friends" + the self-group
 		t.Fatalf("login result %+v (backed up %d)", res, n)
 	}
 	eq(t, texts(t, alice2, gid), want...)
@@ -361,9 +405,11 @@ func TestSeamlessNewDevice(t *testing.T) {
 	defer func() { autoBackup = false }()
 	c := newCluster(t)
 	ctx := context.Background()
-	laptop, phrase := c.register("alice")
-	bob, _ := c.register("bob")
-	carol, _ := c.register("carol")
+	laptop := c.register("alice")
+	bob := c.register("bob")
+	carol := c.register("carol")
+	phrase, err := laptop.SetupRecovery(ctx)
+	ok(t, err)
 
 	gid, err := laptop.CreateGroup(ctx, "team")
 	ok(t, err)
@@ -393,9 +439,11 @@ func TestSeamlessNewDevice(t *testing.T) {
 
 	// New phone: backup + both groups joined, no action from anybody else.
 	phone := c.open("phone", "alice-phone.db")
-	res, err := phone.Login(ctx, "alice", "password-alice", "alice-phone", phrase)
+	_, err = phone.Login(ctx, "alice", "password-alice", "alice-phone")
 	ok(t, err)
-	if res.Restored != 3 || res.Joined != 2 || res.Requested != 0 {
+	res, err := phone.Recover(ctx, phrase)
+	ok(t, err)
+	if res.Restored != 3 || res.Joined != 3 || res.Requested != 0 { // + self-group
 		t.Fatalf("login %+v", res)
 	}
 	g, _ := phone.ResolveGroup(ctx, "team")
@@ -442,12 +490,8 @@ func TestSeamlessNewDevice(t *testing.T) {
 	// online member (bob) adds the tablet automatically.
 	_, err = c.deliveryDB.Exec(ctx, `UPDATE groups SET group_info = NULL`)
 	ok(t, err)
-	tablet := c.open("tablet", "alice-tablet.db")
-	res, err = tablet.Login(ctx, "alice", "password-alice", "alice-tablet", phrase)
-	ok(t, err)
-	if res.Joined != 0 || res.Requested != 2 {
-		t.Fatalf("tablet login %+v", res)
-	}
+	// The tablet is approved on the phone (it gets the history key from it).
+	tablet := c.link(phone, "tablet", "alice-tablet.db", "alice-tablet")
 	ok(t, bob.Sync(ctx))
 	bob.Settle(10 * time.Second)
 	ok(t, tablet.Sync(ctx))
@@ -480,7 +524,7 @@ func TestSeamlessNewDevice(t *testing.T) {
 	}
 	n, err := phone.RevokeDevice(ctx, laptopID)
 	ok(t, err)
-	if n != 2 {
+	if n != 3 { // two chats + the self-group
 		t.Fatalf("removed from %d groups", n)
 	}
 	// The revoked laptop is locked out of delivery and directory.
@@ -503,9 +547,9 @@ func TestSeamlessNewDevice(t *testing.T) {
 func TestStrangerExternalJoinIsRemoved(t *testing.T) {
 	c := newCluster(t)
 	ctx := context.Background()
-	alice, _ := c.register("alice")
-	bob, _ := c.register("bob")
-	mallory, _ := c.register("mallory")
+	alice := c.register("alice")
+	bob := c.register("bob")
+	mallory := c.register("mallory")
 	gid, err := alice.CreateGroup(ctx, "secret")
 	ok(t, err)
 	ok(t, alice.Invite(ctx, gid, "bob"))
@@ -551,8 +595,8 @@ func TestStrangerExternalJoinIsRemoved(t *testing.T) {
 func TestKeyVerification(t *testing.T) {
 	c := newCluster(t)
 	ctx := context.Background()
-	alice, _ := c.register("alice")
-	bob, bobPhrase := c.register("bob")
+	alice := c.register("alice")
+	bob := c.register("bob")
 	gid, err := alice.CreateGroup(ctx, "verified")
 	ok(t, err)
 	ok(t, alice.Invite(ctx, gid, "bob"))
@@ -575,9 +619,7 @@ func TestKeyVerification(t *testing.T) {
 	}
 
 	// New device of a verified contact -> event, still usable.
-	phone := c.open("bob-phone", "bob-phone.db")
-	_, err = phone.Login(ctx, "bob", "password-bob", "bob-phone", bobPhrase)
-	ok(t, err)
+	c.link(bob, "bob-phone", "bob-phone.db", "bob-phone")
 	ok(t, alice.Sync(ctx))
 	if len(alice.eventsOf(core.EventNewDevice)) != 1 {
 		t.Fatalf("new device events: %+v", alice.eventsOf(core.EventNewDevice))
@@ -659,5 +701,161 @@ func TestKeyVerification(t *testing.T) {
 	ok(t, err)
 	if err := alice.Invite(ctx, gid3, "bob"); !errors.Is(err, core.ErrKeyChanged) {
 		t.Fatalf("invite with forged key package: %v", err)
+	}
+}
+
+// Device linking (approve on an old device / reject), recovery phrase set up
+// later, and Telegram-style direct chats found by username.
+func TestLinkingAndDirectChats(t *testing.T) {
+	c := newCluster(t)
+	ctx := context.Background()
+	alice := c.register("alice")
+	bob := c.register("bob")
+
+	// Registration asks for nothing; the recovery phrase is optional.
+	if has, err := alice.HasRecovery(ctx); err != nil || has {
+		t.Fatalf("recovery before setup: %v %v", has, err)
+	}
+
+	// A pending device can do nothing until approved.
+	phone := c.open("alice-phone", "alice-phone.db")
+	res, err := phone.Login(ctx, "alice", "password-alice", "alice-phone")
+	ok(t, err)
+	if !res.Pending {
+		t.Fatal("second device approved automatically")
+	}
+	if _, err := phone.CreateGroup(ctx, "nope"); err == nil {
+		t.Fatal("pending device created a group")
+	}
+	if _, err := phone.OpenDirect(ctx, "bob"); err == nil {
+		t.Fatal("pending device opened a chat")
+	}
+	if _, err := phone.SetupRecovery(ctx); err == nil {
+		t.Fatal("pending device set a recovery phrase")
+	}
+
+	// "It wasn't me": rejecting revokes the device.
+	evil := c.open("evil", "evil.db")
+	_, err = evil.Login(ctx, "alice", "password-alice", "evil-device")
+	ok(t, err)
+	ok(t, alice.Sync(ctx))
+	links := alice.PendingLinks(ctx)
+	if len(links) != 2 {
+		t.Fatalf("pending links %+v", links)
+	}
+	for _, l := range links {
+		if l.DeviceName == "evil-device" {
+			ok(t, alice.RejectLink(ctx, l.DeviceID))
+		}
+	}
+	if err := evil.Sync(ctx); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("rejected device: %v", err)
+	}
+
+	// Approving the phone (codes match) hands it the history key.
+	var phoneLink *core.LinkRequest
+	for _, l := range links {
+		if l.DeviceName == "alice-phone" {
+			phoneLink = &l
+		}
+	}
+	if phoneLink == nil || phoneLink.Code != res.Code {
+		t.Fatalf("phone link %+v, code %q", phoneLink, res.Code)
+	}
+	ok(t, alice.ApproveLink(ctx, phoneLink.DeviceID))
+	ok(t, phone.Sync(ctx))
+	phone.Settle(10 * time.Second)
+	if len(phone.eventsOf(core.EventApproved)) == 0 {
+		t.Fatal("phone not approved")
+	}
+	if approved, _ := phone.IsApproved(ctx); !approved {
+		t.Fatal("phone not approved at the server")
+	}
+	if len(alice.PendingLinks(ctx)) != 0 {
+		t.Fatal("request still pending after approval")
+	}
+	// The approver compared the code: the phone's key counts as verified.
+	keys, err := alice.Keys(ctx, "alice")
+	ok(t, err)
+	for _, k := range keys {
+		if k.DeviceID == phone.Account().DeviceID && k.Status != "verified" {
+			t.Fatalf("phone key %+v", k)
+		}
+	}
+
+	// Direct chat: find bob by nickname, write to him.
+	found, err := alice.SearchUsers(ctx, "bo")
+	ok(t, err)
+	if len(found) != 1 || found[0].Username != "bob" {
+		t.Fatalf("search: %+v", found)
+	}
+	if _, err := alice.OpenDirect(ctx, "alice"); !errors.Is(err, core.ErrSelfChat) {
+		t.Fatalf("chat with self: %v", err)
+	}
+	dm, err := alice.OpenDirect(ctx, "@bob")
+	ok(t, err)
+	if core.GroupKind(dm) != core.KindDirect {
+		t.Fatalf("kind of %s", dm)
+	}
+	if again, err := alice.OpenDirect(ctx, "bob"); err != nil || again != dm {
+		t.Fatalf("reopen: %s %v", again, err)
+	}
+	if err := alice.Invite(ctx, dm, "bob"); !errors.Is(err, core.ErrDirectInvite) {
+		t.Fatalf("invite into direct chat: %v", err)
+	}
+	_, err = alice.SendText(ctx, dm, "hi bob")
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+	g, err := bob.ResolveGroup(ctx, dm)
+	ok(t, err)
+	if g.Peer != alice.Account().UserID {
+		t.Fatalf("bob's direct chat: %+v", g)
+	}
+	eq(t, texts(t, bob, dm), "hi bob")
+	// Bob opening the chat with alice lands in the same one.
+	if same, err := bob.OpenDirect(ctx, "alice"); err != nil || same != dm {
+		t.Fatalf("bob opens: %s %v", same, err)
+	}
+	_, err = bob.SendText(ctx, dm, "hi alice")
+	ok(t, err)
+	// Alice's phone joins the chat by itself and gets the messages from
+	// alice's laptop (history sharing).
+	ok(t, phone.Sync(ctx))
+	phone.Settle(10 * time.Second)
+	ok(t, alice.Sync(ctx))
+	alice.Settle(10 * time.Second)
+	ok(t, phone.Sync(ctx))
+	eq(t, texts(t, phone, dm), "hi bob", "hi alice")
+	gs, err := phone.Groups(ctx)
+	ok(t, err)
+	if len(gs) != 1 || gs[0].ID != dm || gs[0].Peer != bob.Account().UserID {
+		t.Fatalf("phone chats (self-group must be hidden): %+v", gs)
+	}
+
+	// Recovery phrase later, from settings; works on a third device.
+	phrase, err := phone.SetupRecovery(ctx)
+	ok(t, err)
+	if len(strings.Fields(phrase)) != 12 {
+		t.Fatalf("phrase has %d words", len(strings.Fields(phrase)))
+	}
+	if has, _ := alice.HasRecovery(ctx); !has {
+		t.Fatal("recovery not stored")
+	}
+	_, err = alice.BackupHistory(ctx)
+	ok(t, err)
+	tablet := c.open("alice-tablet", "alice-tablet.db")
+	_, err = tablet.Login(ctx, "alice", "password-alice", "alice-tablet")
+	ok(t, err)
+	r, err := tablet.Recover(ctx, strings.ToUpper(phrase))
+	ok(t, err)
+	if r.Restored != 2 {
+		t.Fatalf("tablet recovery %+v", r)
+	}
+	eq(t, texts(t, tablet, dm), "hi bob", "hi alice")
+	_, err = tablet.SendText(ctx, dm, "from the tablet")
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+	if m := texts(t, bob, dm); m[len(m)-1] != "from the tablet" {
+		t.Fatalf("bob: %q", m)
 	}
 }

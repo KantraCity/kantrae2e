@@ -97,6 +97,8 @@ var migrations = []string{
 	// backup, 'shared' re-sent by another member (shared_by = its user id).
 	`ALTER TABLE messages ADD COLUMN origin TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE messages ADD COLUMN shared_by TEXT NOT NULL DEFAULT '';`,
+	// peer: the other user of a direct chat (kind is derived from the id).
+	`ALTER TABLE groups ADD COLUMN peer TEXT NOT NULL DEFAULT '';`,
 }
 
 func migrate(db *sql.DB) error {
@@ -275,13 +277,15 @@ type Group struct {
 	Epoch     uint64
 	Active    bool
 	CreatedAt int64
+	Peer      string // direct chats: the other user's id
 }
 
 func (t *Tx) UpsertGroup(g Group) error {
-	_, err := t.tx.Exec(`INSERT INTO groups (id, name, epoch, active, created_at) VALUES (?, ?, ?, ?, ?)
+	_, err := t.tx.Exec(`INSERT INTO groups (id, name, epoch, active, created_at, peer) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET epoch=excluded.epoch, active=excluded.active,
-		name=CASE WHEN excluded.name <> '' THEN excluded.name ELSE groups.name END`,
-		g.ID, g.Name, int64(g.Epoch), g.Active, g.CreatedAt)
+		name=CASE WHEN excluded.name <> '' THEN excluded.name ELSE groups.name END,
+		peer=CASE WHEN excluded.peer <> '' THEN excluded.peer ELSE groups.peer END`,
+		g.ID, g.Name, int64(g.Epoch), g.Active, g.CreatedAt, g.Peer)
 	return err
 }
 
@@ -293,7 +297,7 @@ func (t *Tx) InsertGroupIfMissing(g Group) error {
 }
 
 func (s *Store) Groups(ctx context.Context) ([]Group, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, epoch, active, created_at FROM groups ORDER BY created_at`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, epoch, active, created_at, peer FROM groups ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +306,7 @@ func (s *Store) Groups(ctx context.Context) ([]Group, error) {
 	for rows.Next() {
 		var g Group
 		var ep int64
-		if err := rows.Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer); err != nil {
 			return nil, err
 		}
 		g.Epoch = uint64(ep)
@@ -314,8 +318,8 @@ func (s *Store) Groups(ctx context.Context) ([]Group, error) {
 func (s *Store) Group(ctx context.Context, id string) (*Group, error) {
 	var g Group
 	var ep int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, name, epoch, active, created_at FROM groups WHERE id=?`, id).
-		Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, epoch, active, created_at, peer FROM groups WHERE id=?`, id).
+		Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

@@ -65,6 +65,9 @@ func Open(serverURL, dbPath string, handler EventHandler) (*Messenger, error) {
 			if e.Detail != "" {
 				out["detail"] = e.Detail
 			}
+			if e.DeviceID != "" {
+				out["device_id"] = e.DeviceID
+			}
 			if e.Err != nil {
 				out["error"] = e.Err.Error()
 			}
@@ -85,19 +88,59 @@ func (m *Messenger) Close() error {
 	return m.c.Close()
 }
 
-// Register returns the seed phrase.
-func (m *Messenger) Register(username, password, deviceName string) (string, error) {
+// Register creates the account and this (approved) device.
+func (m *Messenger) Register(username, password, deviceName string) error {
 	return m.c.Register(context.Background(), username, password, deviceName)
 }
 
-// Login adds this device to an existing account, restores history and joins
-// the account's groups. Returns {"Restored":n,"Joined":n,"Requested":n}.
-func (m *Messenger) Login(username, password, deviceName, seedPhrase string) (string, error) {
-	r, err := m.c.Login(context.Background(), username, password, deviceName, seedPhrase)
+// Login adds this device to an existing account. Returns
+// {"Pending":bool,"Code":"...","Restored":n,"Joined":n,"Requested":n}; while
+// Pending, show Code and wait for the "approved" event (or call Recover).
+func (m *Messenger) Login(username, password, deviceName string) (string, error) {
+	r, err := m.c.Login(context.Background(), username, password, deviceName)
 	if err != nil {
 		return "", err
 	}
 	return marshal(r)
+}
+
+// Recover approves this device with the recovery phrase.
+func (m *Messenger) Recover(phrase string) (string, error) {
+	r, err := m.c.Recover(context.Background(), phrase)
+	if err != nil {
+		return "", err
+	}
+	return marshal(r)
+}
+
+// SetupRecovery creates a new recovery phrase (show it once).
+func (m *Messenger) SetupRecovery() (string, error) { return m.c.SetupRecovery(context.Background()) }
+
+// PendingLinksJSON lists devices waiting for approval: [{"DeviceID","DeviceName","Code"}].
+func (m *Messenger) PendingLinksJSON() (string, error) {
+	return marshal(m.c.PendingLinks(context.Background()))
+}
+
+func (m *Messenger) ApproveLink(deviceID string) error {
+	return m.c.ApproveLink(context.Background(), deviceID)
+}
+
+func (m *Messenger) RejectLink(deviceID string) error {
+	return m.c.RejectLink(context.Background(), deviceID)
+}
+
+// SearchUsersJSON finds users by username prefix: [{"UserID","Username"}].
+func (m *Messenger) SearchUsersJSON(query string) (string, error) {
+	u, err := m.c.SearchUsers(context.Background(), query)
+	if err != nil {
+		return "", err
+	}
+	return marshal(u)
+}
+
+// OpenDirect returns the id of the direct chat with a user (created if needed).
+func (m *Messenger) OpenDirect(username string) (string, error) {
+	return m.c.OpenDirect(context.Background(), username)
 }
 
 // DevicesJSON lists the account's devices.

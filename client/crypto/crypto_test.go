@@ -5,21 +5,21 @@ import (
 	"testing"
 )
 
-func TestHistoryKey(t *testing.T) {
-	p, err := NewSeedPhrase()
-	if err != nil || len(bytesFields(p)) != 24 {
+func TestRecoveryKeys(t *testing.T) {
+	p, err := NewRecoveryPhrase()
+	if err != nil || len(bytesFields(p)) != 12 {
 		t.Fatalf("phrase %q %v", p, err)
 	}
-	k1, err := HistoryKey(p, "u1")
+	w1, v1, err := RecoveryKeys(p, "u1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	k2, _ := HistoryKey("  "+string(bytes.ToUpper([]byte(p)))+" ", "u1")
-	k3, _ := HistoryKey(p, "u2")
-	if !bytes.Equal(k1, k2) || bytes.Equal(k1, k3) {
-		t.Fatal("derivation not deterministic / not user-bound")
+	w2, v2, _ := RecoveryKeys("  "+string(bytes.ToUpper([]byte(p)))+" ", "u1")
+	w3, _, _ := RecoveryKeys(p, "u2")
+	if !bytes.Equal(w1, w2) || !bytes.Equal(v1, v2) || bytes.Equal(w1, w3) || bytes.Equal(w1, v1) {
+		t.Fatal("derivation not deterministic / not user-bound / keys not independent")
 	}
-	if _, err := HistoryKey("not a valid phrase", "u1"); err != ErrBadPhrase {
+	if _, _, err := RecoveryKeys("not a valid phrase", "u1"); err != ErrBadPhrase {
 		t.Fatalf("bad phrase: %v", err)
 	}
 }

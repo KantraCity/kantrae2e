@@ -29,12 +29,19 @@ const usage = `kantra — E2EE messenger CLI (MLS via mls-rs)
 Usage: kantra [flags] <command> [args]
 
 Account:
-  register <username> [device-name]   create account + this device, prints seed phrase
-  login <username> [device-name]      add this client as a new device: restores history,
-                                      joins all your groups (asks for the seed phrase)
+  register <username> [device-name]   create account + this device
+  login <username> [device-name]      add this client as a new device; it waits until you
+                                      approve it on another device (compare the code)
+  recover                             approve this new device with the recovery phrase
   relogin                             renew the session of this device
   whoami                              show account
   devices                             list the account's devices
+
+Linked devices and recovery:
+  links                               new devices waiting for approval (with their codes)
+  approve [device-id]                 approve a waiting device (after comparing the code)
+  reject <device-id>                  reject (revoke) a waiting device
+  recovery                            create a new recovery phrase (12 words, optional)
 
 Verification (compare fingerprints out of band, e.g. in person or by voice):
   fingerprint                         this device's fingerprint
@@ -42,9 +49,11 @@ Verification (compare fingerprints out of band, e.g. in person or by voice):
   trust <username> [device-id]        mark devices as verified (a changed key needs device-id)
   revoke <device-id>                  revoke a device (e.g. lost phone) and remove it from groups
 
-Groups:
+Chats:
+  search <query>                      find people by username
+  dm <username>                       open (or start) the direct chat with a user
   create <name>                       create a group
-  groups                              list groups
+  groups                              list chats
   invite <group> <username>...        add all devices of users
   remove <group> <username>           remove a user (all devices)
   members <group>                     list members
@@ -59,10 +68,10 @@ Messages:
   chat <group>                        interactive chat (lines from stdin)
 
 History backup (automatic; manual commands for completeness):
-  backup                              upload new messages (encrypted with the seed key)
+  backup                              upload new messages (encrypted with the history key)
   restore                             restore history from the backup
 
-<group> is a group name, id or id prefix.
+<group> is a group name, id or id prefix, or @username for a direct chat.
 
 Flags:
 `
@@ -200,12 +209,11 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		phrase, err := a.c.Register(ctx, args[0], pw, deviceName(args))
-		if err != nil {
+		if err := a.c.Register(ctx, args[0], pw, deviceName(args)); err != nil {
 			return err
 		}
-		fmt.Fprintf(a.out, "Registered %s.\n\nSEED PHRASE — write it down, it is shown only once.\n"+
-			"It is the only way to restore your message history on a new device:\n\n  %s\n\n", args[0], phrase)
+		fmt.Fprintf(a.out, "Registered %s.\nNew devices are approved from this one (kantra links / approve).\n"+
+			"Optional: `kantra recovery` creates a recovery phrase in case you lose all devices.\n", args[0])
 		return nil
 
 	case "login":
@@ -216,43 +224,101 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		phrase, err := readSecret("Seed phrase (empty to skip history): ")
+		res, err := a.c.Login(ctx, args[0], pw, deviceName(args))
 		if err != nil {
 			return err
 		}
-		res, err := a.c.Login(ctx, args[0], pw, deviceName(args), phrase)
+		if !res.Pending {
+			fmt.Fprintf(a.out, "Logged in, joined %d chats.\n", res.Joined)
+			return nil
+		}
+		fmt.Fprintf(a.out, "Approve this device on another device of yours (kantra approve).\n"+
+			"Check that it shows the same code:\n\n    %s\n\n"+
+			"No other device? Run `kantra recover` with your recovery phrase.\nWaiting for approval (Ctrl+C to stop waiting)...\n", res.Code)
+		return a.waitApproval(ctx)
+
+	case "recover":
+		phrase, err := readSecret("Recovery phrase (12 words): ")
+		if err != nil {
+			return err
+		}
+		res, err := a.c.Recover(ctx, phrase)
 		if res != nil {
-			fmt.Fprintf(a.out, "Logged in as a new device: %d messages restored from the backup, joined %d groups",
-				res.Restored, res.Joined)
-			if res.Requested > 0 {
-				fmt.Fprintf(a.out, ", asked members to add this device to %d more", res.Requested)
-			}
-			fmt.Fprintln(a.out, ".")
+			fmt.Fprintf(a.out, "Device approved: %d messages restored, joined %d chats.\n", res.Restored, res.Joined)
 		}
+		return err
+
+	case "links":
+		if err := a.c.Sync(ctx); err != nil {
+			return err
+		}
+		for _, l := range a.c.PendingLinks(ctx) {
+			fmt.Fprintf(a.out, "%s  %-20s code %s\n", l.DeviceID, l.DeviceName, l.Code)
+		}
+		return nil
+
+	case "approve":
+		if err := a.c.Sync(ctx); err != nil {
+			return err
+		}
+		links := a.c.PendingLinks(ctx)
+		var l *core.LinkRequest
+		for i := range links {
+			if len(args) == 0 || links[i].DeviceID == args[0] {
+				l = &links[i]
+			}
+		}
+		if l == nil || (len(args) == 0 && len(links) > 1) {
+			return errors.New("no (unique) device waiting; see kantra links")
+		}
+		fmt.Fprintf(a.out, "Device %q shows code %s. Same code on it? [y/N] ", l.DeviceName, l.Code)
+		ans, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(ans)), "y") {
+			return errors.New("not approved")
+		}
+		if err := a.c.ApproveLink(ctx, l.DeviceID); err != nil {
+			return err
+		}
+		fmt.Fprintln(a.out, "approved")
+		return nil
+
+	case "reject":
+		if err := need(args, 1, "reject <device-id>"); err != nil {
+			return err
+		}
+		return a.c.RejectLink(ctx, args[0])
+
+	case "recovery":
+		phrase, err := a.c.SetupRecovery(ctx)
 		if err != nil {
 			return err
 		}
-		if phrase == "" {
-			fmt.Fprintln(a.out, "No seed phrase: older history is only filled in by other members (history sharing).")
+		fmt.Fprintf(a.out, "RECOVERY PHRASE — write it down and keep it offline. It replaces any older one.\n"+
+			"With it you can get your history on a new device when no other device is available:\n\n  %s\n\n", phrase)
+		return nil
+
+	case "search":
+		if err := need(args, 1, "search <query>"); err != nil {
+			return err
 		}
-		// Wait (briefly) for other members to send what the backup misses.
-		if res != nil && res.Joined > 0 {
-			a.c.Settle(5 * time.Second)
-			deadline := time.Now().Add(8 * time.Second)
-			for time.Now().Before(deadline) {
-				if err := a.c.Sync(ctx); err != nil {
-					fmt.Fprintln(os.Stderr, "warning: sync failed:", err)
-					break
-				}
-				a.histMu.Lock()
-				done := a.histAnswers >= res.Joined
-				a.histMu.Unlock()
-				if done {
-					break
-				}
-				time.Sleep(400 * time.Millisecond)
-			}
+		users, err := a.c.SearchUsers(ctx, args[0])
+		if err != nil {
+			return err
 		}
+		for _, u := range users {
+			fmt.Fprintf(a.out, "@%s\n", u.Username)
+		}
+		return nil
+
+	case "dm":
+		if err := need(args, 1, "dm <username>"); err != nil {
+			return err
+		}
+		id, err := a.c.OpenDirect(ctx, args[0])
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "direct chat %s (use @%s as <group>)\n", id, strings.TrimPrefix(args[0], "@"))
 		return nil
 
 	case "devices":
@@ -371,7 +437,11 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 			if !g.Active {
 				state = " (inactive)"
 			}
-			fmt.Fprintf(a.out, "%s  %-20s epoch %d%s\n", g.ID[:8], g.Name, g.Epoch, state)
+			name := g.Name
+			if g.Peer != "" {
+				name = "@" + a.c.Username(ctx, g.Peer)
+			}
+			fmt.Fprintf(a.out, "%s  %-20s epoch %d%s\n", g.ID[:8], name, g.Epoch, state)
 		}
 		return nil
 
@@ -562,6 +632,28 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 	return fmt.Errorf("unknown command %q (see kantra -h)", cmd)
 }
 
+// waitApproval keeps syncing until another device approved this one.
+func (a *app) waitApproval(ctx context.Context) error {
+	for {
+		if ok, err := a.c.IsApproved(ctx); err == nil && ok {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			fmt.Fprintln(a.out, "\nStill waiting; `kantra sync` later picks the approval up.")
+			return nil
+		case <-time.After(2 * time.Second):
+		}
+		if err := a.c.Sync(ctx); err != nil && ctx.Err() == nil {
+			fmt.Fprintln(os.Stderr, "warning: sync failed:", err)
+		}
+	}
+	_ = a.c.Sync(ctx)
+	a.c.Settle(10 * time.Second)
+	fmt.Fprintln(a.out, "Approved. History restored, chats joined.")
+	return nil
+}
+
 func statusMark(status string) string {
 	switch status {
 	case "verified":
@@ -627,6 +719,8 @@ func (a *app) onEvent(e core.Event) {
 	}
 	// Security-relevant events are always shown.
 	switch e.Type {
+	case core.EventLinkRequest:
+		fmt.Fprintf(os.Stderr, "* a new device asks to be linked to your account, code %s (kantra approve %s)\n", e.Detail, e.DeviceID)
 	case core.EventSecurity, core.EventNewDevice:
 		msg := e.Detail
 		if msg == "" && e.Err != nil {

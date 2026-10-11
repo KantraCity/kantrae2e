@@ -50,6 +50,18 @@ const (
 	// AuthServiceRefreshTokenProcedure is the fully-qualified name of the AuthService's RefreshToken
 	// RPC.
 	AuthServiceRefreshTokenProcedure = "/kantra.auth.v1.AuthService/RefreshToken"
+	// AuthServiceGetAccountStatusProcedure is the fully-qualified name of the AuthService's
+	// GetAccountStatus RPC.
+	AuthServiceGetAccountStatusProcedure = "/kantra.auth.v1.AuthService/GetAccountStatus"
+	// AuthServiceApproveDeviceProcedure is the fully-qualified name of the AuthService's ApproveDevice
+	// RPC.
+	AuthServiceApproveDeviceProcedure = "/kantra.auth.v1.AuthService/ApproveDevice"
+	// AuthServiceSetRecoveryProcedure is the fully-qualified name of the AuthService's SetRecovery RPC.
+	AuthServiceSetRecoveryProcedure = "/kantra.auth.v1.AuthService/SetRecovery"
+	// AuthServiceRecoverProcedure is the fully-qualified name of the AuthService's Recover RPC.
+	AuthServiceRecoverProcedure = "/kantra.auth.v1.AuthService/Recover"
+	// AuthServiceSearchUsersProcedure is the fully-qualified name of the AuthService's SearchUsers RPC.
+	AuthServiceSearchUsersProcedure = "/kantra.auth.v1.AuthService/SearchUsers"
 )
 
 // AuthServiceClient is a client for the kantra.auth.v1.AuthService service.
@@ -64,6 +76,20 @@ type AuthServiceClient interface {
 	LookupUser(context.Context, *v1.LookupUserRequest) (*v1.LookupUserResponse, error)
 	// Exchanges a valid token for a fresh one. Fails for revoked devices.
 	RefreshToken(context.Context, *v1.RefreshTokenRequest) (*v1.RefreshTokenResponse, error)
+	// --- Device linking and recovery ---
+	// Status of the calling device and account.
+	GetAccountStatus(context.Context, *v1.GetAccountStatusRequest) (*v1.GetAccountStatusResponse, error)
+	// An approved device approves a pending device of the same account.
+	ApproveDevice(context.Context, *v1.ApproveDeviceRequest) (*v1.ApproveDeviceResponse, error)
+	// Stores the recovery verifier and the history key wrapped with the
+	// recovery key (both computed on the client; the server never sees the
+	// recovery key or the history key). Approved devices only.
+	SetRecovery(context.Context, *v1.SetRecoveryRequest) (*v1.SetRecoveryResponse, error)
+	// Proves knowledge of the recovery key: approves the calling device and
+	// returns the wrapped history key.
+	Recover(context.Context, *v1.RecoverRequest) (*v1.RecoverResponse, error)
+	// Username prefix search (to start a direct chat).
+	SearchUsers(context.Context, *v1.SearchUsersRequest) (*v1.SearchUsersResponse, error)
 }
 
 // NewAuthServiceClient constructs a client for the kantra.auth.v1.AuthService service. By default,
@@ -119,18 +145,53 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("RefreshToken")),
 			connect.WithClientOptions(opts...),
 		),
+		getAccountStatus: connect.NewClient[v1.GetAccountStatusRequest, v1.GetAccountStatusResponse](
+			httpClient,
+			baseURL+AuthServiceGetAccountStatusProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetAccountStatus")),
+			connect.WithClientOptions(opts...),
+		),
+		approveDevice: connect.NewClient[v1.ApproveDeviceRequest, v1.ApproveDeviceResponse](
+			httpClient,
+			baseURL+AuthServiceApproveDeviceProcedure,
+			connect.WithSchema(authServiceMethods.ByName("ApproveDevice")),
+			connect.WithClientOptions(opts...),
+		),
+		setRecovery: connect.NewClient[v1.SetRecoveryRequest, v1.SetRecoveryResponse](
+			httpClient,
+			baseURL+AuthServiceSetRecoveryProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetRecovery")),
+			connect.WithClientOptions(opts...),
+		),
+		recover: connect.NewClient[v1.RecoverRequest, v1.RecoverResponse](
+			httpClient,
+			baseURL+AuthServiceRecoverProcedure,
+			connect.WithSchema(authServiceMethods.ByName("Recover")),
+			connect.WithClientOptions(opts...),
+		),
+		searchUsers: connect.NewClient[v1.SearchUsersRequest, v1.SearchUsersResponse](
+			httpClient,
+			baseURL+AuthServiceSearchUsersProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SearchUsers")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	register       *connect.Client[v1.RegisterRequest, v1.RegisterResponse]
-	login          *connect.Client[v1.LoginRequest, v1.LoginResponse]
-	registerDevice *connect.Client[v1.RegisterDeviceRequest, v1.RegisterDeviceResponse]
-	listDevices    *connect.Client[v1.ListDevicesRequest, v1.ListDevicesResponse]
-	revokeDevice   *connect.Client[v1.RevokeDeviceRequest, v1.RevokeDeviceResponse]
-	lookupUser     *connect.Client[v1.LookupUserRequest, v1.LookupUserResponse]
-	refreshToken   *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
+	register         *connect.Client[v1.RegisterRequest, v1.RegisterResponse]
+	login            *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	registerDevice   *connect.Client[v1.RegisterDeviceRequest, v1.RegisterDeviceResponse]
+	listDevices      *connect.Client[v1.ListDevicesRequest, v1.ListDevicesResponse]
+	revokeDevice     *connect.Client[v1.RevokeDeviceRequest, v1.RevokeDeviceResponse]
+	lookupUser       *connect.Client[v1.LookupUserRequest, v1.LookupUserResponse]
+	refreshToken     *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
+	getAccountStatus *connect.Client[v1.GetAccountStatusRequest, v1.GetAccountStatusResponse]
+	approveDevice    *connect.Client[v1.ApproveDeviceRequest, v1.ApproveDeviceResponse]
+	setRecovery      *connect.Client[v1.SetRecoveryRequest, v1.SetRecoveryResponse]
+	recover          *connect.Client[v1.RecoverRequest, v1.RecoverResponse]
+	searchUsers      *connect.Client[v1.SearchUsersRequest, v1.SearchUsersResponse]
 }
 
 // Register calls kantra.auth.v1.AuthService.Register.
@@ -196,6 +257,51 @@ func (c *authServiceClient) RefreshToken(ctx context.Context, req *v1.RefreshTok
 	return nil, err
 }
 
+// GetAccountStatus calls kantra.auth.v1.AuthService.GetAccountStatus.
+func (c *authServiceClient) GetAccountStatus(ctx context.Context, req *v1.GetAccountStatusRequest) (*v1.GetAccountStatusResponse, error) {
+	response, err := c.getAccountStatus.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ApproveDevice calls kantra.auth.v1.AuthService.ApproveDevice.
+func (c *authServiceClient) ApproveDevice(ctx context.Context, req *v1.ApproveDeviceRequest) (*v1.ApproveDeviceResponse, error) {
+	response, err := c.approveDevice.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SetRecovery calls kantra.auth.v1.AuthService.SetRecovery.
+func (c *authServiceClient) SetRecovery(ctx context.Context, req *v1.SetRecoveryRequest) (*v1.SetRecoveryResponse, error) {
+	response, err := c.setRecovery.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Recover calls kantra.auth.v1.AuthService.Recover.
+func (c *authServiceClient) Recover(ctx context.Context, req *v1.RecoverRequest) (*v1.RecoverResponse, error) {
+	response, err := c.recover.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SearchUsers calls kantra.auth.v1.AuthService.SearchUsers.
+func (c *authServiceClient) SearchUsers(ctx context.Context, req *v1.SearchUsersRequest) (*v1.SearchUsersResponse, error) {
+	response, err := c.searchUsers.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // AuthServiceHandler is an implementation of the kantra.auth.v1.AuthService service.
 type AuthServiceHandler interface {
 	Register(context.Context, *v1.RegisterRequest) (*v1.RegisterResponse, error)
@@ -208,6 +314,20 @@ type AuthServiceHandler interface {
 	LookupUser(context.Context, *v1.LookupUserRequest) (*v1.LookupUserResponse, error)
 	// Exchanges a valid token for a fresh one. Fails for revoked devices.
 	RefreshToken(context.Context, *v1.RefreshTokenRequest) (*v1.RefreshTokenResponse, error)
+	// --- Device linking and recovery ---
+	// Status of the calling device and account.
+	GetAccountStatus(context.Context, *v1.GetAccountStatusRequest) (*v1.GetAccountStatusResponse, error)
+	// An approved device approves a pending device of the same account.
+	ApproveDevice(context.Context, *v1.ApproveDeviceRequest) (*v1.ApproveDeviceResponse, error)
+	// Stores the recovery verifier and the history key wrapped with the
+	// recovery key (both computed on the client; the server never sees the
+	// recovery key or the history key). Approved devices only.
+	SetRecovery(context.Context, *v1.SetRecoveryRequest) (*v1.SetRecoveryResponse, error)
+	// Proves knowledge of the recovery key: approves the calling device and
+	// returns the wrapped history key.
+	Recover(context.Context, *v1.RecoverRequest) (*v1.RecoverResponse, error)
+	// Username prefix search (to start a direct chat).
+	SearchUsers(context.Context, *v1.SearchUsersRequest) (*v1.SearchUsersResponse, error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -259,6 +379,36 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("RefreshToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetAccountStatusHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceGetAccountStatusProcedure,
+		svc.GetAccountStatus,
+		connect.WithSchema(authServiceMethods.ByName("GetAccountStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceApproveDeviceHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceApproveDeviceProcedure,
+		svc.ApproveDevice,
+		connect.WithSchema(authServiceMethods.ByName("ApproveDevice")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetRecoveryHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceSetRecoveryProcedure,
+		svc.SetRecovery,
+		connect.WithSchema(authServiceMethods.ByName("SetRecovery")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceRecoverHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceRecoverProcedure,
+		svc.Recover,
+		connect.WithSchema(authServiceMethods.ByName("Recover")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSearchUsersHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceSearchUsersProcedure,
+		svc.SearchUsers,
+		connect.WithSchema(authServiceMethods.ByName("SearchUsers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.auth.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceRegisterProcedure:
@@ -275,6 +425,16 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceLookupUserHandler.ServeHTTP(w, r)
 		case AuthServiceRefreshTokenProcedure:
 			authServiceRefreshTokenHandler.ServeHTTP(w, r)
+		case AuthServiceGetAccountStatusProcedure:
+			authServiceGetAccountStatusHandler.ServeHTTP(w, r)
+		case AuthServiceApproveDeviceProcedure:
+			authServiceApproveDeviceHandler.ServeHTTP(w, r)
+		case AuthServiceSetRecoveryProcedure:
+			authServiceSetRecoveryHandler.ServeHTTP(w, r)
+		case AuthServiceRecoverProcedure:
+			authServiceRecoverHandler.ServeHTTP(w, r)
+		case AuthServiceSearchUsersProcedure:
+			authServiceSearchUsersHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -310,4 +470,24 @@ func (UnimplementedAuthServiceHandler) LookupUser(context.Context, *v1.LookupUse
 
 func (UnimplementedAuthServiceHandler) RefreshToken(context.Context, *v1.RefreshTokenRequest) (*v1.RefreshTokenResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.RefreshToken is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetAccountStatus(context.Context, *v1.GetAccountStatusRequest) (*v1.GetAccountStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.GetAccountStatus is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) ApproveDevice(context.Context, *v1.ApproveDeviceRequest) (*v1.ApproveDeviceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.ApproveDevice is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetRecovery(context.Context, *v1.SetRecoveryRequest) (*v1.SetRecoveryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.SetRecovery is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) Recover(context.Context, *v1.RecoverRequest) (*v1.RecoverResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.Recover is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SearchUsers(context.Context, *v1.SearchUsersRequest) (*v1.SearchUsersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.SearchUsers is not implemented"))
 }

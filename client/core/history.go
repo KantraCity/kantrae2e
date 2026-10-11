@@ -13,7 +13,7 @@ import (
 )
 
 // historyChunk is the plaintext of one backup chunk. It is encrypted with
-// the history key (Argon2id of the seed phrase), never with MLS secrets:
+// the account's random history key (see linking.go), never with MLS secrets:
 // MLS forward secrecy makes old epoch keys unrecoverable by design.
 type historyChunk struct {
 	V        int               `json:"v"`
@@ -141,7 +141,10 @@ func (c *Client) RestoreHistory(ctx context.Context) (int, error) {
 		}
 		plain, err := crypto.Open(key, r.Data, []byte(historyAD))
 		if err != nil {
-			return total, fmt.Errorf("chunk %s: cannot decrypt (wrong seed phrase?)", e.ChunkHash)
+			// Written under an older history key (accounts from before
+			// device linking): not readable, skip it.
+			c.logf("history chunk %s: cannot decrypt, skipped", e.ChunkHash)
+			continue
 		}
 		var chunk historyChunk
 		if err := json.Unmarshal(plain, &chunk); err != nil {

@@ -141,6 +141,13 @@ func TestRevokedDevicesKeyPackagesHidden(t *testing.T) {
 		}
 	}
 	devices.Revoke(laptop)
+	// A third, pending device may publish but is not handed out.
+	pendingDev := uuid.NewString()
+	devices.SetPending(pendingDev, true)
+	if _, err := client(t, srv.URL, srv.Client(), bob, pendingDev).PublishKeyPackages(ctx,
+		&directoryv1.PublishKeyPackagesRequest{KeyPackages: [][]byte{[]byte(pendingDev)}}); err != nil {
+		t.Fatalf("pending publish: %v", err)
+	}
 	alice := client(t, srv.URL, srv.Client(), uuid.NewString(), "")
 	r, err := alice.FetchUserKeyPackages(ctx, &directoryv1.FetchUserKeyPackagesRequest{UserId: bob})
 	if err != nil || len(r.KeyPackages) != 1 || r.KeyPackages[0].DeviceId != phone {

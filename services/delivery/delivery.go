@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -34,6 +35,9 @@ func Migrations() fs.FS {
 }
 
 const Schema = "delivery"
+
+// SelfGroupPrefix marks a user's own-devices group (see client/core).
+const SelfGroupPrefix = "self-"
 
 const (
 	MaxPayload    = 1 << 20
@@ -63,8 +67,15 @@ func (s *Service) WithDevices(ch devicestatus.Checker) *Service {
 
 // Handler mounts the connect service.
 func (s *Service) Handler() (string, http.Handler) {
+	// A pending device (not yet approved by another device of its account)
+	// may only ask to join its account's self-group and receive the result.
 	return deliveryv1connect.NewDeliveryServiceHandler(s,
-		connect.WithInterceptors(authmiddleware.Interceptor(s.secret), devicestatus.Interceptor(s.devices)))
+		connect.WithInterceptors(authmiddleware.Interceptor(s.secret), devicestatus.Interceptor(s.devices,
+			deliveryv1connect.DeliveryServiceRequestJoinProcedure,
+			deliveryv1connect.DeliveryServiceFetchPendingProcedure,
+			deliveryv1connect.DeliveryServiceAckProcedure,
+			deliveryv1connect.DeliveryServiceFetchWelcomeProcedure,
+		)))
 }
 
 func errf(code connect.Code, format string, args ...any) error {
@@ -573,6 +584,13 @@ func (s *Service) RequestJoin(ctx context.Context, req *deliveryv1.RequestJoinRe
 	}
 	if len(req.KeyPackage) == 0 || len(req.KeyPackage) > MaxPayload {
 		return nil, errf(connect.CodeInvalidArgument, "bad key package size")
+	}
+	// Pending devices may only knock on their own account's self-group
+	// (where only their own devices can approve them).
+	if approved, err := devicestatus.IsApproved(ctx, s.devices, did); err != nil {
+		return nil, err
+	} else if !approved && !strings.HasPrefix(req.GroupId, SelfGroupPrefix) {
+		return nil, errf(connect.CodePermissionDenied, "device not approved yet")
 	}
 	var recipients []string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {

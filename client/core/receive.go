@@ -22,18 +22,46 @@ func (c *Client) Sync(ctx context.Context) error {
 		return err
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if err := c.requireLogin(); err != nil {
+		c.mu.Unlock()
 		return err
 	}
-	if err := c.syncLocked(ctx); err != nil {
+	err := c.syncLocked(ctx)
+	c.mu.Unlock()
+	if err != nil {
 		return err
 	}
-	// Pick up groups the account is in but this device is not (yet).
+	c.maintain(ctx)
+	return nil
+}
+
+// maintain brings this device's memberships up to date: an approved device
+// joins the self-group and every group of its account it is not in yet; a
+// pending one repeats its request for approval now and then.
+func (c *Client) maintain(ctx context.Context) {
+	ok, err := c.IsApproved(ctx)
+	if err != nil {
+		c.logf("device status: %v", err)
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.requireLogin() != nil {
+		return
+	}
+	if !ok {
+		if err := c.requestLinkLocked(ctx, false); err != nil {
+			c.logf("link request: %v", err)
+		}
+		return
+	}
+	if err := c.ensureSelfGroupLocked(ctx); err != nil {
+		c.logf("self group: %v", err)
+	}
 	if _, _, err := c.joinMyGroupsLocked(ctx); err != nil {
 		c.logf("join groups: %v", err)
 	}
-	return nil
+	c.flushDeferred()
 }
 
 func (c *Client) syncLocked(ctx context.Context) error {
@@ -81,16 +109,20 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 		}
 		epoch, members, _ := c.m.GroupInfo(gid)
 		seen := c.seenWrites(string(gid), members, e.CreatedAt*1000, "")
+		peer := ""
+		if GroupKind(string(gid)) == KindDirect {
+			peer = c.directPeer(members)
+		}
 		writes = func(tx *store.Tx) error {
 			if err := seen(tx); err != nil {
 				return err
 			}
-			return tx.UpsertGroup(store.Group{ID: string(gid), Epoch: epoch, Active: true, CreatedAt: time.Now().Unix()})
+			return tx.UpsertGroup(store.Group{ID: string(gid), Peer: peer, Epoch: epoch, Active: true, CreatedAt: time.Now().Unix()})
 		}
 		events = append(events, Event{Type: EventGroupJoined, GroupID: string(gid)})
 		observed = string(gid)
 		// Joined as an additional device of this account: fetch what we missed.
-		if c.otherDevicesOf(members, c.acct.UserID, c.acct.DeviceID) {
+		if GroupKind(string(gid)) != KindSelf && c.otherDevicesOf(members, c.acct.UserID, c.acct.DeviceID) {
 			c.deferHistoryRequestLocked(string(gid))
 		}
 		// A KeyPackage was consumed; top up in the background.
@@ -133,6 +165,9 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 					events = append(events, Event{Type: EventSecurity, GroupID: e.GroupId,
 						Err: errors.New("a device of a user that was not in the group joined by itself; removing it")})
 				}
+				if GroupKind(e.GroupId) == KindSelf {
+					c.dropResolvedLinksLocked(members)
+				}
 				seen := c.seenWrites(e.GroupId, members, e.CreatedAt*1000, skip)
 				writes = func(tx *store.Tx) error {
 					if err := seen(tx); err != nil {
@@ -158,6 +193,15 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 					writes, histEv = c.handleHistoryShareLocked(ctx, e.GroupId, uid, pl.HistShare)
 				}
 				break
+			}
+			if pl.Type == "account_key" {
+				if pl.AccountKey != nil {
+					writes = c.handleAccountKeyLocked(ctx, e.GroupId, uid, pl.AccountKey)
+				}
+				break
+			}
+			if GroupKind(e.GroupId) == KindSelf {
+				break // nothing else is expected in the self-group
 			}
 			if pl.Type == "meta" {
 				if pl.Meta != nil {
@@ -259,9 +303,7 @@ func (c *Client) listenOnce(ctx context.Context) error {
 		if err := c.EnsureKeyPackages(ctx); err != nil {
 			c.logf("key package refill: %v", err)
 		}
-		if _, _, err := c.JoinMyGroups(ctx); err != nil {
-			c.logf("join groups: %v", err)
-		}
+		c.maintain(ctx)
 	}()
 	for {
 		_, data, err := conn.Read(ctx)

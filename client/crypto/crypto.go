@@ -1,6 +1,7 @@
 // Package crypto holds the client's local envelope crypto, independent of
-// MLS epochs: the history key (seed phrase -> Argon2id) and per-file media
-// keys. MLS epoch secrets are never used here and vice versa.
+// MLS epochs: the history key (random, shared between the account's devices
+// and optionally wrapped with a recovery phrase) and per-file media keys.
+// MLS epoch secrets are never used here and vice versa.
 package crypto
 
 import (
@@ -15,11 +16,11 @@ import (
 
 const KeySize = chacha20poly1305.KeySize
 
-var ErrBadPhrase = errors.New("invalid seed phrase")
+var ErrBadPhrase = errors.New("invalid recovery phrase")
 
-// NewSeedPhrase returns a fresh 24-word BIP-39 mnemonic (256 bits).
-func NewSeedPhrase() (string, error) {
-	entropy, err := bip39.NewEntropy(256)
+// NewRecoveryPhrase returns a fresh 12-word BIP-39 mnemonic (128 bits).
+func NewRecoveryPhrase() (string, error) {
+	entropy, err := bip39.NewEntropy(128)
 	if err != nil {
 		return "", err
 	}
@@ -38,15 +39,17 @@ const (
 	argonThreads = 4
 )
 
-// HistoryKey derives the history backup key from the seed phrase. The salt
-// binds the key to the account, so equal phrases of different users differ.
-func HistoryKey(phrase, userID string) ([]byte, error) {
+// RecoveryKeys derives, from the recovery phrase, a key that wraps the
+// history key and an independent verifier that proves knowledge of the
+// phrase to the server. The salt binds both to the account.
+func RecoveryKeys(phrase, userID string) (wrapKey, verifier []byte, err error) {
 	phrase = NormalizePhrase(phrase)
 	if !bip39.IsMnemonicValid(phrase) {
-		return nil, ErrBadPhrase
+		return nil, nil, ErrBadPhrase
 	}
-	salt := []byte("kantra/history-key/v1/" + userID)
-	return argon2.IDKey([]byte(phrase), salt, argonTime, argonMemory, argonThreads, KeySize), nil
+	salt := []byte("kantra/recovery/v1/" + userID)
+	k := argon2.IDKey([]byte(phrase), salt, argonTime, argonMemory, argonThreads, 2*KeySize)
+	return k[:KeySize], k[KeySize:], nil
 }
 
 // NewKey returns a random symmetric key (media keys).

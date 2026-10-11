@@ -10,8 +10,8 @@ package core
 //     in the group before.
 //  2. Fallback when no current GroupInfo exists: the device sends a
 //     JOIN_REQUEST with a fresh KeyPackage and any online member adds it.
-//  3. History: the seed-phrase backup is uploaded continuously (see
-//     scheduleBackup) and restored on login. Messages that are newer than the
+//  3. History: the backup (encrypted with the account's history key) is uploaded continuously (see
+//     scheduleBackup) and restored once the device is approved. Messages that are newer than the
 //     backup are re-sent by an online member ("history sharing") inside the
 //     current MLS epoch, but only from the time that member first saw the
 //     requesting user in the group, so new users never see older history.
@@ -202,7 +202,11 @@ func (c *Client) joinExternalLocked(ctx context.Context, groupID string) error {
 					return err
 				}
 			}
-			return tx.UpsertGroup(store.Group{ID: groupID, Epoch: gi.Epoch + 1, Active: true, CreatedAt: time.Now().Unix()})
+			g := store.Group{ID: groupID, Epoch: gi.Epoch + 1, Active: true, CreatedAt: time.Now().Unix()}
+			if GroupKind(groupID) == KindDirect {
+				g.Peer = c.directPeer(members)
+			}
+			return tx.UpsertGroup(g)
 		})
 		if err != nil {
 			return err
@@ -212,7 +216,9 @@ func (c *Client) joinExternalLocked(ctx context.Context, groupID string) error {
 		for _, e := range events {
 			c.emit(e)
 		}
-		c.deferHistoryRequestLocked(groupID)
+		if GroupKind(groupID) != KindSelf {
+			c.deferHistoryRequestLocked(groupID)
+		}
 		return nil
 	}
 }
@@ -236,6 +242,10 @@ func (c *Client) requestJoinLocked(ctx context.Context, groupID string) error {
 func (c *Client) handleJoinRequestLocked(e *deliveryv1.Envelope) {
 	uid, did := e.SenderUserId, e.SenderDeviceId
 	if did == c.acct.DeviceID || uid == "" {
+		return
+	}
+	if GroupKind(e.GroupId) == KindSelf {
+		c.handleSelfJoinRequestLocked(e.GroupId, uid, did, e.Payload) // needs the user's approval
 		return
 	}
 	want := identity(uid, did)

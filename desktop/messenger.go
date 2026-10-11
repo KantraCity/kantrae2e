@@ -17,9 +17,11 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/kantracity/kantrae2e/client/core"
+	"github.com/kantracity/kantrae2e/client/crypto"
 	"github.com/kantracity/kantrae2e/client/store"
 )
 
@@ -34,6 +36,8 @@ type UIEvent struct {
 	Message *Message `json:"message,omitempty"`
 	Detail  string   `json:"detail,omitempty"`
 	Count   int      `json:"count,omitempty"`
+	// DeviceID for link_request / link_resolved.
+	DeviceID string `json:"deviceId,omitempty"`
 }
 
 // Account is the logged-in identity of this device.
@@ -49,6 +53,23 @@ type State struct {
 	Account   *Account `json:"account"`
 	Online    bool     `json:"online"`
 	WebMode   bool     `json:"webMode"`
+	// Pending: this device waits for approval; show LinkCode.
+	Pending  bool   `json:"pending"`
+	LinkCode string `json:"linkCode,omitempty"`
+}
+
+// LinkRequest is a new device of the account waiting for approval.
+type LinkRequest struct {
+	DeviceID string `json:"deviceId"`
+	Name     string `json:"name"`
+	Code     string `json:"code"`
+	At       int64  `json:"at"`
+}
+
+// UserHit is a global search result.
+type UserHit struct {
+	UserID   string `json:"userId"`
+	Username string `json:"username"`
 }
 
 type FileInfo struct {
@@ -72,7 +93,12 @@ type Message struct {
 }
 
 type Chat struct {
-	ID        string   `json:"id"`
+	ID string `json:"id"`
+	// Kind: "direct" (one person, found by username) or "group".
+	Kind string `json:"kind"`
+	// Peer of a direct chat (username / user id).
+	Peer      string   `json:"peer,omitempty"`
+	PeerID    string   `json:"peerId,omitempty"`
 	Name      string   `json:"name"`
 	Active    bool     `json:"active"`
 	Last      *Message `json:"last,omitempty"`
@@ -104,9 +130,11 @@ type Device struct {
 }
 
 type LoginResult struct {
-	Restored  int `json:"restored"`
-	Joined    int `json:"joined"`
-	Requested int `json:"requested"`
+	Pending   bool   `json:"pending"`
+	Code      string `json:"code,omitempty"`
+	Restored  int    `json:"restored"`
+	Joined    int    `json:"joined"`
+	Requested int    `json:"requested"`
 }
 
 type FileData struct {
@@ -229,10 +257,25 @@ func (m *Messenger) startListening() {
 		_ = c.Sync(ctx)
 		_ = c.Listen(ctx)
 	}()
+	// A pending device keeps asking for approval and notices it even when
+	// the approving device could not send the history key.
+	go func() {
+		for {
+			if ok, err := c.IsApproved(ctx); err == nil && ok {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(15 * time.Second):
+			}
+			_ = c.Sync(ctx)
+		}
+	}()
 }
 
 func (m *Messenger) onCoreEvent(e core.Event) {
-	ev := UIEvent{Type: string(e.Type), ChatID: e.GroupID, Detail: e.Detail, Count: e.Count}
+	ev := UIEvent{Type: string(e.Type), ChatID: e.GroupID, Detail: e.Detail, Count: e.Count, DeviceID: e.DeviceID}
 	if e.Err != nil && ev.Detail == "" {
 		ev.Detail = e.Err.Error()
 	}
@@ -280,11 +323,19 @@ func (m *Messenger) toMessage(c *core.Client, s *store.Message) *Message {
 // GetState returns what the UI needs on start.
 func (m *Messenger) GetState() State {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st := State{ServerURL: m.server, Online: m.online, WebMode: m.web}
-	if m.c != nil {
-		if a := m.c.Account(); a != nil {
-			st.Account = &Account{Username: a.Username, UserID: a.UserID, DeviceID: a.DeviceID}
+	c := m.c
+	m.mu.Unlock()
+	if c == nil {
+		return st
+	}
+	if a := c.Account(); a != nil {
+		st.Account = &Account{Username: a.Username, UserID: a.UserID, DeviceID: a.DeviceID}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if ok, err := c.IsApproved(ctx); err == nil && !ok {
+			st.Pending = true
+			st.LinkCode, _ = c.MyLinkCode(ctx)
 		}
 	}
 	return st
@@ -310,32 +361,141 @@ func (m *Messenger) prepare(server string) (*core.Client, error) {
 	return m.client()
 }
 
-// Register creates an account and returns the seed phrase (shown once).
-func (m *Messenger) Register(server, username, password, deviceName string) (string, error) {
+// Register creates an account with this device.
+func (m *Messenger) Register(server, username, password, deviceName string) error {
 	c, err := m.prepare(server)
 	if err != nil {
-		return "", err
+		return err
 	}
-	phrase, err := c.Register(context.Background(), username, password, orDefault(deviceName))
-	if err != nil {
-		return "", err
+	if err := c.Register(context.Background(), username, password, orDefault(deviceName)); err != nil {
+		return err
 	}
 	m.startListening()
-	return phrase, nil
+	return nil
 }
 
-// Login adds this app as a new device of an existing account.
-func (m *Messenger) Login(server, username, password, deviceName, seedPhrase string) (*LoginResult, error) {
+// Login adds this app as a new device of an existing account. Usually the
+// result is Pending: approve it on another device (same Code) or Recover.
+func (m *Messenger) Login(server, username, password, deviceName string) (*LoginResult, error) {
 	c, err := m.prepare(server)
 	if err != nil {
 		return nil, err
 	}
-	r, err := c.Login(context.Background(), username, password, orDefault(deviceName), seedPhrase)
+	r, err := c.Login(context.Background(), username, password, orDefault(deviceName))
 	if r == nil {
 		return nil, err
 	}
 	m.startListening()
-	return &LoginResult{Restored: r.Restored, Joined: r.Joined, Requested: r.Requested}, err
+	return toLoginResult(r), err
+}
+
+func toLoginResult(r *core.LoginResult) *LoginResult {
+	return &LoginResult{Pending: r.Pending, Code: r.Code, Restored: r.Restored, Joined: r.Joined, Requested: r.Requested}
+}
+
+// Recover approves this new device with the recovery phrase.
+func (m *Messenger) Recover(phrase string) (*LoginResult, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return nil, err
+	}
+	r, err := c.Recover(context.Background(), phrase)
+	if errors.Is(err, crypto.ErrBadPhrase) {
+		return nil, errors.New("неверная фраза: проверьте все 12 слов")
+	}
+	if errors.Is(err, core.ErrNoRecovery) {
+		return nil, errors.New("для аккаунта не создан ключ восстановления — подтвердите вход с другого устройства")
+	}
+	if connect.CodeOf(err) == connect.CodePermissionDenied {
+		return nil, errors.New("фраза не подходит к этому аккаунту")
+	}
+	if r == nil {
+		return nil, err
+	}
+	m.emit(UIEvent{Type: string(core.EventApproved), Count: r.Restored})
+	return toLoginResult(r), err
+}
+
+// RequestLink asks the other devices again to approve this one.
+func (m *Messenger) RequestLink() error {
+	c, err := m.loggedIn()
+	if err != nil {
+		return err
+	}
+	return c.RequestLink(context.Background())
+}
+
+// CancelPending forgets this device's local profile (only while it is still
+// waiting for approval: nothing is lost).
+func (m *Messenger) CancelPending() error {
+	c, err := m.loggedIn()
+	if err != nil {
+		return err
+	}
+	if ok, err := c.IsApproved(context.Background()); err != nil || ok {
+		return errors.New("устройство уже подтверждено")
+	}
+	m.mu.Lock()
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	m.c = nil
+	m.mu.Unlock()
+	c.Close()
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		_ = os.Remove(m.dbPath + suffix)
+	}
+	return nil
+}
+
+// ---- linked devices & recovery ------------------------------------------------
+
+func (m *Messenger) PendingLinks() ([]LinkRequest, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return nil, err
+	}
+	ls := c.PendingLinks(context.Background())
+	out := make([]LinkRequest, 0, len(ls))
+	for _, l := range ls {
+		out = append(out, LinkRequest{DeviceID: l.DeviceID, Name: l.DeviceName, Code: l.Code, At: l.At.UnixMilli()})
+	}
+	return out, nil
+}
+
+func (m *Messenger) ApproveLink(deviceID string) error {
+	c, err := m.loggedIn()
+	if err != nil {
+		return err
+	}
+	return c.ApproveLink(context.Background(), deviceID)
+}
+
+func (m *Messenger) RejectLink(deviceID string) error {
+	c, err := m.loggedIn()
+	if err != nil {
+		return err
+	}
+	return c.RejectLink(context.Background(), deviceID)
+}
+
+// HasRecovery reports whether a recovery phrase exists for the account.
+func (m *Messenger) HasRecovery() (bool, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return false, err
+	}
+	return c.HasRecovery(context.Background())
+}
+
+// SetupRecovery creates a new recovery phrase (replacing an older one).
+func (m *Messenger) SetupRecovery() (string, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return "", err
+	}
+	return c.SetupRecovery(context.Background())
 }
 
 // Relogin renews the session of this device after it expired.
@@ -371,10 +531,7 @@ func (m *Messenger) Chats() ([]Chat, error) {
 	}
 	out := make([]Chat, 0, len(gs))
 	for _, g := range gs {
-		ch := Chat{ID: g.ID, Name: g.Name, Active: g.Active, UpdatedAt: g.CreatedAt * 1000}
-		if ch.Name == "" {
-			ch.Name = "Группа " + g.ID[:4]
-		}
+		ch := m.toChat(c, g)
 		if ms, err := c.Messages(ctx, g.ID, 1); err == nil && len(ms) == 1 {
 			ch.Last = m.toMessage(c, &ms[0])
 			ch.UpdatedAt = ms[0].SentAt
@@ -383,6 +540,73 @@ func (m *Messenger) Chats() ([]Chat, error) {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt > out[j].UpdatedAt })
 	return out, nil
+}
+
+func (m *Messenger) toChat(c *core.Client, g store.Group) Chat {
+	ch := Chat{ID: g.ID, Kind: core.GroupKind(g.ID), Name: g.Name, Active: g.Active, UpdatedAt: g.CreatedAt * 1000}
+	if ch.Kind == core.KindDirect && g.Peer != "" {
+		ch.PeerID = g.Peer
+		ch.Peer = c.Username(context.Background(), g.Peer)
+		ch.Name = ch.Peer
+	}
+	if ch.Name == "" {
+		ch.Name = "Группа " + g.ID[:4]
+	}
+	return ch
+}
+
+// Chat returns one chat.
+func (m *Messenger) Chat(chatID string) (*Chat, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return nil, err
+	}
+	g, err := c.ResolveGroup(context.Background(), chatID)
+	if err != nil {
+		return nil, err
+	}
+	ch := m.toChat(c, *g)
+	return &ch, nil
+}
+
+// SearchUsers finds people by username (global search, like in Telegram).
+func (m *Messenger) SearchUsers(query string) ([]UserHit, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return nil, err
+	}
+	query = strings.TrimPrefix(strings.TrimSpace(query), "@")
+	if len([]rune(query)) < 2 {
+		return []UserHit{}, nil
+	}
+	us, err := c.SearchUsers(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	me := c.Account()
+	out := make([]UserHit, 0, len(us))
+	for _, u := range us {
+		if u.UserID != me.UserID {
+			out = append(out, UserHit{UserID: u.UserID, Username: u.Username})
+		}
+	}
+	return out, nil
+}
+
+// OpenDirect opens (or starts) the direct chat with a user.
+func (m *Messenger) OpenDirect(username string) (*Chat, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.OpenDirect(context.Background(), username)
+	if errors.Is(err, core.ErrNoKeyPackages) {
+		return nil, errors.New("пользователь ещё ни разу не был в сети — написать ему пока нельзя")
+	}
+	if err != nil && id == "" {
+		return nil, friendly(err)
+	}
+	return m.Chat(id)
 }
 
 func (m *Messenger) Messages(chatID string, limit int) ([]Message, error) {
@@ -404,7 +628,8 @@ func (m *Messenger) Messages(chatID string, limit int) ([]Message, error) {
 	return out, nil
 }
 
-func (m *Messenger) CreateChat(name string, usernames []string) (string, error) {
+// CreateGroup creates a group chat with the given members.
+func (m *Messenger) CreateGroup(name string, usernames []string) (string, error) {
 	c, err := m.loggedIn()
 	if err != nil {
 		return "", err
@@ -555,6 +780,10 @@ func friendly(err error) error {
 	switch {
 	case errors.Is(err, core.ErrKeyConflict):
 		return errors.New("отправка заблокирована: у участника сменился ключ — сверьте отпечатки в информации о группе")
+	case errors.Is(err, core.ErrPendingApproval):
+		return errors.New("устройство ещё не подтверждено")
+	case errors.Is(err, core.ErrDirectInvite):
+		return errors.New("в личный чат нельзя добавлять участников — создайте группу")
 	case errors.Is(err, core.ErrNotMember):
 		return errors.New("вы больше не участник этой группы")
 	}

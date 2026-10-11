@@ -15,6 +15,21 @@ service AuthService {
   rpc LookupUser(LookupUserRequest) returns (LookupUserResponse) {}
   // Exchanges a valid token for a fresh one. Fails for revoked devices.
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {}
+
+  // --- Device linking and recovery ---
+  // Status of the calling device and account.
+  rpc GetAccountStatus(GetAccountStatusRequest) returns (GetAccountStatusResponse) {}
+  // An approved device approves a pending device of the same account.
+  rpc ApproveDevice(ApproveDeviceRequest) returns (ApproveDeviceResponse) {}
+  // Stores the recovery verifier and the history key wrapped with the
+  // recovery key (both computed on the client; the server never sees the
+  // recovery key or the history key). Approved devices only.
+  rpc SetRecovery(SetRecoveryRequest) returns (SetRecoveryResponse) {}
+  // Proves knowledge of the recovery key: approves the calling device and
+  // returns the wrapped history key.
+  rpc Recover(RecoverRequest) returns (RecoverResponse) {}
+  // Username prefix search (to start a direct chat).
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse) {}
 }
 
 message RegisterRequest {
@@ -57,6 +72,8 @@ message Device {
   int64 created_at = 3;
   // 0 when active.
   int64 revoked_at = 4;
+  // Pending devices must be approved by another device or the recovery key.
+  bool approved = 5;
 }
 
 message ListDevicesRequest {}
@@ -86,4 +103,45 @@ message RefreshTokenRequest {}
 
 message RefreshTokenResponse {
   string token = 1;
+}
+
+message GetAccountStatusRequest {}
+
+message GetAccountStatusResponse {
+  bool device_approved = 1;
+  bool has_recovery = 2;
+}
+
+message ApproveDeviceRequest {
+  string device_id = 1;
+}
+
+message ApproveDeviceResponse {}
+
+message SetRecoveryRequest {
+  bytes verifier = 1;
+  bytes wrapped_key = 2;
+}
+
+message SetRecoveryResponse {}
+
+message RecoverRequest {
+  bytes verifier = 1;
+}
+
+message RecoverResponse {
+  bytes wrapped_key = 1;
+}
+
+message SearchUsersRequest {
+  string query = 1;
+}
+
+message User {
+  string user_id = 1;
+  string username = 2;
+}
+
+message SearchUsersResponse {
+  repeated User users = 1;
 }

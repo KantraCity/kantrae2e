@@ -54,26 +54,19 @@ func (s *Service) WithDevices(ch devicestatus.Checker) *Service {
 }
 
 func (s *Service) Handler() (string, http.Handler) {
+	// Pending devices may stock up KeyPackages; they are only handed out
+	// once the device is approved.
 	return directoryv1connect.NewDirectoryServiceHandler(s,
-		connect.WithInterceptors(authmiddleware.Interceptor(s.secret), devicestatus.Interceptor(s.devices)))
+		connect.WithInterceptors(authmiddleware.Interceptor(s.secret), devicestatus.Interceptor(s.devices,
+			directoryv1connect.DirectoryServicePublishKeyPackagesProcedure,
+			directoryv1connect.DirectoryServiceRefillKeyPackagesProcedure,
+			directoryv1connect.DirectoryServiceCountKeyPackagesProcedure,
+		)))
 }
 
-// activeDevices filters out revoked devices.
+// activeDevices keeps approved, non-revoked devices only.
 func (s *Service) activeDevices(ctx context.Context, ids []string) ([]string, error) {
-	if s.devices == nil || len(ids) == 0 {
-		return ids, nil
-	}
-	st, err := s.devices.Active(ctx, ids...)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
-	}
-	var out []string
-	for _, id := range ids {
-		if st[id] {
-			out = append(out, id)
-		}
-	}
-	return out, nil
+	return devicestatus.Filter(ctx, s.devices, ids, func(st devicestatus.State) bool { return st.Approved })
 }
 
 func (s *Service) publish(ctx context.Context, kps [][]byte) (int64, error) {

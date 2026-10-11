@@ -5,7 +5,8 @@ package kantra.auth.v1;
 // Service-to-service API. Not routed by the gateway; authenticated with the
 // shared INTERNAL_TOKEN ("Authorization: Internal <token>").
 service AuthInternalService {
-  // Which of the given devices exist and are not revoked.
+  // Which of the given devices exist and are not revoked, and which of
+  // those are approved.
   rpc DeviceStatus(DeviceStatusRequest) returns (DeviceStatusResponse) {}
 }
 
@@ -15,4 +16,6 @@ message DeviceStatusRequest {
 
 message DeviceStatusResponse {
   repeated string active_device_ids = 1;
+  // Subset of active devices that have been approved (not pending).
+  repeated string approved_device_ids = 2;
 }

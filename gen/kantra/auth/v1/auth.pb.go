@@ -343,7 +343,9 @@ type Device struct {
 	DeviceName string                 `protobuf:"bytes,2,opt,name=device_name,json=deviceName,proto3" json:"device_name,omitempty"`
 	CreatedAt  int64                  `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// 0 when active.
-	RevokedAt     int64 `protobuf:"varint,4,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	RevokedAt int64 `protobuf:"varint,4,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	// Pending devices must be approved by another device or the recovery key.
+	Approved      bool `protobuf:"varint,5,opt,name=approved,proto3" json:"approved,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -404,6 +406,13 @@ func (x *Device) GetRevokedAt() int64 {
 		return x.RevokedAt
 	}
 	return 0
+}
+
+func (x *Device) GetApproved() bool {
+	if x != nil {
+		return x.Approved
+	}
+	return false
 }
 
 type ListDevicesRequest struct {
@@ -751,6 +760,490 @@ func (x *RefreshTokenResponse) GetToken() string {
 	return ""
 }
 
+type GetAccountStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAccountStatusRequest) Reset() {
+	*x = GetAccountStatusRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAccountStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAccountStatusRequest) ProtoMessage() {}
+
+func (x *GetAccountStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAccountStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetAccountStatusRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{15}
+}
+
+type GetAccountStatusResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DeviceApproved bool                   `protobuf:"varint,1,opt,name=device_approved,json=deviceApproved,proto3" json:"device_approved,omitempty"`
+	HasRecovery    bool                   `protobuf:"varint,2,opt,name=has_recovery,json=hasRecovery,proto3" json:"has_recovery,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetAccountStatusResponse) Reset() {
+	*x = GetAccountStatusResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAccountStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAccountStatusResponse) ProtoMessage() {}
+
+func (x *GetAccountStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAccountStatusResponse.ProtoReflect.Descriptor instead.
+func (*GetAccountStatusResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GetAccountStatusResponse) GetDeviceApproved() bool {
+	if x != nil {
+		return x.DeviceApproved
+	}
+	return false
+}
+
+func (x *GetAccountStatusResponse) GetHasRecovery() bool {
+	if x != nil {
+		return x.HasRecovery
+	}
+	return false
+}
+
+type ApproveDeviceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveDeviceRequest) Reset() {
+	*x = ApproveDeviceRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveDeviceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveDeviceRequest) ProtoMessage() {}
+
+func (x *ApproveDeviceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveDeviceRequest.ProtoReflect.Descriptor instead.
+func (*ApproveDeviceRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ApproveDeviceRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+type ApproveDeviceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveDeviceResponse) Reset() {
+	*x = ApproveDeviceResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveDeviceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveDeviceResponse) ProtoMessage() {}
+
+func (x *ApproveDeviceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveDeviceResponse.ProtoReflect.Descriptor instead.
+func (*ApproveDeviceResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{18}
+}
+
+type SetRecoveryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Verifier      []byte                 `protobuf:"bytes,1,opt,name=verifier,proto3" json:"verifier,omitempty"`
+	WrappedKey    []byte                 `protobuf:"bytes,2,opt,name=wrapped_key,json=wrappedKey,proto3" json:"wrapped_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetRecoveryRequest) Reset() {
+	*x = SetRecoveryRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetRecoveryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetRecoveryRequest) ProtoMessage() {}
+
+func (x *SetRecoveryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetRecoveryRequest.ProtoReflect.Descriptor instead.
+func (*SetRecoveryRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SetRecoveryRequest) GetVerifier() []byte {
+	if x != nil {
+		return x.Verifier
+	}
+	return nil
+}
+
+func (x *SetRecoveryRequest) GetWrappedKey() []byte {
+	if x != nil {
+		return x.WrappedKey
+	}
+	return nil
+}
+
+type SetRecoveryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetRecoveryResponse) Reset() {
+	*x = SetRecoveryResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetRecoveryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetRecoveryResponse) ProtoMessage() {}
+
+func (x *SetRecoveryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetRecoveryResponse.ProtoReflect.Descriptor instead.
+func (*SetRecoveryResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{20}
+}
+
+type RecoverRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Verifier      []byte                 `protobuf:"bytes,1,opt,name=verifier,proto3" json:"verifier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecoverRequest) Reset() {
+	*x = RecoverRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecoverRequest) ProtoMessage() {}
+
+func (x *RecoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecoverRequest.ProtoReflect.Descriptor instead.
+func (*RecoverRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RecoverRequest) GetVerifier() []byte {
+	if x != nil {
+		return x.Verifier
+	}
+	return nil
+}
+
+type RecoverResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WrappedKey    []byte                 `protobuf:"bytes,1,opt,name=wrapped_key,json=wrappedKey,proto3" json:"wrapped_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecoverResponse) Reset() {
+	*x = RecoverResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecoverResponse) ProtoMessage() {}
+
+func (x *RecoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecoverResponse.ProtoReflect.Descriptor instead.
+func (*RecoverResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RecoverResponse) GetWrappedKey() []byte {
+	if x != nil {
+		return x.WrappedKey
+	}
+	return nil
+}
+
+type SearchUsersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchUsersRequest) Reset() {
+	*x = SearchUsersRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchUsersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchUsersRequest) ProtoMessage() {}
+
+func (x *SearchUsersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchUsersRequest.ProtoReflect.Descriptor instead.
+func (*SearchUsersRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SearchUsersRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+type User struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *User) Reset() {
+	*x = User{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *User) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*User) ProtoMessage() {}
+
+func (x *User) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use User.ProtoReflect.Descriptor instead.
+func (*User) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *User) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *User) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+type SearchUsersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Users         []*User                `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchUsersResponse) Reset() {
+	*x = SearchUsersResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchUsersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchUsersResponse) ProtoMessage() {}
+
+func (x *SearchUsersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchUsersResponse.ProtoReflect.Descriptor instead.
+func (*SearchUsersResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SearchUsersResponse) GetUsers() []*User {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
 var File_kantra_auth_v1_auth_proto protoreflect.FileDescriptor
 
 const file_kantra_auth_v1_auth_proto_rawDesc = "" +
@@ -774,7 +1267,7 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"deviceName\"K\n" +
 	"\x16RegisterDeviceResponse\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"w\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"\x93\x01\n" +
 	"\x06Device\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vdevice_name\x18\x02 \x01(\tR\n" +
@@ -782,7 +1275,8 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x03 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"revoked_at\x18\x04 \x01(\x03R\trevokedAt\"\x14\n" +
+	"revoked_at\x18\x04 \x01(\x03R\trevokedAt\x12\x1a\n" +
+	"\bapproved\x18\x05 \x01(\bR\bapproved\"\x14\n" +
 	"\x12ListDevicesRequest\"G\n" +
 	"\x13ListDevicesResponse\x120\n" +
 	"\adevices\x18\x01 \x03(\v2\x16.kantra.auth.v1.DeviceR\adevices\"2\n" +
@@ -797,7 +1291,31 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\busername\x18\x02 \x01(\tR\busername\"\x15\n" +
 	"\x13RefreshTokenRequest\",\n" +
 	"\x14RefreshTokenResponse\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token2\xf4\x04\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"\x19\n" +
+	"\x17GetAccountStatusRequest\"f\n" +
+	"\x18GetAccountStatusResponse\x12'\n" +
+	"\x0fdevice_approved\x18\x01 \x01(\bR\x0edeviceApproved\x12!\n" +
+	"\fhas_recovery\x18\x02 \x01(\bR\vhasRecovery\"3\n" +
+	"\x14ApproveDeviceRequest\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\"\x17\n" +
+	"\x15ApproveDeviceResponse\"Q\n" +
+	"\x12SetRecoveryRequest\x12\x1a\n" +
+	"\bverifier\x18\x01 \x01(\fR\bverifier\x12\x1f\n" +
+	"\vwrapped_key\x18\x02 \x01(\fR\n" +
+	"wrappedKey\"\x15\n" +
+	"\x13SetRecoveryResponse\",\n" +
+	"\x0eRecoverRequest\x12\x1a\n" +
+	"\bverifier\x18\x01 \x01(\fR\bverifier\"2\n" +
+	"\x0fRecoverResponse\x12\x1f\n" +
+	"\vwrapped_key\x18\x01 \x01(\fR\n" +
+	"wrappedKey\"*\n" +
+	"\x12SearchUsersRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\";\n" +
+	"\x04User\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\"A\n" +
+	"\x13SearchUsersResponse\x12*\n" +
+	"\x05users\x18\x01 \x03(\v2\x14.kantra.auth.v1.UserR\x05users2\xbf\b\n" +
 	"\vAuthService\x12O\n" +
 	"\bRegister\x12\x1f.kantra.auth.v1.RegisterRequest\x1a .kantra.auth.v1.RegisterResponse\"\x00\x12F\n" +
 	"\x05Login\x12\x1c.kantra.auth.v1.LoginRequest\x1a\x1d.kantra.auth.v1.LoginResponse\"\x00\x12a\n" +
@@ -806,7 +1324,12 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\fRevokeDevice\x12#.kantra.auth.v1.RevokeDeviceRequest\x1a$.kantra.auth.v1.RevokeDeviceResponse\"\x00\x12U\n" +
 	"\n" +
 	"LookupUser\x12!.kantra.auth.v1.LookupUserRequest\x1a\".kantra.auth.v1.LookupUserResponse\"\x00\x12[\n" +
-	"\fRefreshToken\x12#.kantra.auth.v1.RefreshTokenRequest\x1a$.kantra.auth.v1.RefreshTokenResponse\"\x00B\xb4\x01\n" +
+	"\fRefreshToken\x12#.kantra.auth.v1.RefreshTokenRequest\x1a$.kantra.auth.v1.RefreshTokenResponse\"\x00\x12g\n" +
+	"\x10GetAccountStatus\x12'.kantra.auth.v1.GetAccountStatusRequest\x1a(.kantra.auth.v1.GetAccountStatusResponse\"\x00\x12^\n" +
+	"\rApproveDevice\x12$.kantra.auth.v1.ApproveDeviceRequest\x1a%.kantra.auth.v1.ApproveDeviceResponse\"\x00\x12X\n" +
+	"\vSetRecovery\x12\".kantra.auth.v1.SetRecoveryRequest\x1a#.kantra.auth.v1.SetRecoveryResponse\"\x00\x12L\n" +
+	"\aRecover\x12\x1e.kantra.auth.v1.RecoverRequest\x1a\x1f.kantra.auth.v1.RecoverResponse\"\x00\x12X\n" +
+	"\vSearchUsers\x12\".kantra.auth.v1.SearchUsersRequest\x1a#.kantra.auth.v1.SearchUsersResponse\"\x00B\xb4\x01\n" +
 	"\x12com.kantra.auth.v1B\tAuthProtoP\x01Z9github.com/kantracity/kantrae2e/gen/kantra/auth/v1;authv1\xa2\x02\x03KAX\xaa\x02\x0eKantra.Auth.V1\xca\x02\x0eKantra\\Auth\\V1\xe2\x02\x1aKantra\\Auth\\V1\\GPBMetadata\xea\x02\x10Kantra::Auth::V1b\x06proto3"
 
 var (
@@ -821,45 +1344,67 @@ func file_kantra_auth_v1_auth_proto_rawDescGZIP() []byte {
 	return file_kantra_auth_v1_auth_proto_rawDescData
 }
 
-var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_kantra_auth_v1_auth_proto_goTypes = []any{
-	(*RegisterRequest)(nil),        // 0: kantra.auth.v1.RegisterRequest
-	(*RegisterResponse)(nil),       // 1: kantra.auth.v1.RegisterResponse
-	(*LoginRequest)(nil),           // 2: kantra.auth.v1.LoginRequest
-	(*LoginResponse)(nil),          // 3: kantra.auth.v1.LoginResponse
-	(*RegisterDeviceRequest)(nil),  // 4: kantra.auth.v1.RegisterDeviceRequest
-	(*RegisterDeviceResponse)(nil), // 5: kantra.auth.v1.RegisterDeviceResponse
-	(*Device)(nil),                 // 6: kantra.auth.v1.Device
-	(*ListDevicesRequest)(nil),     // 7: kantra.auth.v1.ListDevicesRequest
-	(*ListDevicesResponse)(nil),    // 8: kantra.auth.v1.ListDevicesResponse
-	(*RevokeDeviceRequest)(nil),    // 9: kantra.auth.v1.RevokeDeviceRequest
-	(*RevokeDeviceResponse)(nil),   // 10: kantra.auth.v1.RevokeDeviceResponse
-	(*LookupUserRequest)(nil),      // 11: kantra.auth.v1.LookupUserRequest
-	(*LookupUserResponse)(nil),     // 12: kantra.auth.v1.LookupUserResponse
-	(*RefreshTokenRequest)(nil),    // 13: kantra.auth.v1.RefreshTokenRequest
-	(*RefreshTokenResponse)(nil),   // 14: kantra.auth.v1.RefreshTokenResponse
+	(*RegisterRequest)(nil),          // 0: kantra.auth.v1.RegisterRequest
+	(*RegisterResponse)(nil),         // 1: kantra.auth.v1.RegisterResponse
+	(*LoginRequest)(nil),             // 2: kantra.auth.v1.LoginRequest
+	(*LoginResponse)(nil),            // 3: kantra.auth.v1.LoginResponse
+	(*RegisterDeviceRequest)(nil),    // 4: kantra.auth.v1.RegisterDeviceRequest
+	(*RegisterDeviceResponse)(nil),   // 5: kantra.auth.v1.RegisterDeviceResponse
+	(*Device)(nil),                   // 6: kantra.auth.v1.Device
+	(*ListDevicesRequest)(nil),       // 7: kantra.auth.v1.ListDevicesRequest
+	(*ListDevicesResponse)(nil),      // 8: kantra.auth.v1.ListDevicesResponse
+	(*RevokeDeviceRequest)(nil),      // 9: kantra.auth.v1.RevokeDeviceRequest
+	(*RevokeDeviceResponse)(nil),     // 10: kantra.auth.v1.RevokeDeviceResponse
+	(*LookupUserRequest)(nil),        // 11: kantra.auth.v1.LookupUserRequest
+	(*LookupUserResponse)(nil),       // 12: kantra.auth.v1.LookupUserResponse
+	(*RefreshTokenRequest)(nil),      // 13: kantra.auth.v1.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),     // 14: kantra.auth.v1.RefreshTokenResponse
+	(*GetAccountStatusRequest)(nil),  // 15: kantra.auth.v1.GetAccountStatusRequest
+	(*GetAccountStatusResponse)(nil), // 16: kantra.auth.v1.GetAccountStatusResponse
+	(*ApproveDeviceRequest)(nil),     // 17: kantra.auth.v1.ApproveDeviceRequest
+	(*ApproveDeviceResponse)(nil),    // 18: kantra.auth.v1.ApproveDeviceResponse
+	(*SetRecoveryRequest)(nil),       // 19: kantra.auth.v1.SetRecoveryRequest
+	(*SetRecoveryResponse)(nil),      // 20: kantra.auth.v1.SetRecoveryResponse
+	(*RecoverRequest)(nil),           // 21: kantra.auth.v1.RecoverRequest
+	(*RecoverResponse)(nil),          // 22: kantra.auth.v1.RecoverResponse
+	(*SearchUsersRequest)(nil),       // 23: kantra.auth.v1.SearchUsersRequest
+	(*User)(nil),                     // 24: kantra.auth.v1.User
+	(*SearchUsersResponse)(nil),      // 25: kantra.auth.v1.SearchUsersResponse
 }
 var file_kantra_auth_v1_auth_proto_depIdxs = []int32{
 	6,  // 0: kantra.auth.v1.ListDevicesResponse.devices:type_name -> kantra.auth.v1.Device
-	0,  // 1: kantra.auth.v1.AuthService.Register:input_type -> kantra.auth.v1.RegisterRequest
-	2,  // 2: kantra.auth.v1.AuthService.Login:input_type -> kantra.auth.v1.LoginRequest
-	4,  // 3: kantra.auth.v1.AuthService.RegisterDevice:input_type -> kantra.auth.v1.RegisterDeviceRequest
-	7,  // 4: kantra.auth.v1.AuthService.ListDevices:input_type -> kantra.auth.v1.ListDevicesRequest
-	9,  // 5: kantra.auth.v1.AuthService.RevokeDevice:input_type -> kantra.auth.v1.RevokeDeviceRequest
-	11, // 6: kantra.auth.v1.AuthService.LookupUser:input_type -> kantra.auth.v1.LookupUserRequest
-	13, // 7: kantra.auth.v1.AuthService.RefreshToken:input_type -> kantra.auth.v1.RefreshTokenRequest
-	1,  // 8: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
-	3,  // 9: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
-	5,  // 10: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
-	8,  // 11: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
-	10, // 12: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
-	12, // 13: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
-	14, // 14: kantra.auth.v1.AuthService.RefreshToken:output_type -> kantra.auth.v1.RefreshTokenResponse
-	8,  // [8:15] is the sub-list for method output_type
-	1,  // [1:8] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	24, // 1: kantra.auth.v1.SearchUsersResponse.users:type_name -> kantra.auth.v1.User
+	0,  // 2: kantra.auth.v1.AuthService.Register:input_type -> kantra.auth.v1.RegisterRequest
+	2,  // 3: kantra.auth.v1.AuthService.Login:input_type -> kantra.auth.v1.LoginRequest
+	4,  // 4: kantra.auth.v1.AuthService.RegisterDevice:input_type -> kantra.auth.v1.RegisterDeviceRequest
+	7,  // 5: kantra.auth.v1.AuthService.ListDevices:input_type -> kantra.auth.v1.ListDevicesRequest
+	9,  // 6: kantra.auth.v1.AuthService.RevokeDevice:input_type -> kantra.auth.v1.RevokeDeviceRequest
+	11, // 7: kantra.auth.v1.AuthService.LookupUser:input_type -> kantra.auth.v1.LookupUserRequest
+	13, // 8: kantra.auth.v1.AuthService.RefreshToken:input_type -> kantra.auth.v1.RefreshTokenRequest
+	15, // 9: kantra.auth.v1.AuthService.GetAccountStatus:input_type -> kantra.auth.v1.GetAccountStatusRequest
+	17, // 10: kantra.auth.v1.AuthService.ApproveDevice:input_type -> kantra.auth.v1.ApproveDeviceRequest
+	19, // 11: kantra.auth.v1.AuthService.SetRecovery:input_type -> kantra.auth.v1.SetRecoveryRequest
+	21, // 12: kantra.auth.v1.AuthService.Recover:input_type -> kantra.auth.v1.RecoverRequest
+	23, // 13: kantra.auth.v1.AuthService.SearchUsers:input_type -> kantra.auth.v1.SearchUsersRequest
+	1,  // 14: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
+	3,  // 15: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
+	5,  // 16: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
+	8,  // 17: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
+	10, // 18: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
+	12, // 19: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
+	14, // 20: kantra.auth.v1.AuthService.RefreshToken:output_type -> kantra.auth.v1.RefreshTokenResponse
+	16, // 21: kantra.auth.v1.AuthService.GetAccountStatus:output_type -> kantra.auth.v1.GetAccountStatusResponse
+	18, // 22: kantra.auth.v1.AuthService.ApproveDevice:output_type -> kantra.auth.v1.ApproveDeviceResponse
+	20, // 23: kantra.auth.v1.AuthService.SetRecovery:output_type -> kantra.auth.v1.SetRecoveryResponse
+	22, // 24: kantra.auth.v1.AuthService.Recover:output_type -> kantra.auth.v1.RecoverResponse
+	25, // 25: kantra.auth.v1.AuthService.SearchUsers:output_type -> kantra.auth.v1.SearchUsersResponse
+	14, // [14:26] is the sub-list for method output_type
+	2,  // [2:14] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_kantra_auth_v1_auth_proto_init() }
@@ -873,7 +1418,7 @@ func file_kantra_auth_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_auth_v1_auth_proto_rawDesc), len(file_kantra_auth_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
