@@ -30,6 +30,15 @@ android {
         // A real keystore can be provided via environment variables; without
         // one, release builds are signed with the debug keystore so they can
         // be installed for testing (not suitable for Play Store uploads).
+        // Fixed key for test builds (CI and local): every build has the same
+        // signature, so a new APK installs over the previous one. It is
+        // public (in the repository): use ANDROID_KEYSTORE_* for real releases.
+        dev {
+            storeFile file("../kantra-dev.keystore")
+            storePassword "kantra-dev"
+            keyAlias "kantra-dev"
+            keyPassword "kantra-dev"
+        }
         release {
             if (hasKeystore) {
                 storeFile file(keystoreFile)
@@ -44,10 +53,11 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
+            signingConfig hasKeystore ? signingConfigs.release : signingConfigs.dev
         }
         debug {
             debuggable true
+            signingConfig signingConfigs.dev
         }
     }
 
