@@ -95,6 +95,9 @@ tasks:
     internal: true
     summary: Link the iOS executable from the Go archive and main.m
     vars:
+      # c-archive builds do not carry cgo's LDFLAGS: link Kantra's Rust MLS
+      # library (built by `make mls-ffi-ios`) explicitly.
+      EXTRA_LINK: '{{.EXTRA_LINK | default "../mls-ffi/target/ios-lib/libmls_ffi.a"}}'
       SDK_PATH:
         sh: xcrun --sdk {{.IOS_SDK}} --show-sdk-path
     cmds:
@@ -114,7 +117,7 @@ tasks:
           -framework CoreLocation -framework CoreMotion -framework SystemConfiguration \
           -lresolv \
           -o "{{.BIN_DIR}}/{{.APP_NAME | lower}}" \
-          "$MAIN_M" -Wl,-force_load,"{{.BIN_DIR}}/{{.APP_NAME}}.a"
+          "$MAIN_M" -Wl,-force_load,"{{.BIN_DIR}}/{{.APP_NAME}}.a" {{.EXTRA_LINK}}
 
   create:app:bundle:
     summary: Creates an iOS `.app` bundle
