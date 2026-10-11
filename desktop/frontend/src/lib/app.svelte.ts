@@ -1,5 +1,6 @@
 import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type Message, type State, type UIEvent, type UserHit, type UserProfile } from './api'
-import { readFileBase64, plural } from './util'
+import { plural } from './util'
+import { MAX_FILE, prepareFile, type Prepared } from './media'
 
 export type Toast = { id: number; text: string; kind: 'info' | 'error' | 'warning' | 'security' }
 
@@ -10,6 +11,8 @@ export type Modal =
   | { kind: 'recovery'; phrase: string }
   | { kind: 'drawer' }
   | { kind: 'forward'; chatId: string; ids: string[] }
+  | { kind: 'sendFiles'; files: File[] }
+  | { kind: 'viewer'; m: Message }
   | { kind: 'deleteMsg'; chatId: string; ids: string[]; canAll: boolean }
   | { kind: 'editProfile' }
   | { kind: 'logout' }
@@ -41,6 +44,10 @@ class AppState {
   editing = $state<Message | null>(null)
   /** "typing…" per chat: who and until when. */
   typing = $state<Record<string, { name: string; until: number }>>({})
+  /** Local blob URLs of media sent from this device (no re-download). */
+  localUrls = $state<Record<string, string>>({})
+  /** Messages being uploaded (temporary ids). */
+  sending = $state<Record<string, boolean>>({})
   /** Message context menu. */
   menu = $state<{ m: Message; x: number; y: number } | null>(null)
   /** This account's profile and all accounts on this device. */
@@ -350,20 +357,63 @@ class AppState {
   }
 
 
-  async sendFile(file: File) {
-    const id = this.currentId
-    if (!id) return
-    if (file.size > 24 * 1024 * 1024) {
-      this.toast('Файл больше 24 МБ', 'error')
-      return
+  /** Opens the "send files" dialog (caption, as photo / as file). */
+  pickFiles(files: File[]) {
+    const ok = files.filter((f) => f.size <= MAX_FILE)
+    if (ok.length < files.length) this.toast('Файлы больше 64 МБ не отправляются', 'error')
+    if (ok.length) this.modal = { kind: 'sendFiles', files: ok }
+  }
+
+  async sendPrepared(files: File[], compress: boolean, caption: string) {
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const p = await prepareFile(files[i], compress)
+        // Like Telegram: the caption goes with the first item.
+        if (i === 0) p.upload.caption = caption
+        await this.sendMedia(p)
+      } catch {
+        this.toast(`Не удалось подготовить ${files[i].name}`, 'error')
+      }
     }
-    const b64 = await readFileBase64(file)
-    const p = this.sendQueue.then(async () => {
-      const msg = await this.try(() => Messenger.SendFile(id, file.name, b64))
-      if (msg) this.addMessage(msg)
+  }
+
+  /** Sends prepared media; it shows up at once with a progress spinner. */
+  sendMedia(p: Prepared): Promise<void> {
+    const chatId = this.currentId
+    if (!chatId) return Promise.resolve()
+    const replyTo = this.reply?.id ?? ''
+    this.reply = null
+    const tmp = 'local-' + Math.random().toString(36).slice(2)
+    const u = p.upload
+    const temp = {
+      seq: 0, id: tmp, chatId, senderId: this.state?.account?.userId ?? '', sender: '', kind: 'file', text: '',
+      sentAt: Date.now(), outgoing: true, origin: '',
+      file: { name: u.name, size: p.blob.size, kind: u.kind, mime: u.mime, w: u.w, h: u.h, dur: u.dur,
+        thumb: u.thumb ? 'data:image/jpeg;base64,' + u.thumb : '', wave: u.wave, caption: u.caption, url: p.localUrl },
+    } as Message
+    this.localUrls[tmp] = p.localUrl
+    this.sending[tmp] = true
+    this.addMessage(temp)
+    const run = this.sendQueue.then(async () => {
+      const msg = await this.try(() => Messenger.SendMedia(chatId, u, replyTo))
+      const list = this.messages[chatId]
+      const i = list?.findIndex((x) => x.id === tmp) ?? -1
+      delete this.sending[tmp]
+      if (!msg) {
+        if (list && i >= 0) list.splice(i, 1)
+        return
+      }
+      this.localUrls[msg.id] = p.localUrl
+      if (list && i >= 0) list.splice(i, 1)
+      this.addMessage(msg)
     })
-    this.sendQueue = p
-    await p
+    this.sendQueue = run
+    return run
+  }
+
+  /** Where to load a media message from (local copy if we sent it). */
+  mediaUrl(m: Message): string {
+    return this.localUrls[m.id] ?? m.file?.url ?? ''
   }
 
   private addMessage(m: Message) {

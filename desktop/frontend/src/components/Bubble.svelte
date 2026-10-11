@@ -1,13 +1,15 @@
 <script lang="ts">
   import type { Message } from '../lib/api'
-  import { Messenger } from '../lib/api'
   import { app } from '../lib/app.svelte'
-  import { timeHM, fileSize, nameColor, downloadBase64 } from '../lib/util'
+  import { timeHM, nameColor } from '../lib/util'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
+  import MediaContent from './MediaContent.svelte'
 
   let { m, first, last, group }: { m: Message; first: boolean; last: boolean; group: boolean } = $props()
-  let downloading = $state(false)
+  // Round video messages have no bubble (as in Telegram); photos/videos a tight one.
+  const bare = $derived(m.file?.kind === 'round' && !m.reply && !m.forwarded)
+  const isVisual = $derived(m.file?.kind === 'photo' || m.file?.kind === 'video')
 
   // Context menu: right click, or a long press on touch screens.
   function openMenu(e: MouseEvent | { clientX: number; clientY: number }) {
@@ -29,13 +31,6 @@
     setTimeout(() => el.classList.remove('flash'), 1200)
   }
 
-  async function download() {
-    if (downloading) return
-    downloading = true
-    const f = await app.try(() => Messenger.DownloadFile(m.chatId, m.seq))
-    downloading = false
-    if (f) downloadBase64(f.name, f.mime, f.base64)
-  }
 </script>
 
 <div class="line" class:out={m.outgoing} class:last id={'msg-' + m.id}>
@@ -43,7 +38,7 @@
     <div class="avatar-slot">{#if last}<Avatar name={m.sender} id={m.senderId} user={m.senderId} photo={m.senderAvatar} size={34} />{/if}</div>
   {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="bubble" class:tail={last} oncontextmenu={openMenu} ontouchstart={touchStart} ontouchend={touchEnd} ontouchmove={touchEnd}>
+  <div class="bubble" class:tail={last && !bare} class:bare class:visual={isVisual} oncontextmenu={openMenu} ontouchstart={touchStart} ontouchend={touchEnd} ontouchmove={touchEnd}>
     {#if group && first && !m.outgoing}
       <div class="sender" style="color:{nameColor(m.senderId)}">{m.sender}</div>
     {/if}
@@ -62,13 +57,7 @@
       </div>
     {/if}
     {#if m.kind === 'file' && m.file}
-      <button class="file" onclick={download} title="Скачать">
-        <span class="file-icon">{#if downloading}<span class="spinner"></span>{:else}<Icon name="down" size={22} />{/if}</span>
-        <span class="file-meta">
-          <span class="file-name">{m.file.name}</span>
-          <span class="file-size">{fileSize(m.file.size)}</span>
-        </span>
-      </button>
+      <MediaContent {m} />
     {:else}
       <span class="text">{m.text}</span>
     {/if}
@@ -108,6 +97,10 @@
   }
   .out .bubble.tail::before { left: auto; right: -7px; background: radial-gradient(circle at 100% 0, transparent 11px, var(--bubble-out) 12px); }
   .text { white-space: pre-wrap; }
+  .bubble.bare { background: transparent; box-shadow: none; padding: 0; }
+  .bubble.bare .time { position: absolute; right: 6px; bottom: 6px; margin: 0; background: rgba(0,0,0,.45); color: #fff; padding: 1px 6px; border-radius: 10px; }
+  .bubble.visual { padding: 4px 4px 6px; }
+  .bubble.visual .time { margin-right: 6px; }
   .fwd { font-size: 14px; color: var(--accent-light); margin-bottom: 2px; }
   .out .fwd { color: #b2d7ff; }
   .quote { display: flex; flex-direction: column; width: 100%; text-align: left; border-left: 3px solid var(--accent-light); background: rgba(255,255,255,.06);
@@ -129,13 +122,4 @@
   .time { float: right; margin: 8px 0 -4px 12px; font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; user-select: none; }
   .out .time { color: var(--text-bubble-muted); }
   .check { color: var(--accent-light); display: inline-flex; }
-  .file { display: flex; align-items: center; gap: 12px; text-align: left; padding: 4px 0; white-space: normal; }
-  .file-icon { width: 46px; height: 46px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .out .file-icon { background: #fff; color: var(--bubble-out); }
-  .file-meta { display: flex; flex-direction: column; min-width: 0; }
-  .file-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
-  .file-size { font-size: 13px; color: var(--text-muted); }
-  .out .file-size { color: var(--text-bubble-muted); }
-  .spinner { width: 20px; height: 20px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg) } }
 </style>

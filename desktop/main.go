@@ -61,6 +61,8 @@ func main() {
 		}, platformServices(messenger)...),
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+			// Decrypted media for <img>/<video> (media.go).
+			Middleware: mediaMiddleware(messenger),
 		},
 		Mac: application.MacOptions{
 			// Keep running (tray) when the window is closed.
@@ -79,6 +81,11 @@ func main() {
 		MinHeight:        500,
 		BackgroundColour: application.NewRGB(23, 33, 43),
 		URL:              "/",
+		// Voice and video messages (getUserMedia).
+		Permissions: map[application.PermissionType]application.Permission{
+			application.PermissionMicrophone: application.PermissionAllow,
+			application.PermissionCamera:     application.PermissionAllow,
+		},
 	})
 	platformSetup(app, window, messenger)
 

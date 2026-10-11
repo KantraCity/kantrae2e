@@ -31,7 +31,7 @@ func Migrations() fs.FS {
 const (
 	Schema       = "media"
 	Bucket       = "media"
-	MaxMediaSize = 25 << 20
+	MaxMediaSize = 65 << 20
 )
 
 type Service struct {

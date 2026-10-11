@@ -6,6 +6,7 @@
   import Avatar from './Avatar.svelte'
   import Bubble from './Bubble.svelte'
   import Icon from './Icon.svelte'
+  import { duration, micError, RoundRecorder, VoiceRecorder } from '../lib/media'
 
   let text = $state('')
   let scroller: HTMLDivElement | undefined = $state()
@@ -113,10 +114,91 @@
     input.style.height = Math.min(input.scrollHeight, 180) + 'px'
   }
 
-  async function pick(files: FileList | null | undefined) {
-    if (!files) return
-    for (const f of Array.from(files)) await app.sendFile(f)
+  function pick(files: FileList | null | undefined) {
+    if (files?.length) app.pickFiles(Array.from(files))
     if (fileInput) fileInput.value = ''
+  }
+
+  // Pasting an image (screenshot) opens the send dialog, like Telegram.
+  function paste(e: ClipboardEvent) {
+    const files = Array.from(e.clipboardData?.files ?? [])
+    if (files.length) {
+      e.preventDefault()
+      app.pickFiles(files)
+    }
+  }
+
+  // ---- voice / video messages -------------------------------------------
+  // Like Telegram: tap the button to switch voice <-> video message; hold
+  // to record and release to send; slide left to cancel, up to lock.
+  let recMode = $state<'voice' | 'round'>('voice')
+  let rec = $state<{ kind: 'voice' | 'round'; locked: boolean; startX: number; startY: number; t: number; level: number } | null>(null)
+  let recorder: VoiceRecorder | RoundRecorder | null = null
+  let roundPreview: HTMLVideoElement | undefined = $state()
+  let holdTimer: ReturnType<typeof setTimeout> | undefined
+  let tickTimer: ReturnType<typeof setInterval> | undefined
+  let pressAt = 0
+  let cancelHint = $state(false)
+
+  function micDown(e: PointerEvent) {
+    if (rec) return
+    pressAt = Date.now()
+    const x = e.clientX, y = e.clientY
+    ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+    holdTimer = setTimeout(() => startRec(x, y), 250)
+  }
+
+  async function startRec(x: number, y: number) {
+    const kind = recMode
+    try {
+      recorder = kind === 'voice' ? new VoiceRecorder() : new RoundRecorder()
+      rec = { kind, locked: false, startX: x, startY: y, t: 0, level: 0 }
+      await recorder.start()
+      if (recorder instanceof VoiceRecorder) recorder.onLevel = (v) => rec && (rec.level = v)
+      if (recorder instanceof RoundRecorder) {
+        await tick()
+        if (roundPreview) { roundPreview.srcObject = recorder.stream; roundPreview.play().catch(() => {}) }
+      }
+      tickTimer = setInterval(() => {
+        if (!rec || !recorder) return
+        rec.t = (Date.now() - recorder.started) / 1000
+        if (rec.kind === 'round' && rec.t >= 60) finishRec(true) // Telegram's limit
+      }, 200)
+    } catch (err) {
+      recorder?.cancel()
+      recorder = null
+      rec = null
+      app.toast(micError(err), 'error', 6000)
+    }
+  }
+
+  function micMove(e: PointerEvent) {
+    if (!rec || rec.locked) return
+    cancelHint = rec.startX - e.clientX > 60
+    if (rec.startX - e.clientX > 120) finishRec(false)
+    else if (rec.startY - e.clientY > 70) rec.locked = true
+  }
+
+  function micUp() {
+    clearTimeout(holdTimer)
+    if (!rec) {
+      if (Date.now() - pressAt < 250) recMode = recMode === 'voice' ? 'round' : 'voice'
+      return
+    }
+    if (!rec.locked) finishRec(!cancelHint)
+  }
+
+  async function finishRec(send: boolean) {
+    clearInterval(tickTimer)
+    const r = recorder
+    recorder = null
+    cancelHint = false
+    rec = null
+    if (!r) return
+    if (!send) { r.cancel(); return }
+    const p = r instanceof RoundRecorder ? await r.stop(roundPreview) : await r.stop()
+    if (p) await app.sendMedia(p)
+    else app.toast('Слишком короткое сообщение — удерживайте кнопку', 'info')
   }
 
   function drop(e: DragEvent) {
@@ -175,14 +257,46 @@
     {#if chat.active}
       <footer>
         <div class="composer">
-          <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => fileInput?.click()}><Icon name="clip" /></button>
-          <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} oninput={() => { resize(); app.typingTick() }}></textarea>
-          <input type="file" multiple hidden bind:this={fileInput} onchange={(e) => pick((e.currentTarget as HTMLInputElement).files)} />
+          {#if rec}
+            <div class="recbar">
+              <span class="recdot"></span>
+              <span class="rectime">{duration(rec.t)}</span>
+              {#if rec.kind === 'voice'}<span class="level" style="transform:scaleX({0.15 + rec.level})"></span>{/if}
+              {#if rec.locked}
+                <button class="link" onclick={() => finishRec(false)}>Отмена</button>
+              {:else}
+                <span class="hint" class:warn={cancelHint}>‹ Влево — отмена · вверх — закрепить</span>
+              {/if}
+            </div>
+          {:else}
+            <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => fileInput?.click()}><Icon name="clip" /></button>
+            <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} onpaste={paste}
+              oninput={() => { resize(); app.typingTick() }}></textarea>
+          {/if}
+          <input type="file" multiple hidden accept="*/*" bind:this={fileInput} onchange={(e) => pick((e.currentTarget as HTMLInputElement).files)} />
         </div>
-        <button class="send" aria-label="Отправить" disabled={!text.trim()} onclick={send}><Icon name="send" /></button>
+        {#if text.trim() || app.editing}
+          <button class="send" aria-label="Отправить" onclick={send}><Icon name={app.editing ? 'check' : 'send'} /></button>
+        {:else if rec?.locked}
+          <button class="send" aria-label="Отправить" onclick={() => finishRec(true)}><Icon name="send" /></button>
+        {:else}
+          <button class="send mic" class:recording={!!rec} aria-label={recMode === 'voice' ? 'Голосовое сообщение (удерживайте)' : 'Видеосообщение (удерживайте)'}
+            title={recMode === 'voice' ? 'Удерживайте для записи голоса, нажмите — видео' : 'Удерживайте для записи видео, нажмите — голос'}
+            onpointerdown={micDown} onpointermove={micMove} onpointerup={micUp} onpointercancel={micUp} oncontextmenu={(e) => e.preventDefault()}>
+            <Icon name={recMode === 'voice' ? 'mic' : 'video'} />
+          </button>
+        {/if}
       </footer>
     {:else}
       <footer class="readonly muted">{chat.kind === 'direct' ? 'Чат пока недоступен на этом устройстве — доступна только история' : 'Вы не участник этой группы — доступна только история'}</footer>
+    {/if}
+
+    {#if rec?.kind === 'round'}
+      <div class="round-rec">
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <video bind:this={roundPreview} muted playsinline></video>
+        <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" pathLength="1" stroke-dasharray="1" stroke-dashoffset={1 - rec.t / 60} /></svg>
+      </div>
     {/if}
 
     {#if dragging}
@@ -232,6 +346,20 @@
   .typing { color: var(--accent-light); }
   .dots::after { content: '…'; animation: dots 1.2s steps(3) infinite; display: inline-block; width: 1em; overflow: hidden; vertical-align: bottom; }
   @keyframes dots { from { width: 0; } to { width: 1em; } }
+  .send.mic { background: var(--bg-sidebar); color: var(--text-muted); touch-action: none; }
+  .send.mic:hover { color: var(--accent-light); }
+  .send.mic.recording { background: var(--accent); color: #fff; transform: scale(1.35); }
+  .recbar { flex: 1; display: flex; align-items: center; gap: 10px; padding: 10px 8px; min-height: 42px; }
+  .recdot { width: 10px; height: 10px; border-radius: 50%; background: #e53935; animation: blink 1s infinite; }
+  .rectime { font-variant-numeric: tabular-nums; }
+  .level { width: 60px; height: 4px; border-radius: 2px; background: var(--accent-light); transform-origin: left; transition: transform .05s; }
+  .hint { flex: 1; text-align: center; color: var(--text-muted); font-size: 14px; }
+  .hint.warn { color: #e17076; }
+  .link { margin-left: auto; color: var(--accent-light); }
+  @keyframes blink { 50% { opacity: .2; } }
+  .round-rec { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); width: min(300px, 70vw); aspect-ratio: 1; z-index: 5; }
+  .round-rec video { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #000; box-shadow: var(--shadow); }
+  .round-rec svg { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); transform: rotate(-90deg); fill: none; stroke: var(--accent); stroke-width: 2; }
   .readonly { justify-content: center; padding: 18px; font-size: 14px; background: var(--bg-header); max-width: none; }
   .placeholder { align-items: center; justify-content: center; }
   .pill { background: rgba(0, 0, 0, 0.35); padding: 6px 14px; border-radius: 14px; font-size: 14px; color: #d4dde6; }

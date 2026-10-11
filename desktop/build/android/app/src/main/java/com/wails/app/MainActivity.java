@@ -22,6 +22,9 @@ import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.util.Log;
+import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -62,6 +65,11 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
     private WailsBridge bridge;
+    // <input type=file> and getUserMedia (voice / video messages) in the WebView.
+    private static final int WEB_FILE_CHOOSER = 7101;
+    private static final int WEB_MEDIA_PERMISSIONS = 7102;
+    private ValueCallback<Uri[]> fileChooserCallback;
+    private PermissionRequest pendingWebPermission;
     // Battery: system-event receivers are registered only while the activity is
     // in the foreground (onStart) and torn down in onStop, so background battery/
     // network/screen broadcasts don't wake the app.
@@ -142,9 +150,37 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /** Microphone / camera for voice and video messages (getUserMedia). */
+    private void handleWebPermission(PermissionRequest request) {
+        List<String> needed = new ArrayList<>();
+        for (String r : request.getResources()) {
+            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)
+                    && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                needed.add(android.Manifest.permission.RECORD_AUDIO);
+            }
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)
+                    && checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                needed.add(android.Manifest.permission.CAMERA);
+            }
+        }
+        if (needed.isEmpty()) {
+            request.grant(request.getResources());
+            return;
+        }
+        pendingWebPermission = request;
+        requestPermissions(needed.toArray(new String[0]), WEB_MEDIA_PERMISSIONS);
+    }
+
     /** A tapped message notification opens its chat. */
     private void handleOpenChat(Intent intent) {
         if (intent != null) KantraNative.openChat(intent.getStringExtra(KantraNative.EXTRA_CHAT));
+    }
+
+    private static Uri[] clipUris(Intent data) {
+        android.content.ClipData clip = data.getClipData();
+        Uri[] out = new Uri[clip.getItemCount()];
+        for (int i = 0; i < out.length; i++) out[i] = clip.getItemAt(i).getUri();
+        return out;
     }
 
     @Override
@@ -158,6 +194,30 @@ public class MainActivity extends AppCompatActivity {
     private void setupWebView() {
         webView = findViewById(R.id.webview);
         bridge.setWebView(webView);
+        webView.setBackgroundColor(0xFF17212B);
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
+                fileChooserCallback = callback;
+                try {
+                    Intent i = params.createIntent();
+                    if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                    }
+                    startActivityForResult(Intent.createChooser(i, null), WEB_FILE_CHOOSER);
+                    return true;
+                } catch (Exception e) {
+                    fileChooserCallback = null;
+                    return false;
+                }
+            }
+
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> handleWebPermission(request));
+            }
+        });
 
         // Configure WebView settings
         WebSettings settings = webView.getSettings();
@@ -298,6 +358,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == WEB_MEDIA_PERMISSIONS && pendingWebPermission != null) {
+            boolean all = grantResults.length > 0;
+            for (int g : grantResults) all &= g == PackageManager.PERMISSION_GRANTED;
+            if (all) pendingWebPermission.grant(pendingWebPermission.getResources());
+            else pendingWebPermission.deny();
+            pendingWebPermission = null;
+            return;
+        }
         if (requestCode == CAMERA_PERMISSION_REQUEST) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 launchCameraCapture(pendingCaptureIsVideo);
@@ -505,6 +573,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == WEB_FILE_CHOOSER) {
+            if (fileChooserCallback != null) {
+                Uri[] result = null;
+                if (resultCode == RESULT_OK && data != null) {
+                    if (data.getClipData() != null) result = clipUris(data);
+                    else if (data.getData() != null) result = new Uri[]{data.getData()};
+                }
+                fileChooserCallback.onReceiveValue(result);
+                fileChooserCallback = null;
+            }
+            return;
+        }
         if (requestCode == PHOTO_CAPTURE_REQUEST || requestCode == VIDEO_CAPTURE_REQUEST) {
             handleCaptureResult(resultCode, data);
             return;

@@ -49,6 +49,7 @@ func (m *Messenger) toMessageView(c *core.Client, s *store.Message, v *chatView)
 	if ref, err := core.ParseMedia(s); err == nil {
 		msg.Kind, msg.Text = "file", ""
 		msg.File = fileInfo(ref)
+		msg.File.URL = mediaURL(s.GroupID, s.UID, ref)
 	}
 	if s.ReplyTo != "" {
 		msg.Reply = &ReplyInfo{ID: s.ReplyTo, Text: "Сообщение удалено"}

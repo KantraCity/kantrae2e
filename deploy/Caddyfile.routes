@@ -108,7 +108,7 @@ handle /kantra.history.v1.HistoryService/* {
 # --- media-service ---
 handle /kantra.media.v1.MediaService/* {
 	request_body {
-		max_size 26MB
+		max_size 66MB
 	}
 	reverse_proxy media-service:8084
 }

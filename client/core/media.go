@@ -13,7 +13,7 @@ import (
 )
 
 // MaxFileSize is the largest plaintext file accepted for sending.
-const MaxFileSize = 24 << 20
+const MaxFileSize = 64 << 20
 
 // MediaRef travels inside an MLS application message. The key never
 // reaches the media service, which only stores ciphertext.

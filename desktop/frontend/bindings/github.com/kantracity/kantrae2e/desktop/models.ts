@@ -92,6 +92,11 @@ export interface FileInfo {
     "thumb"?: string;
     "wave"?: number[] | null;
     "caption"?: string;
+
+    /**
+     * URL serves the decrypted file (media.go); "?download=1" saves it.
+     */
+    "url": string;
 }
 
 /**
