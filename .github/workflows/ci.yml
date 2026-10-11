@@ -123,6 +123,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - name: System libraries (the wails3 CLI links GTK4 / WebKitGTK 6)
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
       - run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
       - name: MLS library (Rust, Android)
         run: make mls-ffi-android
