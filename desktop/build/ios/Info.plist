@@ -9,7 +9,7 @@
 		<key>CFBundleGetInfoString</key>
 		<string>Some Product Comments</string>
 		<key>CFBundleIdentifier</key>
-		<string>city.kantra.desktop</string>
+		<string>city.kantra.app</string>
 		<key>CFBundleName</key>
 		<string>Kantra</string>
 		<key>CFBundlePackageType</key>
@@ -29,6 +29,12 @@
 			<key>NSAllowsLocalNetworking</key>
 			<true/>
 		</dict>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Kantra записывает голосовые и видеосообщения.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Kantra снимает видеосообщения (кружочки).</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Kantra отправляет выбранные фото и видео.</string>
 		<key>NSHumanReadableCopyright</key>
 		<string>(c) 2026, KantraCity</string>
 		<key>UILaunchStoryboardName</key>

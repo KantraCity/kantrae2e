@@ -22,6 +22,8 @@ deploy/               docker-compose (dev/prod), Caddyfile(.dev), бэкап
 e2e/                  сквозной тест всех DoD и бесшовного multi-device
 ```
 
+> Развернуть на своём VPS с доменом за 10 минут и поставить приложения — **[DEPLOY.md](DEPLOY.md)**.
+
 ## Быстрый старт
 
 Нужны Go (версия из `go.mod`, тулчейн скачается сам), Rust и Docker.

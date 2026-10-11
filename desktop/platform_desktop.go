@@ -1,4 +1,4 @@
-//go:build !android && !server
+//go:build !android && !ios && !server
 
 package main
 

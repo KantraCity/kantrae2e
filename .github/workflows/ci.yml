@@ -94,6 +94,10 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go test ./client/mls ./client/crypto
+      - name: Preset the server address (repository variable KANTRA_SERVER, optional)
+        if: ${{ vars.KANTRA_SERVER != '' }}
+        shell: bash
+        run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
       - name: Build desktop exe
         env:
           CGO_ENABLED: "1"
@@ -128,6 +132,10 @@ jobs:
       - run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
       - name: MLS library (Rust, Android)
         run: make mls-ffi-android
+      - name: Preset the server address (repository variable KANTRA_SERVER, optional)
+        if: ${{ vars.KANTRA_SERVER != '' }}
+        shell: bash
+        run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
       # The runner ships the Android SDK and NDK (ANDROID_HOME, ANDROID_NDK_HOME).
       - name: Build APK (arm64, release, debug-signed)
         run: make android
@@ -135,3 +143,72 @@ jobs:
         with:
           name: kantra-android-arm64
           path: desktop/bin/kantra-desktop.apk
+
+  macos:
+    runs-on: macos-14 # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mls-ffi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
+      - run: make mls-ffi
+      - name: MLS bridge tests on macOS
+        run: go test ./client/mls ./client/crypto
+      - name: Preset the server address (repository variable KANTRA_SERVER, optional)
+        if: ${{ vars.KANTRA_SERVER != '' }}
+        shell: bash
+        run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
+      - name: Build Kantra.app (arm64, ad-hoc signed)
+        run: cd desktop && "$(go env GOPATH)/bin/wails3" task darwin:package
+      - name: Zip
+        run: cd desktop/bin && mv kantra-desktop.app Kantra.app && ditto -c -k --keepParent Kantra.app Kantra-macos-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kantra-macos-arm64
+          path: desktop/bin/Kantra-macos-arm64.zip
+
+  ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mls-ffi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
+      - name: Preset the server address (repository variable KANTRA_SERVER, optional)
+        if: ${{ vars.KANTRA_SERVER != '' }}
+        shell: bash
+        run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
+      # Unsigned device build: re-signed on install with your Apple ID
+      # (Sideloadly / AltStore) — see DEPLOY.md. Signing in CI would need
+      # your Apple certificate and provisioning profile as secrets.
+      - name: Build Kantra.ipa (iPhone, unsigned)
+        run: |
+          make mls-ffi-ios IOS_PLATFORM=device
+          cd desktop && "$(go env GOPATH)/bin/wails3" task ios:package:ipa IOS_PLATFORM=device CODESIGN_IDENTITY=-
+          mv bin/kantra-desktop.ipa bin/Kantra.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kantra-ios
+          path: desktop/bin/Kantra.ipa
+      - name: Build for the iOS Simulator (check)
+        run: |
+          make mls-ffi-ios IOS_PLATFORM=simulator
+          cd desktop && "$(go env GOPATH)/bin/wails3" task ios:package IOS_PLATFORM=simulator

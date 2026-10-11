@@ -1,0 +1,55 @@
+//go:build ios
+
+package main
+
+import (
+	"context"
+	"log"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
+)
+
+// iOS: local notifications while the app runs. iOS suspends apps in the
+// background shortly after they leave the screen, so — unlike Android — a
+// persistent connection cannot wait for messages there; that would need
+// Apple's push service (APNs), which this project deliberately avoids.
+const platformName = "ios"
+
+type iosNotifier struct{ ns *notifications.NotificationService }
+
+func newNotifier(*Messenger) notifier { return &iosNotifier{ns: notifications.New()} }
+
+func (n *iosNotifier) Show(x Notice) {
+	_ = n.ns.SendNotification(notifications.NotificationOptions{ID: "chat-" + x.Key, Title: x.Title, Body: x.Body,
+		Data: map[string]any{"key": x.Key}})
+}
+
+func (n *iosNotifier) Clear(key string) { _ = n.ns.RemoveNotification("chat-" + key) }
+
+type iosNotifications struct{ *notifications.NotificationService }
+
+func (o *iosNotifications) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
+	if err := o.NotificationService.ServiceStartup(ctx, opts); err != nil {
+		log.Printf("notifications unavailable: %v", err)
+	}
+	return nil
+}
+
+func platformServices(m *Messenger) []application.Service {
+	return []application.Service{application.NewService(&iosNotifications{m.notif.(*iosNotifier).ns})}
+}
+
+func platformSetup(_ *application.App, _ *application.WebviewWindow, m *Messenger) {
+	ns := m.notif.(*iosNotifier).ns
+	_, _ = ns.RequestNotificationAuthorization()
+	ns.OnNotificationResponse(func(r notifications.NotificationResult) {
+		if key, _ := r.Response.UserInfo["key"].(string); key != "" {
+			m.showChat(key)
+		}
+	})
+}
+
+func platformStatus(*Settings)     {}
+func platformApplyBackground(bool) {}
+func platformOpenSettings(string)  {}

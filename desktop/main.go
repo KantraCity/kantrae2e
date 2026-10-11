@@ -37,6 +37,9 @@ func sharedMessenger() *Messenger {
 		}
 		server := os.Getenv("KANTRA_SERVER")
 		if server == "" {
+			server = buildServer
+		}
+		if server == "" {
 			server = defaultServer
 		}
 		theMessenger = NewMessenger(dbPath, server, hc, webMode)

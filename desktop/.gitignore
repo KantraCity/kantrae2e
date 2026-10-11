@@ -11,3 +11,6 @@ build/ios/xcode/overlay.json
 build/ios/xcode/gen/
 build/android/overlay.json
 build/android/gen/
+# Gateway address preset by CI (KANTRA_SERVER repository variable)
+server_preset_ci.go
+

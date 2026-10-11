@@ -29,6 +29,10 @@
 		</dict>
 		<key>NSHighResolutionCapable</key>
 		<string>true</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Kantra записывает голосовые и видеосообщения.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Kantra снимает видеосообщения (кружочки).</string>
 		<key>NSHumanReadableCopyright</key>
 		<string>(c) 2026, KantraCity</string>
 	</dict>

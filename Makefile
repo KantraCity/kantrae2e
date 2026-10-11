@@ -6,7 +6,7 @@ COMPOSE_DEV  = docker compose -f deploy/docker-compose.yml
 COMPOSE_PROD = docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env
 SERVICES = auth directory delivery history media
 
-.PHONY: all mls-ffi mls-ffi-windows gen build cli services test test-unit test-rust lint up down logs dev-ca prod-up desktop desktop-web desktop-windows mls-ffi-android android
+.PHONY: all mls-ffi mls-ffi-windows gen build cli services test test-unit test-rust lint up down logs dev-ca prod-up desktop desktop-web desktop-windows mls-ffi-android android mls-ffi-ios macos ios
 
 all: build
 
@@ -23,6 +23,14 @@ mls-ffi-windows:
 mls-ffi-android:
 	cd mls-ffi && for t in aarch64-linux-android x86_64-linux-android; do \
 		cargo rustc --release --target $$t --lib --crate-type staticlib || exit 1; done
+
+## Same library for iOS: IOS_PLATFORM=device (iPhone) or simulator. The one
+## chosen is copied to target/ios-lib, where the Go client links it from.
+IOS_PLATFORM ?= device
+mls-ffi-ios:
+	@t=$$([ "$(IOS_PLATFORM)" = device ] && echo aarch64-apple-ios || echo aarch64-apple-ios-sim); \
+		cd mls-ffi && cargo rustc --release --target $$t --lib --crate-type staticlib && \
+		mkdir -p target/ios-lib && cp target/$$t/release/libmls_ffi.a target/ios-lib/
 
 ## Regenerate protobuf + connect-go code (needs buf, protoc-gen-go, protoc-gen-connect-go)
 gen:
@@ -93,3 +101,13 @@ desktop-windows: mls-ffi-windows
 ## `adb install -r`, then `adb reverse tcp:8080 tcp:8080` (see README).
 android: mls-ffi-android
 	cd desktop && wails3 task android:package ARCH=$${ARCH:-arm64}
+
+## macOS app (on a Mac): desktop/bin/kantra-desktop.app
+macos: mls-ffi
+	cd desktop && wails3 task darwin:package
+
+## iOS app (on a Mac with Xcode): desktop/bin/kantra-desktop.app / .ipa.
+## Unsigned device builds are re-signed with your Apple ID (Sideloadly,
+## AltStore) or built from Xcode (`wails3 task ios:xcode`), see DEPLOY.md.
+ios: mls-ffi-ios
+	cd desktop && wails3 task ios:package IOS_PLATFORM=$(IOS_PLATFORM)
