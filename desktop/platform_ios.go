@@ -16,7 +16,9 @@ import (
 // Apple's push service (APNs), which this project deliberately avoids.
 const platformName = "ios"
 
-type iosNotifier struct{ ns *notifications.NotificationService }
+type iosNotifier struct {
+	ns *notifications.NotificationService
+}
 
 func newNotifier(*Messenger) notifier { return &iosNotifier{ns: notifications.New()} }
 
@@ -27,7 +29,9 @@ func (n *iosNotifier) Show(x Notice) {
 
 func (n *iosNotifier) Clear(key string) { _ = n.ns.RemoveNotification("chat-" + key) }
 
-type iosNotifications struct{ *notifications.NotificationService }
+type iosNotifications struct {
+	*notifications.NotificationService
+}
 
 func (o *iosNotifications) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
 	if err := o.NotificationService.ServiceStartup(ctx, opts); err != nil {
