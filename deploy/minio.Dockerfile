@@ -1,7 +1,6 @@
-# Fallback MinIO image built from source, for environments where the
-# upstream minio/minio image cannot be pulled:
-#   docker build -f deploy/minio.Dockerfile -t kantra/minio:local deploy
-#   MINIO_IMAGE=kantra/minio:local docker compose -f deploy/docker-compose.yml up -d
+# MinIO built from source. MinIO stopped publishing community images on
+# Docker Hub (minio/minio), so docker compose builds this one (image
+# kantra/minio:local). Pin a version with --build-arg MINIO_VERSION=<module version>.
 FROM golang:1.26-alpine AS build
 ARG MINIO_VERSION=latest
 RUN CGO_ENABLED=0 go install -trimpath github.com/minio/minio@${MINIO_VERSION}

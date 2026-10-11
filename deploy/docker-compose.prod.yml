@@ -46,7 +46,12 @@ services:
 
   minio:
     <<: *service
-    image: ${MINIO_IMAGE:-minio/minio:latest}
+    # MinIO no longer publishes images on Docker Hub: build it from source
+    # (deploy/minio.Dockerfile, a few minutes on the first run).
+    image: kantra/minio:local
+    build:
+      context: .
+      dockerfile: minio.Dockerfile
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}

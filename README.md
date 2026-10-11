@@ -192,10 +192,9 @@ Delivery и directory спрашивают у auth статус устройст
   sharing; в delivery-service для этого добавлены `ListMyGroups`, `GetGroupInfo`, `ExternalJoin`,
   `RequestJoin`, колонки `group_info`, `group_members.user_id` и таблица `group_bans`.
 - Бакеты создаёт init-контейнер `s3init` (minio-go) вместо ручного `mc mb`.
-- **Образ MinIO:** по умолчанию `minio/minio:latest`, как в роадмапе, но переопределяется
-  `MINIO_IMAGE`; `deploy/minio.Dockerfile` собирает MinIO из исходников, если upstream-образ
-  недоступен (в этом окружении он не скачивался; MinIO сместил community-редакцию
-  к распространению из исходников).
+- **Образ MinIO** собирается из исходников (`deploy/minio.Dockerfile`, образ `kantra/minio:local`):
+  `minio/minio` с Docker Hub больше не скачивается (MinIO перестал публиковать community-образы).
+  Первый `docker compose up --build` из-за этого дольше на несколько минут.
 
 ## Сверка ключей (safety numbers)
 
