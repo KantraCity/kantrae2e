@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte'
-  import { Messenger, type Member } from '../lib/api'
+  import { Messenger, type Member, type UserProfile } from '../lib/api'
   import { plural } from '../lib/util'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
@@ -10,21 +10,29 @@
   let { chatId }: { chatId: string } = $props()
   const chat = $derived(app.chats.find((c) => c.id === chatId))
   let members = $state<Member[]>([])
+  let profile = $state<UserProfile | null>(null)
+  $effect(() => {
+    if (chat?.kind === 'direct' && chat.peerId) Messenger.UserProfile(chat.peerId).then((p) => {
+      profile = p
+      // The name/photo may have changed: update the list and the header too.
+      if (p && (p.name !== chat.name || (p.avatarId ?? '') !== (chat.peerAvatar ?? ''))) app.refreshChats()
+    }).catch(() => {})
+  })
   let invite = $state('')
   let busy = $state(false)
 
   // One row per user: worst status of its devices wins.
   const rank: Record<string, number> = { conflict: 0, seen: 1, verified: 2, self: 3 }
   const users = $derived.by(() => {
-    const byUser = new Map<string, { username: string; userId: string; devices: number; status: string; me: boolean }>()
+    const byUser = new Map<string, { username: string; name: string; avatarId?: string; userId: string; devices: number; status: string; me: boolean }>()
     for (const m of members) {
-      const u = byUser.get(m.userId) ?? { username: m.username, userId: m.userId, devices: 0, status: m.status, me: false }
+      const u = byUser.get(m.userId) ?? { username: m.username, name: m.name, avatarId: m.avatarId, userId: m.userId, devices: 0, status: m.status, me: false }
       u.devices++
       if (m.status === 'self') u.me = true
       else if (u.status === 'self' || rank[m.status] < rank[u.status]) u.status = m.status
       byUser.set(m.userId, u)
     }
-    return [...byUser.values()].sort((a, b) => Number(b.me) - Number(a.me) || a.username.localeCompare(b.username))
+    return [...byUser.values()].sort((a, b) => Number(b.me) - Number(a.me) || a.name.localeCompare(b.name))
   })
 
   async function load() {
@@ -57,11 +65,15 @@
   {#if chat && chat.kind === 'direct'}
     {@const peer = users.find((u) => !u.me)}
     <div class="head">
-      <Avatar name={chat.name} id={chat.peerId || chat.id} size={72} />
+      <Avatar name={chat.name} id={chat.peerId || chat.id} user={chat.peerId} photo={profile?.avatarId ?? chat.peerAvatar} size={96} />
       <div>
-        <div class="name">{chat.name}</div>
-        <div class="muted">@{chat.peer}</div>
+        <div class="name">{profile?.name ?? chat.name}</div>
+        <div class="muted">личный чат · сквозное шифрование</div>
       </div>
+    </div>
+    <div class="info-rows">
+      <div class="info-row"><div>@{profile?.username ?? chat.peer}</div><div class="muted small">Имя пользователя</div></div>
+      {#if profile?.bio}<div class="info-row"><div class="bio">{profile.bio}</div><div class="muted small">О себе</div></div>{/if}
     </div>
     <button class="row-btn" onclick={() => (app.modal = { kind: 'verify', username: chat.peer! })}>
       <Icon name="shield" size={20} />
@@ -89,10 +101,10 @@
         {#each users as u (u.userId)}
           <div class="member">
             <button class="who" onclick={() => (app.modal = { kind: 'verify', username: u.username })}>
-              <Avatar name={u.username} id={u.userId} size={40} />
+              <Avatar name={u.name} id={u.userId} user={u.userId} photo={u.avatarId} size={40} />
               <div class="who-text">
-                <div class="uname">{u.username}{u.me ? ' (вы)' : ''}</div>
-                <div class="muted small">{u.devices} {plural(u.devices, 'устройство', 'устройства', 'устройств')}</div>
+                <div class="uname">{u.name}{u.me ? ' (вы)' : ''}</div>
+                <div class="muted small">@{u.username} · {u.devices} {plural(u.devices, 'устройство', 'устройства', 'устройств')}</div>
               </div>
             </button>
             <StatusBadge status={u.me ? 'self' : u.status} />
@@ -123,4 +135,8 @@
   .row-btn:hover { background: var(--bg-hover); }
   .grow { flex: 1; color: var(--text); }
   .hint { margin: 6px 10px 0; }
+  .info-rows { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+  .info-row { padding: 8px 10px; border-radius: 10px; }
+  .info-row:hover { background: var(--bg-hover); }
+  .bio { white-space: pre-wrap; word-break: break-word; }
 </style>

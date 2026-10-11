@@ -448,11 +448,14 @@ func (c *Client) Recover(ctx context.Context, phrase string) (*LoginResult, erro
 
 // UserInfo is a search result.
 type UserInfo struct {
-	UserID   string
-	Username string
+	UserID      string
+	Username    string
+	DisplayName string
+	AvatarID    string
 }
 
-// SearchUsers finds users by username prefix (at least 2 characters).
+// SearchUsers finds users by @username prefix or a word of their name
+// (at least 2 characters).
 func (c *Client) SearchUsers(ctx context.Context, query string) ([]UserInfo, error) {
 	if err := c.refreshToken(ctx); err != nil {
 		return nil, err
@@ -461,15 +464,10 @@ func (c *Client) SearchUsers(ctx context.Context, query string) ([]UserInfo, err
 	if err != nil {
 		return nil, err
 	}
+	_ = c.putProfiles(ctx, r.Users)
 	out := make([]UserInfo, 0, len(r.Users))
-	_ = c.st.Update(ctx, func(tx *store.Tx) error {
-		for _, u := range r.Users {
-			_ = tx.PutUser(u.UserId, u.Username)
-		}
-		return nil
-	})
 	for _, u := range r.Users {
-		out = append(out, UserInfo{UserID: u.UserId, Username: u.Username})
+		out = append(out, UserInfo{UserID: u.UserId, Username: u.Username, DisplayName: u.DisplayName, AvatarID: u.AvatarId})
 	}
 	return out, nil
 }

@@ -89,8 +89,8 @@ func (m *Messenger) Close() error {
 }
 
 // Register creates the account and this (approved) device.
-func (m *Messenger) Register(username, password, deviceName string) error {
-	return m.c.Register(context.Background(), username, password, deviceName)
+func (m *Messenger) Register(username, password, displayName, deviceName string) error {
+	return m.c.Register(context.Background(), username, password, displayName, deviceName)
 }
 
 // Login adds this device to an existing account. Returns

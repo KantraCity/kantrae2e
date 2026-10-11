@@ -137,7 +137,7 @@ func (c *cluster) open(name, db string) *user {
 func (c *cluster) register(name string) *user {
 	c.t.Helper()
 	u := c.open(name, name+".db")
-	if err := u.Register(context.Background(), name, "password-"+name, name+"-laptop"); err != nil {
+	if err := u.Register(context.Background(), name, "password-"+name, "", name+"-laptop"); err != nil {
 		c.t.Fatal(err)
 	}
 	return u
@@ -908,4 +908,62 @@ func TestRealtimeKeepAliveAndReconnect(t *testing.T) {
 	_, err = alice.SendText(ctx, dm, "after reconnect")
 	ok(t, err)
 	waitFor(t, func() bool { return len(u.eventsOf(core.EventMessage)) == 2 })
+}
+
+// Telegram-like profiles (display name, @username, bio, photo) and logging
+// a device out.
+func TestProfilesAndLogout(t *testing.T) {
+	c := newCluster(t)
+	ctx := context.Background()
+	alice := c.open("alice", "alice.db")
+	ok(t, alice.Register(ctx, "alice", "password-alice", "Алиса Смирнова", "laptop"))
+	bob := c.register("bob")
+
+	found, err := bob.SearchUsers(ctx, "смир")
+	ok(t, err)
+	if len(found) != 1 || found[0].DisplayName != "Алиса Смирнова" {
+		t.Fatalf("search by name: %+v", found)
+	}
+	_, err = alice.UpdateProfile(ctx, "Алиса", "люблю MLS")
+	ok(t, err)
+	p, err := alice.SetUsername(ctx, "alisa")
+	ok(t, err)
+	if p.Username != "alisa" || alice.Account().Username != "alisa" {
+		t.Fatalf("username: %+v / %+v", p, alice.Account())
+	}
+	if _, err := alice.SetUsername(ctx, "BOB"); !errors.Is(err, core.ErrUsernameTaken) {
+		t.Fatalf("taken: %v", err)
+	}
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...)
+	_, err = alice.SetAvatar(ctx, png)
+	ok(t, err)
+
+	dm, err := bob.OpenDirect(ctx, "@alisa")
+	ok(t, err)
+	ok(t, bob.RefreshProfiles(ctx, alice.Account().UserID))
+	ap, err := bob.Profile(ctx, alice.Account().UserID)
+	ok(t, err)
+	if ap.DisplayName != "Алиса" || ap.Bio != "люблю MLS" || ap.AvatarID == "" {
+		t.Fatalf("bob sees %+v", ap)
+	}
+	img, err := bob.Avatar(ctx, alice.Account().UserID)
+	ok(t, err)
+	if !bytes.Equal(img, png) {
+		t.Fatal("avatar mismatch")
+	}
+	ok(t, alice.Sync(ctx))
+	if g, _ := alice.ResolveGroup(ctx, dm); g == nil {
+		t.Fatal("alice did not get the chat")
+	}
+
+	// Logout: the device is revoked and locked out.
+	info, err := alice.LogoutInfo(ctx)
+	ok(t, err)
+	if !info.LastDevice || info.HasRecovery {
+		t.Fatalf("logout info %+v", info)
+	}
+	ok(t, alice.Logout(ctx))
+	if err := alice.Sync(ctx); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("after logout: %v", err)
+	}
 }

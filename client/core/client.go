@@ -439,11 +439,11 @@ func (c *Client) refreshToken(ctx context.Context) error {
 // (protecting the server-side backup) is random; it reaches the account's
 // future devices when they are approved here, or via the optional recovery
 // phrase (SetupRecovery).
-func (c *Client) Register(ctx context.Context, username, password, deviceName string) error {
+func (c *Client) Register(ctx context.Context, username, password, displayName, deviceName string) error {
 	if c.Account() != nil {
 		return ErrAlreadySetUp
 	}
-	r, err := c.auth.Register(ctx, &authv1.RegisterRequest{Username: username, Password: password})
+	r, err := c.auth.Register(ctx, &authv1.RegisterRequest{Username: username, Password: password, DisplayName: displayName})
 	if err != nil {
 		return err
 	}

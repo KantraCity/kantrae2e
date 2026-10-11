@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -45,6 +44,8 @@ type UIEvent struct {
 
 // Account is the logged-in identity of this device.
 type Account struct {
+	// Name is the display name; Username the unique @username.
+	Name     string `json:"name"`
 	Username string `json:"username"`
 	UserID   string `json:"userId"`
 	DeviceID string `json:"deviceId"`
@@ -59,6 +60,8 @@ type State struct {
 	// Pending: this device waits for approval; show LinkCode.
 	Pending  bool   `json:"pending"`
 	LinkCode string `json:"linkCode,omitempty"`
+	// Accounts on this device (including the active one, set up or not).
+	Accounts int `json:"accounts"`
 }
 
 // LinkRequest is a new device of the account waiting for approval.
@@ -73,6 +76,8 @@ type LinkRequest struct {
 type UserHit struct {
 	UserID   string `json:"userId"`
 	Username string `json:"username"`
+	Name     string `json:"name"`
+	AvatarID string `json:"avatarId,omitempty"`
 }
 
 type FileInfo struct {
@@ -81,16 +86,18 @@ type FileInfo struct {
 }
 
 type Message struct {
-	Seq      int64     `json:"seq"`
-	ID       string    `json:"id"`
-	ChatID   string    `json:"chatId"`
-	SenderID string    `json:"senderId"`
-	Sender   string    `json:"sender"`
-	Kind     string    `json:"kind"` // "text" or "file"
-	Text     string    `json:"text"`
-	File     *FileInfo `json:"file,omitempty"`
-	SentAt   int64     `json:"sentAt"` // unix ms
-	Outgoing bool      `json:"outgoing"`
+	Seq      int64  `json:"seq"`
+	ID       string `json:"id"`
+	ChatID   string `json:"chatId"`
+	SenderID string `json:"senderId"`
+	// Sender is the display name; SenderAvatar its photo id (or "").
+	Sender       string    `json:"sender"`
+	SenderAvatar string    `json:"senderAvatar,omitempty"`
+	Kind         string    `json:"kind"` // "text" or "file"
+	Text         string    `json:"text"`
+	File         *FileInfo `json:"file,omitempty"`
+	SentAt       int64     `json:"sentAt"` // unix ms
+	Outgoing     bool      `json:"outgoing"`
 	// Origin: "" direct, "backup" restored, "shared" re-sent by another member.
 	Origin string `json:"origin"`
 }
@@ -99,16 +106,20 @@ type Chat struct {
 	ID string `json:"id"`
 	// Kind: "direct" (one person, found by username) or "group".
 	Kind string `json:"kind"`
-	// Peer of a direct chat (username / user id).
-	Peer      string   `json:"peer,omitempty"`
-	PeerID    string   `json:"peerId,omitempty"`
-	Name      string   `json:"name"`
-	Active    bool     `json:"active"`
-	Last      *Message `json:"last,omitempty"`
-	UpdatedAt int64    `json:"updatedAt"` // unix ms
+	// Peer of a direct chat (@username / user id / photo id); Name is
+	// its display name.
+	Peer       string   `json:"peer,omitempty"`
+	PeerID     string   `json:"peerId,omitempty"`
+	PeerAvatar string   `json:"peerAvatar,omitempty"`
+	Name       string   `json:"name"`
+	Active     bool     `json:"active"`
+	Last       *Message `json:"last,omitempty"`
+	UpdatedAt  int64    `json:"updatedAt"` // unix ms
 }
 
 type Member struct {
+	Name     string `json:"name"`
+	AvatarID string `json:"avatarId,omitempty"`
 	Username string `json:"username"`
 	UserID   string `json:"userId"`
 	DeviceID string `json:"deviceId"`
@@ -149,21 +160,22 @@ type FileData struct {
 var errNoServer = errors.New("server address is not set")
 
 // Messenger is the service bound to the frontend. The same code runs in the
-// desktop app and in server (web) mode.
+// desktop app and in server (web) mode. It holds every account added on this
+// device (accounts.go); the UI shows the active one, all of them stay
+// connected for notifications.
 type Messenger struct {
 	app    *application.App
 	dbFunc func() string
-	dbPath string
+	dir    string
 	hc     *http.Client
 	web    bool
 
-	mu     sync.Mutex
-	c      *core.Client
-	server string
-	cancel context.CancelFunc
-	online bool
+	mu            sync.Mutex
+	slots         []*slot
+	active        *slot
+	defaultServer string
 
-	// startOnce: the profile is opened once per process, by the UI or (on
+	// startOnce: the accounts are opened once per process, by the UI or (on
 	// Android) by the background service, whichever comes first.
 	startOnce sync.Once
 	startErr  error
@@ -172,14 +184,13 @@ type Messenger struct {
 	notif      notifier
 	foreground bool
 	activeChat string
-	unread     map[string]int
 	openChat   string // chat to open once the UI asks (tapped notification)
 }
 
 // NewMessenger: dbPath is resolved at startup (on Android the storage
 // directory is only known once the app runs).
 func NewMessenger(dbPath func() string, defaultServer string, hc *http.Client, web bool) *Messenger {
-	m := &Messenger{dbFunc: dbPath, server: defaultServer, hc: hc, web: web, foreground: true, unread: map[string]int{}}
+	m := &Messenger{dbFunc: dbPath, defaultServer: defaultServer, hc: hc, web: web, foreground: true}
 	m.notif = newNotifier(m)
 	return m
 }
@@ -191,33 +202,12 @@ func (m *Messenger) ServiceStartup(ctx context.Context, _ application.ServiceOpt
 	return m.start()
 }
 
-// start opens an existing profile and connects. Safe to call repeatedly
-// and without the UI (Android background service).
-func (m *Messenger) start() error {
-	m.startOnce.Do(func() {
-		m.dbPath = m.dbFunc()
-		if _, err := os.Stat(m.dbPath); err != nil {
-			return // no profile yet: the UI registers or logs in
-		}
-		// Existing profile: the server URL is stored in it.
-		if m.startErr = m.open(""); m.startErr != nil {
-			return
-		}
-		if m.c.Account() != nil {
-			m.startListening()
-		}
-	})
-	return m.startErr
-}
-
 func (m *Messenger) ServiceShutdown() error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.cancel != nil {
-		m.cancel()
-	}
-	if m.c != nil {
-		return m.c.Close()
+	slots := append([]*slot(nil), m.slots...)
+	m.mu.Unlock()
+	for _, s := range slots {
+		s.close()
 	}
 	return nil
 }
@@ -231,41 +221,14 @@ func (m *Messenger) emit(e UIEvent) {
 	}
 }
 
-// open (re)opens the core client. Caller must not hold m.mu.
-func (m *Messenger) open(server string) error {
-	if err := os.MkdirAll(filepath.Dir(m.dbPath), 0o700); err != nil {
-		return err
-	}
-	c, err := core.Open(context.Background(), core.Options{
-		ServerURL:  server,
-		DBPath:     m.dbPath,
-		HTTPClient: m.hc,
-		OnEvent:    m.onCoreEvent,
-		Logf:       log.Printf, // diagnostics only, never plaintext
-		KeepAlive:  keepAlive,
-	})
-	if err != nil {
-		return err
-	}
-	m.mu.Lock()
-	if m.c != nil {
-		m.c.Close()
-	}
-	m.c = c
-	if server != "" {
-		m.server = server
-	}
-	m.mu.Unlock()
-	return nil
-}
-
+// client returns the active account's client.
 func (m *Messenger) client() (*core.Client, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.c == nil {
+	if m.active == nil || m.active.c == nil {
 		return nil, errNoServer
 	}
-	return m.c, nil
+	return m.active.c, nil
 }
 
 func (m *Messenger) loggedIn() (*core.Client, error) {
@@ -279,15 +242,21 @@ func (m *Messenger) loggedIn() (*core.Client, error) {
 	return c, nil
 }
 
-func (m *Messenger) startListening() {
+func (m *Messenger) startListening(s *slot) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cancel != nil || m.c == nil {
+	if s.cancel != nil || s.c == nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
-	c := m.c
+	s.cancel = cancel
+	c := s.c
+	m.mu.Unlock()
+	a := c.Account()
+	m.mu.Lock()
+	if a != nil {
+		s.userID = a.UserID
+	}
 	go func() {
 		// Catch up first (join groups of the account, pending messages).
 		_ = c.Sync(ctx)
@@ -310,43 +279,51 @@ func (m *Messenger) startListening() {
 	}()
 }
 
-func (m *Messenger) onCoreEvent(e core.Event) {
+func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
+	m.mu.Lock()
+	isActive := s == m.active
+	switch e.Type {
+	case core.EventConnected:
+		s.online = true
+	case core.EventDisconnected:
+		s.online = false
+	}
+	m.mu.Unlock()
+	if !isActive {
+		// Background account: only notifications and its unread badge.
+		if e.Type == core.EventMessage && e.Message != nil && s.c != nil {
+			m.maybeNotify(s, s.c, m.toMessage(s.c, e.Message))
+			m.emit(UIEvent{Type: "accounts"})
+		}
+		return
+	}
 	ev := UIEvent{Type: string(e.Type), ChatID: e.GroupID, Detail: e.Detail, Count: e.Count, DeviceID: e.DeviceID}
 	if e.Err != nil && ev.Detail == "" {
 		ev.Detail = e.Err.Error()
 	}
-	switch e.Type {
-	case core.EventConnected:
-		m.mu.Lock()
-		m.online = true
-		m.mu.Unlock()
-	case core.EventDisconnected:
-		m.mu.Lock()
-		m.online = false
-		m.mu.Unlock()
-	case core.EventMessage:
-		if c, err := m.client(); err == nil && e.Message != nil {
-			// Re-read to get the local sequence number.
-			if ms, err := c.Messages(context.Background(), e.GroupID, 20); err == nil {
-				for i := len(ms) - 1; i >= 0; i-- {
-					if ms[i].UID == e.Message.UID {
-						ev.Message = m.toMessage(c, &ms[i])
-						break
-					}
+	if e.Type == core.EventMessage && e.Message != nil && s.c != nil {
+		c := s.c
+		// Re-read to get the local sequence number.
+		if ms, err := c.Messages(context.Background(), e.GroupID, 20); err == nil {
+			for i := len(ms) - 1; i >= 0; i-- {
+				if ms[i].UID == e.Message.UID {
+					ev.Message = m.toMessage(c, &ms[i])
+					break
 				}
 			}
-			if ev.Message == nil {
-				ev.Message = m.toMessage(c, e.Message)
-			}
-			m.maybeNotify(c, ev.Message)
 		}
+		if ev.Message == nil {
+			ev.Message = m.toMessage(c, e.Message)
+		}
+		m.maybeNotify(s, c, ev.Message)
 	}
 	m.emit(ev)
 }
 
 func (m *Messenger) toMessage(c *core.Client, s *store.Message) *Message {
+	p := profileOf(c, s.SenderUser)
 	msg := &Message{Seq: s.Seq, ID: s.UID, ChatID: s.GroupID, SenderID: s.SenderUser,
-		Sender: c.Username(context.Background(), s.SenderUser), Kind: "text", Text: s.Body,
+		Sender: core.DisplayName(p), SenderAvatar: p.AvatarID, Kind: "text", Text: s.Body,
 		SentAt: s.SentAt, Outgoing: s.Outgoing, Origin: s.Origin}
 	if ref, err := core.ParseMedia(s); err == nil {
 		msg.Kind, msg.Text = "file", ""
@@ -360,14 +337,23 @@ func (m *Messenger) toMessage(c *core.Client, s *store.Message) *Message {
 // GetState returns what the UI needs on start.
 func (m *Messenger) GetState() State {
 	m.mu.Lock()
-	st := State{ServerURL: m.server, Online: m.online, WebMode: m.web}
-	c := m.c
+	st := State{WebMode: m.web, ServerURL: m.defaultServer}
+	var c *core.Client
+	if s := m.active; s != nil {
+		st.Online = s.online
+		if s.server != "" {
+			st.ServerURL = s.server
+		}
+		c = s.c
+	}
+	st.Accounts = len(m.slots)
 	m.mu.Unlock()
 	if c == nil {
 		return st
 	}
 	if a := c.Account(); a != nil {
-		st.Account = &Account{Username: a.Username, UserID: a.UserID, DeviceID: a.DeviceID}
+		st.Account = &Account{Username: a.Username, UserID: a.UserID, DeviceID: a.DeviceID,
+			Name: core.DisplayName(c.CachedProfile(context.Background(), a.UserID))}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if ok, err := c.IsApproved(ctx); err == nil && !ok {
@@ -378,51 +364,66 @@ func (m *Messenger) GetState() State {
 	return st
 }
 
-// prepare opens the profile for a (new) server address before an account exists.
-func (m *Messenger) prepare(server string) (*core.Client, error) {
+// prepare opens the active (not yet set up) account slot for a server.
+func (m *Messenger) prepare(server string) (*slot, error) {
 	server = strings.TrimRight(strings.TrimSpace(server), "/")
 	if server == "" {
 		return nil, errNoServer
 	}
-	if c, err := m.client(); err == nil {
-		if c.Account() != nil {
+	m.mu.Lock()
+	s := m.active
+	m.mu.Unlock()
+	if s == nil {
+		return nil, errNoServer
+	}
+	if s.c != nil {
+		if s.c.Account() != nil {
 			return nil, core.ErrAlreadySetUp
 		}
-		if m.server == server {
-			return c, nil
+		if s.server == server {
+			return s, nil
 		}
 	}
-	if err := m.open(server); err != nil {
+	if err := m.openSlot(s, server); err != nil {
 		return nil, err
 	}
-	return m.client()
+	return s, nil
 }
 
-// Register creates an account with this device.
-func (m *Messenger) Register(server, username, password, deviceName string) error {
-	c, err := m.prepare(server)
+// Register creates an account with this device (added as another account
+// if there already are some).
+func (m *Messenger) Register(server, username, password, displayName, deviceName string) error {
+	s, err := m.prepare(server)
 	if err != nil {
 		return err
 	}
-	if err := c.Register(context.Background(), username, password, orDefault(deviceName)); err != nil {
+	if err := m.checkNotAdded(username); err != nil {
 		return err
 	}
-	m.startListening()
+	if err := s.c.Register(context.Background(), username, password, strings.TrimSpace(displayName), orDefault(deviceName)); err != nil {
+		return err
+	}
+	m.saveAccounts()
+	m.startListening(s)
 	return nil
 }
 
 // Login adds this app as a new device of an existing account. Usually the
 // result is Pending: approve it on another device (same Code) or Recover.
 func (m *Messenger) Login(server, username, password, deviceName string) (*LoginResult, error) {
-	c, err := m.prepare(server)
+	s, err := m.prepare(server)
 	if err != nil {
 		return nil, err
 	}
-	r, err := c.Login(context.Background(), username, password, orDefault(deviceName))
+	if err := m.checkNotAdded(username); err != nil {
+		return nil, err
+	}
+	r, err := s.c.Login(context.Background(), username, password, orDefault(deviceName))
 	if r == nil {
 		return nil, err
 	}
-	m.startListening()
+	m.saveAccounts()
+	m.startListening(s)
 	return toLoginResult(r), err
 }
 
@@ -473,16 +474,9 @@ func (m *Messenger) CancelPending() error {
 		return errors.New("устройство уже подтверждено")
 	}
 	m.mu.Lock()
-	if m.cancel != nil {
-		m.cancel()
-		m.cancel = nil
-	}
-	m.c = nil
+	s := m.active
 	m.mu.Unlock()
-	c.Close()
-	for _, suffix := range []string{"", "-wal", "-shm"} {
-		_ = os.Remove(m.dbPath + suffix)
-	}
+	m.removeSlot(s)
 	return nil
 }
 
@@ -569,6 +563,14 @@ func (m *Messenger) Chats() ([]Chat, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Refresh stale profiles of the people in the list in one request.
+	var stale []string
+	for _, g := range gs {
+		if g.Peer != "" && time.Since(time.UnixMilli(c.CachedProfile(ctx, g.Peer).FetchedAt)) > 10*time.Minute {
+			stale = append(stale, g.Peer)
+		}
+	}
+	_ = c.RefreshProfiles(ctx, stale...)
 	out := make([]Chat, 0, len(gs))
 	for _, g := range gs {
 		ch := m.toChat(c, g)
@@ -585,9 +587,8 @@ func (m *Messenger) Chats() ([]Chat, error) {
 func (m *Messenger) toChat(c *core.Client, g store.Group) Chat {
 	ch := Chat{ID: g.ID, Kind: core.GroupKind(g.ID), Name: g.Name, Active: g.Active, UpdatedAt: g.CreatedAt * 1000}
 	if ch.Kind == core.KindDirect && g.Peer != "" {
-		ch.PeerID = g.Peer
-		ch.Peer = c.Username(context.Background(), g.Peer)
-		ch.Name = ch.Peer
+		p := profileOf(c, g.Peer)
+		ch.PeerID, ch.Peer, ch.PeerAvatar, ch.Name = g.Peer, p.Username, p.AvatarID, core.DisplayName(p)
 	}
 	if ch.Name == "" {
 		ch.Name = "Группа " + g.ID[:4]
@@ -627,7 +628,7 @@ func (m *Messenger) SearchUsers(query string) ([]UserHit, error) {
 	out := make([]UserHit, 0, len(us))
 	for _, u := range us {
 		if u.UserID != me.UserID {
-			out = append(out, UserHit{UserID: u.UserID, Username: u.Username})
+			out = append(out, UserHit{UserID: u.UserID, Username: u.Username, Name: u.DisplayName, AvatarID: u.AvatarID})
 		}
 	}
 	return out, nil
@@ -741,7 +742,9 @@ func (m *Messenger) Members(chatID string) ([]Member, error) {
 				}
 			}
 		}
-		out = append(out, Member{Username: mm.Username, UserID: mm.UserID, DeviceID: mm.DeviceID, Status: st})
+		p := profileOf(c, mm.UserID)
+		out = append(out, Member{Name: core.DisplayName(p), AvatarID: p.AvatarID, Username: mm.Username,
+			UserID: mm.UserID, DeviceID: mm.DeviceID, Status: st})
 	}
 	return out, nil
 }

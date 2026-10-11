@@ -102,7 +102,7 @@
     <header>
       <button class="icon-btn back" aria-label="Назад" onclick={() => app.openChat(null)}><Icon name="back" /></button>
       <button class="title" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}>
-        <Avatar name={chat.name} id={chat.peerId || chat.id} size={42} />
+        <Avatar name={chat.name} id={chat.peerId || chat.id} user={chat.peerId} photo={chat.peerAvatar} size={42} />
         <div class="title-text">
           <div class="name">{chat.name}</div>
           <div class="status muted">

@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -73,14 +75,26 @@ func (s *Service) Register(ctx context.Context, req *authv1.RegisterRequest) (*a
 	if len(req.Password) < 8 || len(req.Password) > 72 {
 		return nil, invalid("password must be 8-72 bytes")
 	}
+	name, err := cleanName(req.DisplayName)
+	if err != nil {
+		return nil, err
+	}
+	if name == "" {
+		name = req.Username
+	}
+	if taken, err := s.usernameTaken(ctx, req.Username, ""); err != nil {
+		return nil, internal(err)
+	} else if taken {
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("username taken"))
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, internal(err)
 	}
 	var id string
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id`,
-		req.Username, string(hash)).Scan(&id)
+		`INSERT INTO users (username, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id`,
+		req.Username, string(hash), name).Scan(&id)
 	if db.IsUniqueViolation(err) {
 		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("username taken"))
 	}
@@ -201,16 +215,17 @@ func (s *Service) LookupUser(ctx context.Context, req *authv1.LookupUserRequest)
 	if _, err := authmiddleware.RequireUser(ctx); err != nil {
 		return nil, err
 	}
-	resp := &authv1.LookupUserResponse{}
+	var u *authv1.User
 	var err error
 	switch {
 	case req.Username != "" && req.UserId == "":
-		err = s.pool.QueryRow(ctx, `SELECT id, username FROM users WHERE username=$1`, req.Username).Scan(&resp.UserId, &resp.Username)
+		u, err = scanUser(s.pool.QueryRow(ctx, `SELECT `+userCols+` FROM users WHERE lower(username)=lower($1)`,
+			strings.TrimPrefix(req.Username, "@")))
 	case req.UserId != "" && req.Username == "":
 		if _, perr := uuid.Parse(req.UserId); perr != nil {
 			return nil, invalid("bad user_id")
 		}
-		err = s.pool.QueryRow(ctx, `SELECT id, username FROM users WHERE id=$1`, req.UserId).Scan(&resp.UserId, &resp.Username)
+		u, err = scanUser(s.pool.QueryRow(ctx, `SELECT `+userCols+` FROM users WHERE id=$1`, req.UserId))
 	default:
 		return nil, invalid("exactly one of username / user_id is required")
 	}
@@ -220,7 +235,8 @@ func (s *Service) LookupUser(ctx context.Context, req *authv1.LookupUserRequest)
 	if err != nil {
 		return nil, internal(err)
 	}
-	return resp, nil
+	return &authv1.LookupUserResponse{UserId: u.UserId, Username: u.Username, DisplayName: u.DisplayName,
+		Bio: u.Bio, AvatarId: u.AvatarId}, nil
 }
 
 func (s *Service) RefreshToken(ctx context.Context, _ *authv1.RefreshTokenRequest) (*authv1.RefreshTokenResponse, error) {
@@ -357,22 +373,189 @@ func (s *Service) SearchUsers(ctx context.Context, req *authv1.SearchUsersReques
 	if len(q) < 2 || len(q) > 32 {
 		return resp, nil
 	}
-	pattern := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(q) + "%"
+	esc := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(q)
+	// Like Telegram's global search: @username prefix, or a word of the name.
 	rows, err := s.pool.Query(ctx,
-		`SELECT id::text, username FROM users WHERE lower(username) LIKE $1 ESCAPE '\'
-		 ORDER BY lower(username) = $2 DESC, length(username), username LIMIT 20`, pattern, q)
+		`SELECT `+userCols+` FROM users
+		 WHERE lower(username) LIKE $1 ESCAPE '\' OR lower(display_name) LIKE $1 ESCAPE '\'
+		    OR lower(display_name) LIKE $3 ESCAPE '\'
+		 ORDER BY lower(username) = $2 DESC, lower(username) LIKE $1 ESCAPE '\' DESC, length(username), username LIMIT 20`,
+		esc+"%", q, "% "+esc+"%")
 	if err != nil {
 		return nil, internal(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var u authv1.User
-		if err := rows.Scan(&u.UserId, &u.Username); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, internal(err)
 		}
-		resp.Users = append(resp.Users, &u)
+		resp.Users = append(resp.Users, u)
 	}
 	return resp, rows.Err()
+}
+
+// ---- profile ---------------------------------------------------------------------
+
+const userCols = `id::text, username, display_name, bio, avatar_id`
+
+func scanUser(row pgx.Row) (*authv1.User, error) {
+	var u authv1.User
+	err := row.Scan(&u.UserId, &u.Username, &u.DisplayName, &u.Bio, &u.AvatarId)
+	return &u, err
+}
+
+const (
+	maxNameRunes = 64
+	maxBioRunes  = 140 // Telegram's limit
+	maxAvatar    = 512 << 10
+)
+
+func cleanName(n string) (string, error) {
+	n = strings.Join(strings.Fields(n), " ")
+	if utf8.RuneCountInString(n) > maxNameRunes {
+		return "", invalid("name is too long")
+	}
+	return n, nil
+}
+
+func (s *Service) usernameTaken(ctx context.Context, username, exceptID string) (bool, error) {
+	var taken bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE lower(username)=lower($1) AND id::text <> $2)`,
+		username, exceptID).Scan(&taken)
+	return taken, err
+}
+
+func (s *Service) user(ctx context.Context, id string) (*authv1.User, error) {
+	u, err := scanUser(s.pool.QueryRow(ctx, `SELECT `+userCols+` FROM users WHERE id=$1`, id))
+	if err != nil {
+		return nil, internal(err)
+	}
+	return u, nil
+}
+
+func (s *Service) GetProfiles(ctx context.Context, req *authv1.GetProfilesRequest) (*authv1.GetProfilesResponse, error) {
+	if _, err := authmiddleware.RequireUser(ctx); err != nil {
+		return nil, err
+	}
+	if len(req.UserIds) > 200 {
+		return nil, invalid("too many user ids")
+	}
+	var ids []uuid.UUID
+	for _, id := range req.UserIds {
+		if u, err := uuid.Parse(id); err == nil {
+			ids = append(ids, u)
+		}
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+userCols+` FROM users WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	resp := &authv1.GetProfilesResponse{}
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, internal(err)
+		}
+		resp.Users = append(resp.Users, u)
+	}
+	return resp, rows.Err()
+}
+
+func (s *Service) UpdateProfile(ctx context.Context, req *authv1.UpdateProfileRequest) (*authv1.UpdateProfileResponse, error) {
+	uid, _, err := s.requireApprovedDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	name, err := cleanName(req.DisplayName)
+	if err != nil {
+		return nil, err
+	}
+	if name == "" {
+		return nil, invalid("name is required")
+	}
+	bio := strings.TrimSpace(req.Bio)
+	if utf8.RuneCountInString(bio) > maxBioRunes {
+		return nil, invalid("bio is too long")
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE users SET display_name=$2, bio=$3 WHERE id=$1`, uid, name, bio); err != nil {
+		return nil, internal(err)
+	}
+	u, err := s.user(ctx, uid)
+	return &authv1.UpdateProfileResponse{User: u}, err
+}
+
+func (s *Service) SetUsername(ctx context.Context, req *authv1.SetUsernameRequest) (*authv1.SetUsernameResponse, error) {
+	uid, _, err := s.requireApprovedDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimPrefix(strings.TrimSpace(req.Username), "@")
+	if !usernameRe.MatchString(name) {
+		return nil, invalid("username must be 3-32 chars of [a-zA-Z0-9_.-]")
+	}
+	if taken, err := s.usernameTaken(ctx, name, uid); err != nil {
+		return nil, internal(err)
+	} else if taken {
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("username taken"))
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE users SET username=$2 WHERE id=$1`, uid, name)
+	if db.IsUniqueViolation(err) {
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("username taken"))
+	}
+	if err != nil {
+		return nil, internal(err)
+	}
+	u, err := s.user(ctx, uid)
+	return &authv1.SetUsernameResponse{User: u}, err
+}
+
+func (s *Service) SetAvatar(ctx context.Context, req *authv1.SetAvatarRequest) (*authv1.SetAvatarResponse, error) {
+	uid, _, err := s.requireApprovedDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var img []byte
+	id := ""
+	if len(req.Image) > 0 {
+		if len(req.Image) > maxAvatar {
+			return nil, invalid("photo is larger than 512 KiB")
+		}
+		switch http.DetectContentType(req.Image) {
+		case "image/jpeg", "image/png", "image/webp":
+		default:
+			return nil, invalid("photo must be JPEG, PNG or WebP")
+		}
+		img = req.Image
+		sum := sha256.Sum256(img)
+		id = hex.EncodeToString(sum[:8])
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE users SET avatar=$2, avatar_id=$3 WHERE id=$1`, uid, img, id); err != nil {
+		return nil, internal(err)
+	}
+	u, err := s.user(ctx, uid)
+	return &authv1.SetAvatarResponse{User: u}, err
+}
+
+func (s *Service) GetAvatar(ctx context.Context, req *authv1.GetAvatarRequest) (*authv1.GetAvatarResponse, error) {
+	if _, err := authmiddleware.RequireUser(ctx); err != nil {
+		return nil, err
+	}
+	if _, err := uuid.Parse(req.UserId); err != nil {
+		return nil, invalid("bad user_id")
+	}
+	resp := &authv1.GetAvatarResponse{}
+	err := s.pool.QueryRow(ctx, `SELECT avatar_id, coalesce(avatar, ''::bytea) FROM users WHERE id=$1`, req.UserId).
+		Scan(&resp.AvatarId, &resp.Image)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && resp.AvatarId == "") {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("no photo"))
+	}
+	if err != nil {
+		return nil, internal(err)
+	}
+	return resp, nil
 }
 
 // ---- internal API -------------------------------------------------------------

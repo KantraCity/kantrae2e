@@ -32,7 +32,7 @@
 
 <aside class="sidebar">
   <header>
-    <button class="icon-btn" aria-label="Меню" onclick={() => (app.modal = { kind: 'settings' })}><Icon name="menu" /></button>
+    <button class="icon-btn" aria-label="Меню" onclick={() => (app.modal = { kind: 'drawer' })}><Icon name="menu" /></button>
     <div class="search">
       <Icon name="search" size={18} />
       <input placeholder={app.online ? 'Поиск' : 'Соединение…'} bind:value={app.search} oninput={searchInput}
@@ -52,7 +52,7 @@
     {#if q && filtered.length}<div class="section-title">Чаты</div>{/if}
     {#each filtered as c (c.id)}
       <button class="chat-item" class:active={c.id === app.currentId} onclick={() => app.openChat(c.id)}>
-        <Avatar name={c.name} id={c.peerId || c.id} size={54} />
+        <Avatar name={c.name} id={c.peerId || c.id} user={c.peerId} photo={c.peerAvatar} size={54} />
         <div class="meta">
           <div class="row">
             <span class="name">
@@ -77,9 +77,9 @@
       <div class="section-title">Глобальный поиск</div>
       {#each people as u (u.userId)}
         <button class="chat-item" onclick={() => app.openDirect(u.username)}>
-          <Avatar name={u.username} id={u.userId} size={54} />
+          <Avatar name={u.name || u.username} id={u.userId} user={u.userId} photo={u.avatarId} size={54} />
           <div class="meta">
-            <span class="name">{u.username}</span>
+            <span class="name">{u.name || u.username}</span>
             <span class="preview">@{u.username}</span>
           </div>
         </button>

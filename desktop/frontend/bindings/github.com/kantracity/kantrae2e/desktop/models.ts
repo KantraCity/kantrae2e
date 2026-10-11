@@ -5,9 +5,25 @@
  * Account is the logged-in identity of this device.
  */
 export interface Account {
+    /**
+     * Name is the display name; Username the unique @username.
+     */
+    "name": string;
     "username": string;
     "userId": string;
     "deviceId": string;
+}
+
+/**
+ * AccountInfo is one account in the account switcher.
+ */
+export interface AccountInfo {
+    "id": string;
+    "userId": string;
+    "name": string;
+    "username": string;
+    "active": boolean;
+    "unread": number;
 }
 
 export interface Chat {
@@ -19,10 +35,12 @@ export interface Chat {
     "kind": string;
 
     /**
-     * Peer of a direct chat (username / user id).
+     * Peer of a direct chat (@username / user id / photo id); Name is
+     * its display name.
      */
     "peer"?: string;
     "peerId"?: string;
+    "peerAvatar"?: string;
     "name": string;
     "active": boolean;
     "last"?: Message | null;
@@ -78,7 +96,17 @@ export interface LoginResult {
     "requested": number;
 }
 
+/**
+ * LogoutInfo warns before logging out.
+ */
+export interface LogoutInfo {
+    "lastDevice": boolean;
+    "hasRecovery": boolean;
+}
+
 export interface Member {
+    "name": string;
+    "avatarId"?: string;
     "username": string;
     "userId": string;
     "deviceId": string;
@@ -94,7 +122,12 @@ export interface Message {
     "id": string;
     "chatId": string;
     "senderId": string;
+
+    /**
+     * Sender is the display name; SenderAvatar its photo id (or "").
+     */
     "sender": string;
+    "senderAvatar"?: string;
 
     /**
      * "text" or "file"
@@ -158,6 +191,11 @@ export interface State {
      */
     "pending": boolean;
     "linkCode"?: string;
+
+    /**
+     * Accounts on this device (including the active one, set up or not).
+     */
+    "accounts": number;
 }
 
 /**
@@ -189,4 +227,17 @@ export interface UIEvent {
 export interface UserHit {
     "userId": string;
     "username": string;
+    "name": string;
+    "avatarId"?: string;
+}
+
+/**
+ * UserProfile is a public profile as the UI shows it.
+ */
+export interface UserProfile {
+    "userId": string;
+    "username": string;
+    "name": string;
+    "bio": string;
+    "avatarId"?: string;
 }

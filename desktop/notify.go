@@ -17,17 +17,21 @@ import (
 //     (KantraPushService) and posts notifications through JNI;
 //   - web mode: the browser's Notification API (UIEvent "notify").
 
-// Notice is one chat's notification (a newer message replaces it).
+// Notice is one chat's notification (a newer message replaces it). Key
+// identifies it across accounts ("<account>/<chat>").
 type Notice struct {
+	Key    string
 	ChatID string
 	Title  string
 	Body   string
 	Count  int
 }
 
+func noticeKey(account, chatID string) string { return account + "/" + chatID }
+
 type notifier interface {
 	Show(n Notice)
-	Clear(chatID string)
+	Clear(key string)
 }
 
 // Settings are this device's notification preferences.
@@ -58,8 +62,10 @@ func (m *Messenger) pref(key string) bool {
 	if err != nil {
 		return true
 	}
-	return c.Pref(context.Background(), key) != "0"
+	return clientPref(c, key)
 }
+
+func clientPref(c *core.Client, key string) bool { return c.Pref(context.Background(), key) != "0" }
 
 func boolPref(b bool) string {
 	if b {
@@ -104,12 +110,14 @@ func (m *Messenger) OpenSystemSettings(what string) { platformOpenSettings(what)
 func (m *Messenger) SetActiveChat(chatID string) {
 	m.mu.Lock()
 	m.activeChat = chatID
-	if chatID != "" {
-		delete(m.unread, chatID)
+	key := ""
+	if chatID != "" && m.active != nil {
+		delete(m.active.unread, chatID)
+		key = noticeKey(m.active.file, chatID)
 	}
 	m.mu.Unlock()
-	if chatID != "" {
-		m.notif.Clear(chatID)
+	if key != "" {
+		m.notif.Clear(key)
 	}
 }
 
@@ -118,15 +126,19 @@ func (m *Messenger) SetActiveChat(chatID string) {
 func (m *Messenger) SetForeground(fg bool) {
 	m.mu.Lock()
 	m.foreground = fg
-	chat := m.activeChat
-	if fg && chat != "" {
-		delete(m.unread, chat)
+	key := ""
+	if fg && m.activeChat != "" && m.active != nil {
+		delete(m.active.unread, m.activeChat)
+		key = noticeKey(m.active.file, m.activeChat)
 	}
 	m.mu.Unlock()
-	if fg && chat != "" {
-		m.notif.Clear(chat)
+	if key != "" {
+		m.notif.Clear(key)
 	}
 }
+
+// OpenNotification handles a clicked browser notification (web mode).
+func (m *Messenger) OpenNotification(key string) { m.showChat(key) }
 
 // TakeOpenChat returns (once) the chat whose notification was tapped.
 func (m *Messenger) TakeOpenChat() string {
@@ -137,35 +149,47 @@ func (m *Messenger) TakeOpenChat() string {
 	return id
 }
 
-// showChat brings a chat to the screen after its notification was clicked.
-func (m *Messenger) showChat(chatID string) {
+// showChat brings a chat to the screen after its notification (key
+// "<account>/<chat>") was clicked, switching account if needed.
+func (m *Messenger) showChat(key string) {
+	account, chatID, ok := strings.Cut(key, "/")
+	if !ok {
+		account, chatID = "", key
+	}
 	m.mu.Lock()
+	switchTo := account != "" && m.active != nil && m.active.file != account
 	m.openChat = chatID
 	m.mu.Unlock()
+	if switchTo {
+		if err := m.SwitchAccount(account); err != nil {
+			return
+		}
+	}
 	m.emit(UIEvent{Type: "open_chat", ChatID: chatID})
 }
 
-func (m *Messenger) maybeNotify(c *core.Client, msg *Message) {
+func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 	if msg.Outgoing || msg.Origin != "" { // own or restored/shared history
 		return
 	}
 	m.mu.Lock()
-	visible := m.foreground && m.activeChat == msg.ChatID
-	if visible {
+	if s == m.active && m.foreground && m.activeChat == msg.ChatID {
 		m.mu.Unlock()
 		return
 	}
-	m.unread[msg.ChatID]++
-	count := m.unread[msg.ChatID]
+	s.unread[msg.ChatID]++
+	count := s.unread[msg.ChatID]
+	multi := len(m.slots) > 1
 	m.mu.Unlock()
-	if !m.pref(prefNotify) {
+	if !clientPref(c, prefNotify) {
 		return
 	}
-	n := Notice{ChatID: msg.ChatID, Title: "Kantra", Body: "Новое сообщение", Count: count}
+	preview := clientPref(c, prefPreview)
+	n := Notice{Key: noticeKey(s.file, msg.ChatID), ChatID: msg.ChatID, Title: "Kantra", Body: "Новое сообщение", Count: count}
 	if g, err := c.ResolveGroup(context.Background(), msg.ChatID); err == nil {
 		ch := m.toChat(c, *g)
 		n.Title = ch.Name
-		if m.pref(prefPreview) {
+		if preview {
 			body := msg.Text
 			if msg.Kind == "file" && msg.File != nil {
 				body = "📎 " + msg.File.Name
@@ -176,8 +200,14 @@ func (m *Messenger) maybeNotify(c *core.Client, msg *Message) {
 			n.Body = body
 		}
 	}
-	if count > 1 && !m.pref(prefPreview) {
+	if count > 1 && !preview {
 		n.Body = fmt.Sprintf("Новых сообщений: %d", count)
+	}
+	if multi {
+		// Several accounts: say which one, like Telegram.
+		if uid := s.userID; uid != "" {
+			n.Title += " → " + core.DisplayName(c.CachedProfile(context.Background(), uid))
+		}
 	}
 	n.Body = strings.TrimSpace(n.Body)
 	m.notif.Show(n)
@@ -187,7 +217,7 @@ func (m *Messenger) maybeNotify(c *core.Client, msg *Message) {
 type eventNotifier struct{ m *Messenger }
 
 func (e eventNotifier) Show(n Notice) {
-	e.m.emit(UIEvent{Type: "notify", ChatID: n.ChatID, Title: n.Title, Body: n.Body, Count: n.Count})
+	e.m.emit(UIEvent{Type: "notify", ChatID: n.Key, Title: n.Title, Body: n.Body, Count: n.Count})
 }
 
 func (e eventNotifier) Clear(string) {}

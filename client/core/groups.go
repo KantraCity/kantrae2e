@@ -94,8 +94,12 @@ func (c *Client) resolveUser(ctx context.Context, username string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("lookup %q: %w", username, err)
 	}
-	err = c.st.Update(ctx, func(tx *store.Tx) error { return tx.PutUser(r.UserId, r.Username) })
+	err = c.putProfiles(ctx, []*authv1.User{lookupUser(r)})
 	return r.UserId, err
+}
+
+func lookupUser(r *authv1.LookupUserResponse) *authv1.User {
+	return &authv1.User{UserId: r.UserId, Username: r.Username, DisplayName: r.DisplayName, Bio: r.Bio, AvatarId: r.AvatarId}
 }
 
 // Username resolves a user id to a username (cached locally).
@@ -107,7 +111,7 @@ func (c *Client) Username(ctx context.Context, userID string) string {
 	if err != nil {
 		return userID
 	}
-	_ = c.st.Update(ctx, func(tx *store.Tx) error { return tx.PutUser(r.UserId, r.Username) })
+	_ = c.putProfiles(ctx, []*authv1.User{lookupUser(r)})
 	return r.Username
 }
 

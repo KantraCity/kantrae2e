@@ -1,4 +1,4 @@
-import { Messenger, onEvent, errorText, type Chat, type LinkRequest, type Message, type State, type UIEvent, type UserHit } from './api'
+import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type Message, type State, type UIEvent, type UserHit, type UserProfile } from './api'
 import { readFileBase64, plural } from './util'
 
 export type Toast = { id: number; text: string; kind: 'info' | 'error' | 'warning' | 'security' }
@@ -8,16 +8,20 @@ export type Modal =
   | { kind: 'newDirect' }
   | { kind: 'approveLink'; deviceId: string }
   | { kind: 'recovery'; phrase: string }
+  | { kind: 'drawer' }
+  | { kind: 'editProfile' }
+  | { kind: 'logout' }
   | { kind: 'chatInfo'; chatId: string }
   | { kind: 'verify'; username: string }
   | { kind: 'settings' }
   | { kind: 'relogin' }
 
-const UNREAD_KEY = 'kantra.unread'
+// Unread counters per account (localStorage, this device only).
+const unreadKey = (userId?: string) => 'kantra.unread' + (userId ? '.' + userId : '')
 
-function loadUnread(): Record<string, number> {
+function loadUnread(userId?: string): Record<string, number> {
   try {
-    return JSON.parse(localStorage.getItem(UNREAD_KEY) || '{}')
+    return JSON.parse(localStorage.getItem(unreadKey(userId)) || '{}')
   } catch {
     return {}
   }
@@ -29,7 +33,10 @@ class AppState {
   chats = $state<Chat[]>([])
   currentId = $state<string | null>(null)
   messages = $state<Record<string, Message[]>>({})
-  unread = $state<Record<string, number>>(loadUnread())
+  unread = $state<Record<string, number>>({})
+  /** This account's profile and all accounts on this device. */
+  me = $state<UserProfile | null>(null)
+  accounts = $state<AccountInfo[]>([])
   toasts = $state<Toast[]>([])
   online = $state(false)
   modal = $state<Modal | null>(null)
@@ -58,18 +65,52 @@ class AppState {
     document.addEventListener('visibilitychange', () => {
       if (this.state?.webMode) Messenger.SetForeground(!document.hidden).catch(() => {})
     })
+    await this.loadAccount()
+    this.loaded = true
+  }
+
+  /** (Re)loads everything for the active account (start, account switch). */
+  async loadAccount() {
+    this.chats = []
+    this.messages = {}
+    this.currentId = null
+    this.links = []
+    this.me = null
+    this.search = ''
+    this.userHits = []
+    if (this.modal?.kind !== 'relogin') this.modal = null
+    if (history.state?.chat) history.replaceState(null, '')
     try {
       this.state = await Messenger.GetState()
       this.online = this.state.online
+      this.unread = loadUnread(this.state.account?.userId)
+      await this.refreshAccounts()
       if (this.state.account && !this.state.pending) {
         await this.refreshChats()
         await this.refreshLinks()
         await this.openTappedChat()
+        this.loadMe()
       }
     } catch (e) {
       this.toast(errorText(e), 'error')
     }
-    this.loaded = true
+  }
+
+  async refreshAccounts() {
+    this.accounts = (await Messenger.Accounts().catch(() => null)) ?? []
+  }
+
+  async loadMe() {
+    const p = await Messenger.MyProfile().catch(() => null)
+    if (p) this.me = p
+  }
+
+  async switchAccount(id: string) {
+    await this.try(() => Messenger.SwitchAccount(id)) // "account_switched" reloads
+  }
+
+  async addAccount() {
+    await this.try(() => Messenger.AddAccount())
   }
 
   private setCurrent(id: string | null) {
@@ -95,14 +136,19 @@ class AppState {
     const n = new Notification(e.title || 'Kantra', { body: e.body, tag: e.chatId, icon: '/icon.svg' })
     n.onclick = () => {
       window.focus()
-      if (e.chatId) this.openChat(e.chatId)
+      if (e.chatId) Messenger.OpenNotification(e.chatId) // key "<account>/<chat>"
       n.close()
     }
   }
 
   async afterAuth() {
     this.state = await Messenger.GetState()
-    if (!this.state.pending) await this.refreshChats()
+    this.unread = loadUnread(this.state.account?.userId)
+    await this.refreshAccounts()
+    if (this.state.account && !this.state.pending) {
+      await this.refreshChats()
+      this.loadMe()
+    }
   }
 
   async refreshLinks() {
@@ -253,7 +299,7 @@ class AppState {
 
   private saveUnread() {
     try {
-      localStorage.setItem(UNREAD_KEY, JSON.stringify(this.unread))
+      localStorage.setItem(unreadKey(this.state?.account?.userId), JSON.stringify(this.unread))
     } catch { /* storage unavailable */ }
   }
 
@@ -295,6 +341,13 @@ class AppState {
         break
       case 'new_device':
         this.toast(`Новое устройство: ${e.detail ?? ''}. Сверьте отпечатки.`, 'warning', 9000)
+        break
+      case 'account_switched':
+        await this.loadAccount()
+        break
+      case 'accounts':
+        await this.refreshAccounts()
+        this.loadMe()
         break
       case 'open_chat':
         await this.openTappedChat()

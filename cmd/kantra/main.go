@@ -209,7 +209,7 @@ func (a *app) run(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := a.c.Register(ctx, args[0], pw, deviceName(args)); err != nil {
+		if err := a.c.Register(ctx, args[0], pw, "", deviceName(args)); err != nil {
 			return err
 		}
 		fmt.Fprintf(a.out, "Registered %s.\nNew devices are approved from this one (kantra links / approve).\n"+

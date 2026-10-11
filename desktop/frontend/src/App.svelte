@@ -5,6 +5,9 @@
   import ChatInfo from './components/ChatInfo.svelte'
   import ChatView from './components/ChatView.svelte'
   import ApproveLink from './components/ApproveLink.svelte'
+  import Drawer from './components/Drawer.svelte'
+  import EditProfile from './components/EditProfile.svelte'
+  import Logout from './components/Logout.svelte'
   import NewDirect from './components/NewDirect.svelte'
   import NewGroup from './components/NewGroup.svelte'
   import PendingDevice from './components/PendingDevice.svelte'
@@ -32,6 +35,9 @@
 {/if}
 
 {#if app.pending}{#if app.modal?.kind === 'relogin'}<Relogin />{/if}
+{:else if app.modal?.kind === 'drawer'}<Drawer />
+{:else if app.modal?.kind === 'editProfile'}<EditProfile />
+{:else if app.modal?.kind === 'logout'}<Logout />
 {:else if app.modal?.kind === 'newGroup'}<NewGroup />
 {:else if app.modal?.kind === 'newDirect'}<NewDirect />
 {:else if app.modal?.kind === 'approveLink'}<ApproveLink deviceId={app.modal.deviceId} />

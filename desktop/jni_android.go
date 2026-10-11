@@ -88,11 +88,12 @@ func Java_com_wails_app_KantraNative_nativeNetworkAvailable(env *C.JNIEnv, cls C
 type androidNotifier struct{}
 
 func (androidNotifier) Show(n Notice) {
-	b, _ := json.Marshal(map[string]any{"chatId": n.ChatID, "title": n.Title, "body": n.Body, "count": n.Count})
+	// chatId is the notice key ("<account>/<chat>"), handed back on tap.
+	b, _ := json.Marshal(map[string]any{"chatId": n.Key, "title": n.Title, "body": n.Body, "count": n.Count})
 	javaCall("notify", string(b))
 }
 
-func (androidNotifier) Clear(chatID string) { javaCall("cancel", chatID) }
+func (androidNotifier) Clear(key string) { javaCall("cancel", key) }
 
 func platformStatus(s *Settings) {
 	var st struct {

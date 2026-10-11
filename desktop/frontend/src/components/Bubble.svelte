@@ -20,7 +20,7 @@
 
 <div class="line" class:out={m.outgoing} class:last>
   {#if group && !m.outgoing}
-    <div class="avatar-slot">{#if last}<Avatar name={m.sender} id={m.senderId} size={34} />{/if}</div>
+    <div class="avatar-slot">{#if last}<Avatar name={m.sender} id={m.senderId} user={m.senderId} photo={m.senderAvatar} size={34} />{/if}</div>
   {/if}
   <div class="bubble" class:tail={last}>
     {#if group && first && !m.outgoing}

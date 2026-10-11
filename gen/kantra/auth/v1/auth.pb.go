@@ -22,9 +22,11 @@ const (
 )
 
 type RegisterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Username string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Password string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	// Display name ("first last"); defaults to the username.
+	DisplayName   string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -69,6 +71,13 @@ func (x *RegisterRequest) GetUsername() string {
 func (x *RegisterRequest) GetPassword() string {
 	if x != nil {
 		return x.Password
+	}
+	return ""
+}
+
+func (x *RegisterRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
 	}
 	return ""
 }
@@ -632,6 +641,9 @@ type LookupUserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Bio           string                 `protobuf:"bytes,4,opt,name=bio,proto3" json:"bio,omitempty"`
+	AvatarId      string                 `protobuf:"bytes,5,opt,name=avatar_id,json=avatarId,proto3" json:"avatar_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -676,6 +688,27 @@ func (x *LookupUserResponse) GetUserId() string {
 func (x *LookupUserResponse) GetUsername() string {
 	if x != nil {
 		return x.Username
+	}
+	return ""
+}
+
+func (x *LookupUserResponse) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *LookupUserResponse) GetBio() string {
+	if x != nil {
+		return x.Bio
+	}
+	return ""
+}
+
+func (x *LookupUserResponse) GetAvatarId() string {
+	if x != nil {
+		return x.AvatarId
 	}
 	return ""
 }
@@ -1149,9 +1182,13 @@ func (x *SearchUsersRequest) GetQuery() string {
 }
 
 type User struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	UserId      string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Username    string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Bio         string                 `protobuf:"bytes,4,opt,name=bio,proto3" json:"bio,omitempty"`
+	// Changes whenever the photo changes; empty: no photo.
+	AvatarId      string `protobuf:"bytes,5,opt,name=avatar_id,json=avatarId,proto3" json:"avatar_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1200,6 +1237,27 @@ func (x *User) GetUsername() string {
 	return ""
 }
 
+func (x *User) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *User) GetBio() string {
+	if x != nil {
+		return x.Bio
+	}
+	return ""
+}
+
+func (x *User) GetAvatarId() string {
+	if x != nil {
+		return x.AvatarId
+	}
+	return ""
+}
+
 type SearchUsersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Users         []*User                `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
@@ -1244,14 +1302,471 @@ func (x *SearchUsersResponse) GetUsers() []*User {
 	return nil
 }
 
+type GetProfilesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProfilesRequest) Reset() {
+	*x = GetProfilesRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProfilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProfilesRequest) ProtoMessage() {}
+
+func (x *GetProfilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProfilesRequest.ProtoReflect.Descriptor instead.
+func (*GetProfilesRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GetProfilesRequest) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+type GetProfilesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Users         []*User                `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProfilesResponse) Reset() {
+	*x = GetProfilesResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProfilesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProfilesResponse) ProtoMessage() {}
+
+func (x *GetProfilesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProfilesResponse.ProtoReflect.Descriptor instead.
+func (*GetProfilesResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GetProfilesResponse) GetUsers() []*User {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
+type UpdateProfileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DisplayName   string                 `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Bio           string                 `protobuf:"bytes,2,opt,name=bio,proto3" json:"bio,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateProfileRequest) Reset() {
+	*x = UpdateProfileRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateProfileRequest) ProtoMessage() {}
+
+func (x *UpdateProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateProfileRequest.ProtoReflect.Descriptor instead.
+func (*UpdateProfileRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *UpdateProfileRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *UpdateProfileRequest) GetBio() string {
+	if x != nil {
+		return x.Bio
+	}
+	return ""
+}
+
+type UpdateProfileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateProfileResponse) Reset() {
+	*x = UpdateProfileResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateProfileResponse) ProtoMessage() {}
+
+func (x *UpdateProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateProfileResponse.ProtoReflect.Descriptor instead.
+func (*UpdateProfileResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *UpdateProfileResponse) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
+type SetUsernameRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetUsernameRequest) Reset() {
+	*x = SetUsernameRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUsernameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUsernameRequest) ProtoMessage() {}
+
+func (x *SetUsernameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUsernameRequest.ProtoReflect.Descriptor instead.
+func (*SetUsernameRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SetUsernameRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+type SetUsernameResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetUsernameResponse) Reset() {
+	*x = SetUsernameResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUsernameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUsernameResponse) ProtoMessage() {}
+
+func (x *SetUsernameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUsernameResponse.ProtoReflect.Descriptor instead.
+func (*SetUsernameResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *SetUsernameResponse) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
+type SetAvatarRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Image         []byte                 `protobuf:"bytes,1,opt,name=image,proto3" json:"image,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAvatarRequest) Reset() {
+	*x = SetAvatarRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAvatarRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAvatarRequest) ProtoMessage() {}
+
+func (x *SetAvatarRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAvatarRequest.ProtoReflect.Descriptor instead.
+func (*SetAvatarRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *SetAvatarRequest) GetImage() []byte {
+	if x != nil {
+		return x.Image
+	}
+	return nil
+}
+
+type SetAvatarResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAvatarResponse) Reset() {
+	*x = SetAvatarResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAvatarResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAvatarResponse) ProtoMessage() {}
+
+func (x *SetAvatarResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAvatarResponse.ProtoReflect.Descriptor instead.
+func (*SetAvatarResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *SetAvatarResponse) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
+type GetAvatarRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvatarRequest) Reset() {
+	*x = GetAvatarRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvatarRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvatarRequest) ProtoMessage() {}
+
+func (x *GetAvatarRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvatarRequest.ProtoReflect.Descriptor instead.
+func (*GetAvatarRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *GetAvatarRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type GetAvatarResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AvatarId      string                 `protobuf:"bytes,1,opt,name=avatar_id,json=avatarId,proto3" json:"avatar_id,omitempty"`
+	Image         []byte                 `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvatarResponse) Reset() {
+	*x = GetAvatarResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvatarResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvatarResponse) ProtoMessage() {}
+
+func (x *GetAvatarResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvatarResponse.ProtoReflect.Descriptor instead.
+func (*GetAvatarResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *GetAvatarResponse) GetAvatarId() string {
+	if x != nil {
+		return x.AvatarId
+	}
+	return ""
+}
+
+func (x *GetAvatarResponse) GetImage() []byte {
+	if x != nil {
+		return x.Image
+	}
+	return nil
+}
+
 var File_kantra_auth_v1_auth_proto protoreflect.FileDescriptor
 
 const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x19kantra/auth/v1/auth.proto\x12\x0ekantra.auth.v1\"I\n" +
+	"\x19kantra/auth/v1/auth.proto\x12\x0ekantra.auth.v1\"l\n" +
 	"\x0fRegisterRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"A\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"A\n" +
 	"\x10RegisterResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\"c\n" +
@@ -1285,10 +1800,13 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\x14RevokeDeviceResponse\"H\n" +
 	"\x11LookupUserRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"I\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"\x9b\x01\n" +
 	"\x12LookupUserResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
-	"\busername\x18\x02 \x01(\tR\busername\"\x15\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x10\n" +
+	"\x03bio\x18\x04 \x01(\tR\x03bio\x12\x1b\n" +
+	"\tavatar_id\x18\x05 \x01(\tR\bavatarId\"\x15\n" +
 	"\x13RefreshTokenRequest\",\n" +
 	"\x14RefreshTokenResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"\x19\n" +
@@ -1310,12 +1828,37 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\vwrapped_key\x18\x01 \x01(\fR\n" +
 	"wrappedKey\"*\n" +
 	"\x12SearchUsersRequest\x12\x14\n" +
-	"\x05query\x18\x01 \x01(\tR\x05query\";\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\"\x8d\x01\n" +
 	"\x04User\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
-	"\busername\x18\x02 \x01(\tR\busername\"A\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x10\n" +
+	"\x03bio\x18\x04 \x01(\tR\x03bio\x12\x1b\n" +
+	"\tavatar_id\x18\x05 \x01(\tR\bavatarId\"A\n" +
 	"\x13SearchUsersResponse\x12*\n" +
-	"\x05users\x18\x01 \x03(\v2\x14.kantra.auth.v1.UserR\x05users2\xbf\b\n" +
+	"\x05users\x18\x01 \x03(\v2\x14.kantra.auth.v1.UserR\x05users\"/\n" +
+	"\x12GetProfilesRequest\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds\"A\n" +
+	"\x13GetProfilesResponse\x12*\n" +
+	"\x05users\x18\x01 \x03(\v2\x14.kantra.auth.v1.UserR\x05users\"K\n" +
+	"\x14UpdateProfileRequest\x12!\n" +
+	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12\x10\n" +
+	"\x03bio\x18\x02 \x01(\tR\x03bio\"A\n" +
+	"\x15UpdateProfileResponse\x12(\n" +
+	"\x04user\x18\x01 \x01(\v2\x14.kantra.auth.v1.UserR\x04user\"0\n" +
+	"\x12SetUsernameRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\"?\n" +
+	"\x13SetUsernameResponse\x12(\n" +
+	"\x04user\x18\x01 \x01(\v2\x14.kantra.auth.v1.UserR\x04user\"(\n" +
+	"\x10SetAvatarRequest\x12\x14\n" +
+	"\x05image\x18\x01 \x01(\fR\x05image\"=\n" +
+	"\x11SetAvatarResponse\x12(\n" +
+	"\x04user\x18\x01 \x01(\v2\x14.kantra.auth.v1.UserR\x04user\"+\n" +
+	"\x10GetAvatarRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"F\n" +
+	"\x11GetAvatarResponse\x12\x1b\n" +
+	"\tavatar_id\x18\x01 \x01(\tR\bavatarId\x12\x14\n" +
+	"\x05image\x18\x02 \x01(\fR\x05image2\xfb\v\n" +
 	"\vAuthService\x12O\n" +
 	"\bRegister\x12\x1f.kantra.auth.v1.RegisterRequest\x1a .kantra.auth.v1.RegisterResponse\"\x00\x12F\n" +
 	"\x05Login\x12\x1c.kantra.auth.v1.LoginRequest\x1a\x1d.kantra.auth.v1.LoginResponse\"\x00\x12a\n" +
@@ -1329,7 +1872,12 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\rApproveDevice\x12$.kantra.auth.v1.ApproveDeviceRequest\x1a%.kantra.auth.v1.ApproveDeviceResponse\"\x00\x12X\n" +
 	"\vSetRecovery\x12\".kantra.auth.v1.SetRecoveryRequest\x1a#.kantra.auth.v1.SetRecoveryResponse\"\x00\x12L\n" +
 	"\aRecover\x12\x1e.kantra.auth.v1.RecoverRequest\x1a\x1f.kantra.auth.v1.RecoverResponse\"\x00\x12X\n" +
-	"\vSearchUsers\x12\".kantra.auth.v1.SearchUsersRequest\x1a#.kantra.auth.v1.SearchUsersResponse\"\x00B\xb4\x01\n" +
+	"\vSearchUsers\x12\".kantra.auth.v1.SearchUsersRequest\x1a#.kantra.auth.v1.SearchUsersResponse\"\x00\x12X\n" +
+	"\vGetProfiles\x12\".kantra.auth.v1.GetProfilesRequest\x1a#.kantra.auth.v1.GetProfilesResponse\"\x00\x12^\n" +
+	"\rUpdateProfile\x12$.kantra.auth.v1.UpdateProfileRequest\x1a%.kantra.auth.v1.UpdateProfileResponse\"\x00\x12X\n" +
+	"\vSetUsername\x12\".kantra.auth.v1.SetUsernameRequest\x1a#.kantra.auth.v1.SetUsernameResponse\"\x00\x12R\n" +
+	"\tSetAvatar\x12 .kantra.auth.v1.SetAvatarRequest\x1a!.kantra.auth.v1.SetAvatarResponse\"\x00\x12R\n" +
+	"\tGetAvatar\x12 .kantra.auth.v1.GetAvatarRequest\x1a!.kantra.auth.v1.GetAvatarResponse\"\x00B\xb4\x01\n" +
 	"\x12com.kantra.auth.v1B\tAuthProtoP\x01Z9github.com/kantracity/kantrae2e/gen/kantra/auth/v1;authv1\xa2\x02\x03KAX\xaa\x02\x0eKantra.Auth.V1\xca\x02\x0eKantra\\Auth\\V1\xe2\x02\x1aKantra\\Auth\\V1\\GPBMetadata\xea\x02\x10Kantra::Auth::V1b\x06proto3"
 
 var (
@@ -1344,7 +1892,7 @@ func file_kantra_auth_v1_auth_proto_rawDescGZIP() []byte {
 	return file_kantra_auth_v1_auth_proto_rawDescData
 }
 
-var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_kantra_auth_v1_auth_proto_goTypes = []any{
 	(*RegisterRequest)(nil),          // 0: kantra.auth.v1.RegisterRequest
 	(*RegisterResponse)(nil),         // 1: kantra.auth.v1.RegisterResponse
@@ -1372,39 +1920,63 @@ var file_kantra_auth_v1_auth_proto_goTypes = []any{
 	(*SearchUsersRequest)(nil),       // 23: kantra.auth.v1.SearchUsersRequest
 	(*User)(nil),                     // 24: kantra.auth.v1.User
 	(*SearchUsersResponse)(nil),      // 25: kantra.auth.v1.SearchUsersResponse
+	(*GetProfilesRequest)(nil),       // 26: kantra.auth.v1.GetProfilesRequest
+	(*GetProfilesResponse)(nil),      // 27: kantra.auth.v1.GetProfilesResponse
+	(*UpdateProfileRequest)(nil),     // 28: kantra.auth.v1.UpdateProfileRequest
+	(*UpdateProfileResponse)(nil),    // 29: kantra.auth.v1.UpdateProfileResponse
+	(*SetUsernameRequest)(nil),       // 30: kantra.auth.v1.SetUsernameRequest
+	(*SetUsernameResponse)(nil),      // 31: kantra.auth.v1.SetUsernameResponse
+	(*SetAvatarRequest)(nil),         // 32: kantra.auth.v1.SetAvatarRequest
+	(*SetAvatarResponse)(nil),        // 33: kantra.auth.v1.SetAvatarResponse
+	(*GetAvatarRequest)(nil),         // 34: kantra.auth.v1.GetAvatarRequest
+	(*GetAvatarResponse)(nil),        // 35: kantra.auth.v1.GetAvatarResponse
 }
 var file_kantra_auth_v1_auth_proto_depIdxs = []int32{
 	6,  // 0: kantra.auth.v1.ListDevicesResponse.devices:type_name -> kantra.auth.v1.Device
 	24, // 1: kantra.auth.v1.SearchUsersResponse.users:type_name -> kantra.auth.v1.User
-	0,  // 2: kantra.auth.v1.AuthService.Register:input_type -> kantra.auth.v1.RegisterRequest
-	2,  // 3: kantra.auth.v1.AuthService.Login:input_type -> kantra.auth.v1.LoginRequest
-	4,  // 4: kantra.auth.v1.AuthService.RegisterDevice:input_type -> kantra.auth.v1.RegisterDeviceRequest
-	7,  // 5: kantra.auth.v1.AuthService.ListDevices:input_type -> kantra.auth.v1.ListDevicesRequest
-	9,  // 6: kantra.auth.v1.AuthService.RevokeDevice:input_type -> kantra.auth.v1.RevokeDeviceRequest
-	11, // 7: kantra.auth.v1.AuthService.LookupUser:input_type -> kantra.auth.v1.LookupUserRequest
-	13, // 8: kantra.auth.v1.AuthService.RefreshToken:input_type -> kantra.auth.v1.RefreshTokenRequest
-	15, // 9: kantra.auth.v1.AuthService.GetAccountStatus:input_type -> kantra.auth.v1.GetAccountStatusRequest
-	17, // 10: kantra.auth.v1.AuthService.ApproveDevice:input_type -> kantra.auth.v1.ApproveDeviceRequest
-	19, // 11: kantra.auth.v1.AuthService.SetRecovery:input_type -> kantra.auth.v1.SetRecoveryRequest
-	21, // 12: kantra.auth.v1.AuthService.Recover:input_type -> kantra.auth.v1.RecoverRequest
-	23, // 13: kantra.auth.v1.AuthService.SearchUsers:input_type -> kantra.auth.v1.SearchUsersRequest
-	1,  // 14: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
-	3,  // 15: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
-	5,  // 16: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
-	8,  // 17: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
-	10, // 18: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
-	12, // 19: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
-	14, // 20: kantra.auth.v1.AuthService.RefreshToken:output_type -> kantra.auth.v1.RefreshTokenResponse
-	16, // 21: kantra.auth.v1.AuthService.GetAccountStatus:output_type -> kantra.auth.v1.GetAccountStatusResponse
-	18, // 22: kantra.auth.v1.AuthService.ApproveDevice:output_type -> kantra.auth.v1.ApproveDeviceResponse
-	20, // 23: kantra.auth.v1.AuthService.SetRecovery:output_type -> kantra.auth.v1.SetRecoveryResponse
-	22, // 24: kantra.auth.v1.AuthService.Recover:output_type -> kantra.auth.v1.RecoverResponse
-	25, // 25: kantra.auth.v1.AuthService.SearchUsers:output_type -> kantra.auth.v1.SearchUsersResponse
-	14, // [14:26] is the sub-list for method output_type
-	2,  // [2:14] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	24, // 2: kantra.auth.v1.GetProfilesResponse.users:type_name -> kantra.auth.v1.User
+	24, // 3: kantra.auth.v1.UpdateProfileResponse.user:type_name -> kantra.auth.v1.User
+	24, // 4: kantra.auth.v1.SetUsernameResponse.user:type_name -> kantra.auth.v1.User
+	24, // 5: kantra.auth.v1.SetAvatarResponse.user:type_name -> kantra.auth.v1.User
+	0,  // 6: kantra.auth.v1.AuthService.Register:input_type -> kantra.auth.v1.RegisterRequest
+	2,  // 7: kantra.auth.v1.AuthService.Login:input_type -> kantra.auth.v1.LoginRequest
+	4,  // 8: kantra.auth.v1.AuthService.RegisterDevice:input_type -> kantra.auth.v1.RegisterDeviceRequest
+	7,  // 9: kantra.auth.v1.AuthService.ListDevices:input_type -> kantra.auth.v1.ListDevicesRequest
+	9,  // 10: kantra.auth.v1.AuthService.RevokeDevice:input_type -> kantra.auth.v1.RevokeDeviceRequest
+	11, // 11: kantra.auth.v1.AuthService.LookupUser:input_type -> kantra.auth.v1.LookupUserRequest
+	13, // 12: kantra.auth.v1.AuthService.RefreshToken:input_type -> kantra.auth.v1.RefreshTokenRequest
+	15, // 13: kantra.auth.v1.AuthService.GetAccountStatus:input_type -> kantra.auth.v1.GetAccountStatusRequest
+	17, // 14: kantra.auth.v1.AuthService.ApproveDevice:input_type -> kantra.auth.v1.ApproveDeviceRequest
+	19, // 15: kantra.auth.v1.AuthService.SetRecovery:input_type -> kantra.auth.v1.SetRecoveryRequest
+	21, // 16: kantra.auth.v1.AuthService.Recover:input_type -> kantra.auth.v1.RecoverRequest
+	23, // 17: kantra.auth.v1.AuthService.SearchUsers:input_type -> kantra.auth.v1.SearchUsersRequest
+	26, // 18: kantra.auth.v1.AuthService.GetProfiles:input_type -> kantra.auth.v1.GetProfilesRequest
+	28, // 19: kantra.auth.v1.AuthService.UpdateProfile:input_type -> kantra.auth.v1.UpdateProfileRequest
+	30, // 20: kantra.auth.v1.AuthService.SetUsername:input_type -> kantra.auth.v1.SetUsernameRequest
+	32, // 21: kantra.auth.v1.AuthService.SetAvatar:input_type -> kantra.auth.v1.SetAvatarRequest
+	34, // 22: kantra.auth.v1.AuthService.GetAvatar:input_type -> kantra.auth.v1.GetAvatarRequest
+	1,  // 23: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
+	3,  // 24: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
+	5,  // 25: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
+	8,  // 26: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
+	10, // 27: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
+	12, // 28: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
+	14, // 29: kantra.auth.v1.AuthService.RefreshToken:output_type -> kantra.auth.v1.RefreshTokenResponse
+	16, // 30: kantra.auth.v1.AuthService.GetAccountStatus:output_type -> kantra.auth.v1.GetAccountStatusResponse
+	18, // 31: kantra.auth.v1.AuthService.ApproveDevice:output_type -> kantra.auth.v1.ApproveDeviceResponse
+	20, // 32: kantra.auth.v1.AuthService.SetRecovery:output_type -> kantra.auth.v1.SetRecoveryResponse
+	22, // 33: kantra.auth.v1.AuthService.Recover:output_type -> kantra.auth.v1.RecoverResponse
+	25, // 34: kantra.auth.v1.AuthService.SearchUsers:output_type -> kantra.auth.v1.SearchUsersResponse
+	27, // 35: kantra.auth.v1.AuthService.GetProfiles:output_type -> kantra.auth.v1.GetProfilesResponse
+	29, // 36: kantra.auth.v1.AuthService.UpdateProfile:output_type -> kantra.auth.v1.UpdateProfileResponse
+	31, // 37: kantra.auth.v1.AuthService.SetUsername:output_type -> kantra.auth.v1.SetUsernameResponse
+	33, // 38: kantra.auth.v1.AuthService.SetAvatar:output_type -> kantra.auth.v1.SetAvatarResponse
+	35, // 39: kantra.auth.v1.AuthService.GetAvatar:output_type -> kantra.auth.v1.GetAvatarResponse
+	23, // [23:40] is the sub-list for method output_type
+	6,  // [6:23] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_kantra_auth_v1_auth_proto_init() }
@@ -1418,7 +1990,7 @@ func file_kantra_auth_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_auth_v1_auth_proto_rawDesc), len(file_kantra_auth_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

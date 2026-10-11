@@ -27,7 +27,7 @@ type desktopNotifier struct {
 
 func newNotifier(*Messenger) notifier { return &desktopNotifier{ns: notifications.New()} }
 
-func noticeID(chatID string) string { return "chat-" + chatID }
+func noticeID(key string) string { return "chat-" + key }
 
 func (d *desktopNotifier) Show(n Notice) {
 	body := n.Body
@@ -35,12 +35,12 @@ func (d *desktopNotifier) Show(n Notice) {
 		body += "  (" + strconv.Itoa(n.Count) + ")"
 	}
 	_ = d.ns.SendNotification(notifications.NotificationOptions{
-		ID: noticeID(n.ChatID), Title: n.Title, Body: body,
-		Data: map[string]any{"chatId": n.ChatID},
+		ID: noticeID(n.Key), Title: n.Title, Body: body,
+		Data: map[string]any{"key": n.Key},
 	})
 }
 
-func (d *desktopNotifier) Clear(chatID string) { _ = d.ns.RemoveNotification(noticeID(chatID)) }
+func (d *desktopNotifier) Clear(key string) { _ = d.ns.RemoveNotification(noticeID(key)) }
 
 // optionalNotifications: no notification daemon (e.g. a bare Linux session)
 // must not stop the app from starting.
@@ -72,13 +72,13 @@ func platformSetup(app *application.App, w *application.WebviewWindow, m *Messen
 		if r.Error != nil {
 			return
 		}
-		chat, _ := r.Response.UserInfo["chatId"].(string)
-		if chat == "" {
-			chat = strings.TrimPrefix(r.Response.ID, "chat-")
+		key, _ := r.Response.UserInfo["key"].(string)
+		if key == "" {
+			key = strings.TrimPrefix(r.Response.ID, "chat-")
 		}
 		application.InvokeAsync(show)
-		if chat != "" {
-			m.showChat(chat)
+		if key != "" {
+			m.showChat(key)
 		}
 	})
 

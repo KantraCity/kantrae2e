@@ -99,6 +99,13 @@ var migrations = []string{
 	 ALTER TABLE messages ADD COLUMN shared_by TEXT NOT NULL DEFAULT '';`,
 	// peer: the other user of a direct chat (kind is derived from the id).
 	`ALTER TABLE groups ADD COLUMN peer TEXT NOT NULL DEFAULT '';`,
+	// Public profiles (cached), avatar blob cached per avatar id.
+	`ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE users ADD COLUMN avatar_id TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE users ADD COLUMN avatar BLOB;
+	 ALTER TABLE users ADD COLUMN avatar_cached TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE users ADD COLUMN fetched_at INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func migrate(db *sql.DB) error {
@@ -444,6 +451,52 @@ func (t *Tx) PutUser(userID, username string) error {
 	_, err := t.tx.Exec(`INSERT INTO users (user_id, username) VALUES (?, ?)
 		ON CONFLICT(user_id) DO UPDATE SET username=excluded.username`, userID, username)
 	return err
+}
+
+// Profile is a cached public profile.
+type Profile struct {
+	UserID      string
+	Username    string
+	DisplayName string
+	Bio         string
+	AvatarID    string
+	FetchedAt   int64 // unix ms; 0: only the username is known
+}
+
+// PutProfile stores a fetched profile.
+func (t *Tx) PutProfile(p Profile) error {
+	_, err := t.tx.Exec(`INSERT INTO users (user_id, username, display_name, bio, avatar_id, fetched_at)
+		VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET username=excluded.username,
+		display_name=excluded.display_name, bio=excluded.bio, avatar_id=excluded.avatar_id,
+		fetched_at=excluded.fetched_at`, p.UserID, p.Username, p.DisplayName, p.Bio, p.AvatarID, p.FetchedAt)
+	return err
+}
+
+func (s *Store) Profile(ctx context.Context, userID string) (*Profile, error) {
+	p := Profile{UserID: userID}
+	err := s.db.QueryRowContext(ctx, `SELECT username, display_name, bio, avatar_id, fetched_at FROM users WHERE user_id=?`,
+		userID).Scan(&p.Username, &p.DisplayName, &p.Bio, &p.AvatarID, &p.FetchedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &p, err
+}
+
+// PutAvatar caches the photo with the given avatar id.
+func (t *Tx) PutAvatar(userID, avatarID string, img []byte) error {
+	_, err := t.tx.Exec(`UPDATE users SET avatar=?, avatar_cached=? WHERE user_id=?`, img, avatarID, userID)
+	return err
+}
+
+// Avatar returns the cached photo if it is the current one.
+func (s *Store) Avatar(ctx context.Context, userID, avatarID string) ([]byte, error) {
+	var img []byte
+	err := s.db.QueryRowContext(ctx, `SELECT avatar FROM users WHERE user_id=? AND avatar_cached=? AND avatar IS NOT NULL`,
+		userID, avatarID).Scan(&img)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return img, err
 }
 
 func (s *Store) Username(ctx context.Context, userID string) (string, error) {

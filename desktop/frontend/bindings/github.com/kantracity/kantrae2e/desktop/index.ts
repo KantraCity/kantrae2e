@@ -8,6 +8,7 @@ export {
 
 export type {
     Account,
+    AccountInfo,
     Chat,
     Device,
     DeviceKey,
@@ -15,10 +16,12 @@ export type {
     FileInfo,
     LinkRequest,
     LoginResult,
+    LogoutInfo,
     Member,
     Message,
     Settings,
     State,
     UIEvent,
-    UserHit
+    UserHit,
+    UserProfile
 } from "./models.js";

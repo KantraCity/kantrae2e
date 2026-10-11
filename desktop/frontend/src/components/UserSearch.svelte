@@ -44,9 +44,9 @@
 <div class="hits">
   {#each hits as u (u.userId)}
     <button class="hit" onclick={() => onpick(u)}>
-      <Avatar name={u.username} id={u.userId} size={42} />
+      <Avatar name={u.name || u.username} id={u.userId} user={u.userId} photo={u.avatarId} size={42} />
       <div class="who">
-        <div class="name">{u.username}</div>
+        <div class="name">{u.name || u.username}</div>
         <div class="muted small">@{u.username}</div>
       </div>
       {#if selected.includes(u.username)}<span class="tick"><Icon name="check" size={18} /></span>{/if}

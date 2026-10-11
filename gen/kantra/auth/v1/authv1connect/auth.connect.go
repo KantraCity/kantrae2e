@@ -62,6 +62,17 @@ const (
 	AuthServiceRecoverProcedure = "/kantra.auth.v1.AuthService/Recover"
 	// AuthServiceSearchUsersProcedure is the fully-qualified name of the AuthService's SearchUsers RPC.
 	AuthServiceSearchUsersProcedure = "/kantra.auth.v1.AuthService/SearchUsers"
+	// AuthServiceGetProfilesProcedure is the fully-qualified name of the AuthService's GetProfiles RPC.
+	AuthServiceGetProfilesProcedure = "/kantra.auth.v1.AuthService/GetProfiles"
+	// AuthServiceUpdateProfileProcedure is the fully-qualified name of the AuthService's UpdateProfile
+	// RPC.
+	AuthServiceUpdateProfileProcedure = "/kantra.auth.v1.AuthService/UpdateProfile"
+	// AuthServiceSetUsernameProcedure is the fully-qualified name of the AuthService's SetUsername RPC.
+	AuthServiceSetUsernameProcedure = "/kantra.auth.v1.AuthService/SetUsername"
+	// AuthServiceSetAvatarProcedure is the fully-qualified name of the AuthService's SetAvatar RPC.
+	AuthServiceSetAvatarProcedure = "/kantra.auth.v1.AuthService/SetAvatar"
+	// AuthServiceGetAvatarProcedure is the fully-qualified name of the AuthService's GetAvatar RPC.
+	AuthServiceGetAvatarProcedure = "/kantra.auth.v1.AuthService/GetAvatar"
 )
 
 // AuthServiceClient is a client for the kantra.auth.v1.AuthService service.
@@ -90,6 +101,15 @@ type AuthServiceClient interface {
 	Recover(context.Context, *v1.RecoverRequest) (*v1.RecoverResponse, error)
 	// Username prefix search (to start a direct chat).
 	SearchUsers(context.Context, *v1.SearchUsersRequest) (*v1.SearchUsersResponse, error)
+	// --- Public profile (like Telegram: visible to everyone) ---
+	// Profiles of several users (clients cache them, avatar by avatar_id).
+	GetProfiles(context.Context, *v1.GetProfilesRequest) (*v1.GetProfilesResponse, error)
+	UpdateProfile(context.Context, *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error)
+	// Changes the caller's @username (unique, case-insensitive).
+	SetUsername(context.Context, *v1.SetUsernameRequest) (*v1.SetUsernameResponse, error)
+	// Sets (or with empty image removes) the caller's profile photo (JPEG/PNG/WebP, <= 512 KiB).
+	SetAvatar(context.Context, *v1.SetAvatarRequest) (*v1.SetAvatarResponse, error)
+	GetAvatar(context.Context, *v1.GetAvatarRequest) (*v1.GetAvatarResponse, error)
 }
 
 // NewAuthServiceClient constructs a client for the kantra.auth.v1.AuthService service. By default,
@@ -175,6 +195,36 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SearchUsers")),
 			connect.WithClientOptions(opts...),
 		),
+		getProfiles: connect.NewClient[v1.GetProfilesRequest, v1.GetProfilesResponse](
+			httpClient,
+			baseURL+AuthServiceGetProfilesProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetProfiles")),
+			connect.WithClientOptions(opts...),
+		),
+		updateProfile: connect.NewClient[v1.UpdateProfileRequest, v1.UpdateProfileResponse](
+			httpClient,
+			baseURL+AuthServiceUpdateProfileProcedure,
+			connect.WithSchema(authServiceMethods.ByName("UpdateProfile")),
+			connect.WithClientOptions(opts...),
+		),
+		setUsername: connect.NewClient[v1.SetUsernameRequest, v1.SetUsernameResponse](
+			httpClient,
+			baseURL+AuthServiceSetUsernameProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetUsername")),
+			connect.WithClientOptions(opts...),
+		),
+		setAvatar: connect.NewClient[v1.SetAvatarRequest, v1.SetAvatarResponse](
+			httpClient,
+			baseURL+AuthServiceSetAvatarProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetAvatar")),
+			connect.WithClientOptions(opts...),
+		),
+		getAvatar: connect.NewClient[v1.GetAvatarRequest, v1.GetAvatarResponse](
+			httpClient,
+			baseURL+AuthServiceGetAvatarProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetAvatar")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -192,6 +242,11 @@ type authServiceClient struct {
 	setRecovery      *connect.Client[v1.SetRecoveryRequest, v1.SetRecoveryResponse]
 	recover          *connect.Client[v1.RecoverRequest, v1.RecoverResponse]
 	searchUsers      *connect.Client[v1.SearchUsersRequest, v1.SearchUsersResponse]
+	getProfiles      *connect.Client[v1.GetProfilesRequest, v1.GetProfilesResponse]
+	updateProfile    *connect.Client[v1.UpdateProfileRequest, v1.UpdateProfileResponse]
+	setUsername      *connect.Client[v1.SetUsernameRequest, v1.SetUsernameResponse]
+	setAvatar        *connect.Client[v1.SetAvatarRequest, v1.SetAvatarResponse]
+	getAvatar        *connect.Client[v1.GetAvatarRequest, v1.GetAvatarResponse]
 }
 
 // Register calls kantra.auth.v1.AuthService.Register.
@@ -302,6 +357,51 @@ func (c *authServiceClient) SearchUsers(ctx context.Context, req *v1.SearchUsers
 	return nil, err
 }
 
+// GetProfiles calls kantra.auth.v1.AuthService.GetProfiles.
+func (c *authServiceClient) GetProfiles(ctx context.Context, req *v1.GetProfilesRequest) (*v1.GetProfilesResponse, error) {
+	response, err := c.getProfiles.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// UpdateProfile calls kantra.auth.v1.AuthService.UpdateProfile.
+func (c *authServiceClient) UpdateProfile(ctx context.Context, req *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error) {
+	response, err := c.updateProfile.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SetUsername calls kantra.auth.v1.AuthService.SetUsername.
+func (c *authServiceClient) SetUsername(ctx context.Context, req *v1.SetUsernameRequest) (*v1.SetUsernameResponse, error) {
+	response, err := c.setUsername.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SetAvatar calls kantra.auth.v1.AuthService.SetAvatar.
+func (c *authServiceClient) SetAvatar(ctx context.Context, req *v1.SetAvatarRequest) (*v1.SetAvatarResponse, error) {
+	response, err := c.setAvatar.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// GetAvatar calls kantra.auth.v1.AuthService.GetAvatar.
+func (c *authServiceClient) GetAvatar(ctx context.Context, req *v1.GetAvatarRequest) (*v1.GetAvatarResponse, error) {
+	response, err := c.getAvatar.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // AuthServiceHandler is an implementation of the kantra.auth.v1.AuthService service.
 type AuthServiceHandler interface {
 	Register(context.Context, *v1.RegisterRequest) (*v1.RegisterResponse, error)
@@ -328,6 +428,15 @@ type AuthServiceHandler interface {
 	Recover(context.Context, *v1.RecoverRequest) (*v1.RecoverResponse, error)
 	// Username prefix search (to start a direct chat).
 	SearchUsers(context.Context, *v1.SearchUsersRequest) (*v1.SearchUsersResponse, error)
+	// --- Public profile (like Telegram: visible to everyone) ---
+	// Profiles of several users (clients cache them, avatar by avatar_id).
+	GetProfiles(context.Context, *v1.GetProfilesRequest) (*v1.GetProfilesResponse, error)
+	UpdateProfile(context.Context, *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error)
+	// Changes the caller's @username (unique, case-insensitive).
+	SetUsername(context.Context, *v1.SetUsernameRequest) (*v1.SetUsernameResponse, error)
+	// Sets (or with empty image removes) the caller's profile photo (JPEG/PNG/WebP, <= 512 KiB).
+	SetAvatar(context.Context, *v1.SetAvatarRequest) (*v1.SetAvatarResponse, error)
+	GetAvatar(context.Context, *v1.GetAvatarRequest) (*v1.GetAvatarResponse, error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -409,6 +518,36 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SearchUsers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetProfilesHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceGetProfilesProcedure,
+		svc.GetProfiles,
+		connect.WithSchema(authServiceMethods.ByName("GetProfiles")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceUpdateProfileHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceUpdateProfileProcedure,
+		svc.UpdateProfile,
+		connect.WithSchema(authServiceMethods.ByName("UpdateProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetUsernameHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceSetUsernameProcedure,
+		svc.SetUsername,
+		connect.WithSchema(authServiceMethods.ByName("SetUsername")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetAvatarHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceSetAvatarProcedure,
+		svc.SetAvatar,
+		connect.WithSchema(authServiceMethods.ByName("SetAvatar")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceGetAvatarHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceGetAvatarProcedure,
+		svc.GetAvatar,
+		connect.WithSchema(authServiceMethods.ByName("GetAvatar")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.auth.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceRegisterProcedure:
@@ -435,6 +574,16 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceRecoverHandler.ServeHTTP(w, r)
 		case AuthServiceSearchUsersProcedure:
 			authServiceSearchUsersHandler.ServeHTTP(w, r)
+		case AuthServiceGetProfilesProcedure:
+			authServiceGetProfilesHandler.ServeHTTP(w, r)
+		case AuthServiceUpdateProfileProcedure:
+			authServiceUpdateProfileHandler.ServeHTTP(w, r)
+		case AuthServiceSetUsernameProcedure:
+			authServiceSetUsernameHandler.ServeHTTP(w, r)
+		case AuthServiceSetAvatarProcedure:
+			authServiceSetAvatarHandler.ServeHTTP(w, r)
+		case AuthServiceGetAvatarProcedure:
+			authServiceGetAvatarHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -490,4 +639,24 @@ func (UnimplementedAuthServiceHandler) Recover(context.Context, *v1.RecoverReque
 
 func (UnimplementedAuthServiceHandler) SearchUsers(context.Context, *v1.SearchUsersRequest) (*v1.SearchUsersResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.SearchUsers is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetProfiles(context.Context, *v1.GetProfilesRequest) (*v1.GetProfilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.GetProfiles is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) UpdateProfile(context.Context, *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.UpdateProfile is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetUsername(context.Context, *v1.SetUsernameRequest) (*v1.SetUsernameResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.SetUsername is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetAvatar(context.Context, *v1.SetAvatarRequest) (*v1.SetAvatarResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.SetAvatar is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetAvatar(context.Context, *v1.GetAvatarRequest) (*v1.GetAvatarResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.GetAvatar is not implemented"))
 }

@@ -207,3 +207,84 @@ func TestLinkingRecoveryAndSearch(t *testing.T) {
 		t.Fatal("one-letter search should return nothing")
 	}
 }
+
+func TestProfile(t *testing.T) {
+	pool := testutil.Pool(t, testutil.DatabaseURL(t), auth.Schema, auth.Migrations())
+	path, h := auth.New(pool, testutil.Secret, time.Hour).Handler()
+	srv := testutil.Serve(t, map[string]http.Handler{path: h})
+	ctx := context.Background()
+	anon := authv1connect.NewAuthServiceClient(srv.Client(), srv.URL)
+	device := func(user, name string) (authv1connect.AuthServiceClient, string) {
+		reg, err := anon.Register(ctx, &authv1.RegisterRequest{Username: user, Password: "password123", DisplayName: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		acct := authv1connect.NewAuthServiceClient(srv.Client(), srv.URL, bearer(reg.Token))
+		dev, err := acct.RegisterDevice(ctx, &authv1.RegisterDeviceRequest{DeviceName: "d"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return authv1connect.NewAuthServiceClient(srv.Client(), srv.URL, bearer(dev.Token)), reg.UserId
+	}
+	alice, aliceID := device("alice", "  Alice   Smith ")
+	bob, bobID := device("bob", "")
+
+	// Usernames are unique regardless of case.
+	if _, err := anon.Register(ctx, &authv1.RegisterRequest{Username: "ALICE", Password: "password123"}); connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("case-insensitive duplicate: %v", err)
+	}
+	ps, err := bob.GetProfiles(ctx, &authv1.GetProfilesRequest{UserIds: []string{aliceID, bobID, "nope"}})
+	if err != nil || len(ps.Users) != 2 {
+		t.Fatalf("profiles: %v %v", ps, err)
+	}
+	for _, u := range ps.Users {
+		if (u.UserId == aliceID && u.DisplayName != "Alice Smith") || (u.UserId == bobID && u.DisplayName != "bob") {
+			t.Fatalf("display name: %+v", u)
+		}
+	}
+
+	up, err := alice.UpdateProfile(ctx, &authv1.UpdateProfileRequest{DisplayName: "Алиса", Bio: "привет"})
+	if err != nil || up.User.DisplayName != "Алиса" || up.User.Bio != "привет" {
+		t.Fatalf("update: %v %v", up, err)
+	}
+	if _, err := alice.UpdateProfile(ctx, &authv1.UpdateProfileRequest{DisplayName: " "}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("empty name: %v", err)
+	}
+	// Search by a word of the name or by username prefix.
+	if r, _ := bob.SearchUsers(ctx, &authv1.SearchUsersRequest{Query: "али"}); len(r.Users) != 1 || r.Users[0].UserId != aliceID {
+		t.Fatalf("search by name: %+v", r)
+	}
+
+	if _, err := alice.SetUsername(ctx, &authv1.SetUsernameRequest{Username: "Bob"}); connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("taken username: %v", err)
+	}
+	if r, err := alice.SetUsername(ctx, &authv1.SetUsernameRequest{Username: "@alisa"}); err != nil || r.User.Username != "alisa" {
+		t.Fatalf("set username: %v %v", r, err)
+	}
+	if l, err := bob.LookupUser(ctx, &authv1.LookupUserRequest{Username: "ALISA"}); err != nil || l.UserId != aliceID || l.Bio != "привет" {
+		t.Fatalf("lookup: %v %v", l, err)
+	}
+	// Login uses the current username.
+	if _, err := anon.Login(ctx, &authv1.LoginRequest{Username: "alisa", Password: "password123"}); err != nil {
+		t.Fatal(err)
+	}
+
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 100)...)
+	if _, err := alice.SetAvatar(ctx, &authv1.SetAvatarRequest{Image: []byte("not an image")}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("bad image: %v", err)
+	}
+	sa, err := alice.SetAvatar(ctx, &authv1.SetAvatarRequest{Image: png})
+	if err != nil || sa.User.AvatarId == "" {
+		t.Fatalf("set avatar: %v %v", sa, err)
+	}
+	ga, err := bob.GetAvatar(ctx, &authv1.GetAvatarRequest{UserId: aliceID})
+	if err != nil || ga.AvatarId != sa.User.AvatarId || !bytes.Equal(ga.Image, png) {
+		t.Fatalf("get avatar: %v", err)
+	}
+	if _, err := alice.SetAvatar(ctx, &authv1.SetAvatarRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bob.GetAvatar(ctx, &authv1.GetAvatarRequest{UserId: aliceID}); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("removed avatar: %v", err)
+	}
+}

@@ -3,7 +3,9 @@
 
 /**
  * Messenger is the service bound to the frontend. The same code runs in the
- * desktop app and in server (web) mode.
+ * desktop app and in server (web) mode. It holds every account added on this
+ * device (accounts.go); the UI shows the active one, all of them stay
+ * connected for notifications.
  * @module
  */
 
@@ -15,8 +17,31 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+/**
+ * Accounts lists the accounts set up on this device.
+ */
+export function Accounts(): $CancellablePromise<$models.AccountInfo[] | null> {
+    return $Call.ByID(3628883221);
+}
+
+/**
+ * AddAccount starts adding another account: the UI shows the login /
+ * registration screen for it (CancelAddAccount returns to the previous one).
+ */
+export function AddAccount(): $CancellablePromise<void> {
+    return $Call.ByID(433840723);
+}
+
 export function ApproveLink(deviceID: string): $CancellablePromise<void> {
     return $Call.ByID(3157958442, deviceID);
+}
+
+/**
+ * Avatar returns a user's photo as a data: URL ("" if none). Cached
+ * locally by photo id; the UI caches by avatarId too.
+ */
+export function Avatar(userID: string): $CancellablePromise<string> {
+    return $Call.ByID(3402951932, userID);
 }
 
 /**
@@ -24,6 +49,13 @@ export function ApproveLink(deviceID: string): $CancellablePromise<void> {
  */
 export function Backup(): $CancellablePromise<number> {
     return $Call.ByID(758421255);
+}
+
+/**
+ * CancelAddAccount returns to the previous account.
+ */
+export function CancelAddAccount(): $CancellablePromise<void> {
+    return $Call.ByID(3845560969);
 }
 
 /**
@@ -63,6 +95,10 @@ export function DownloadFile(chatID: string, seq: number): $CancellablePromise<$
     return $Call.ByID(268098135, chatID, seq);
 }
 
+export function GetLogoutInfo(): $CancellablePromise<$models.LogoutInfo | null> {
+    return $Call.ByID(2063889561);
+}
+
 /**
  * GetSettings returns the notification settings of this device.
  */
@@ -100,6 +136,14 @@ export function Login(server: string, username: string, password: string, device
     return $Call.ByID(1734906618, server, username, password, deviceName);
 }
 
+/**
+ * Logout signs this device out of the active account and deletes its local
+ * data; the app switches to another account (or the login screen).
+ */
+export function Logout(): $CancellablePromise<void> {
+    return $Call.ByID(3541579155);
+}
+
 export function Members(chatID: string): $CancellablePromise<$models.Member[] | null> {
     return $Call.ByID(1310962584, chatID);
 }
@@ -113,10 +157,24 @@ export function MyFingerprint(): $CancellablePromise<string> {
 }
 
 /**
+ * MyProfile returns this account's profile.
+ */
+export function MyProfile(): $CancellablePromise<$models.UserProfile | null> {
+    return $Call.ByID(944599700);
+}
+
+/**
  * OpenDirect opens (or starts) the direct chat with a user.
  */
 export function OpenDirect(username: string): $CancellablePromise<$models.Chat | null> {
     return $Call.ByID(3064201712, username);
+}
+
+/**
+ * OpenNotification handles a clicked browser notification (web mode).
+ */
+export function OpenNotification(key: string): $CancellablePromise<void> {
+    return $Call.ByID(3481975018, key);
 }
 
 /**
@@ -139,10 +197,11 @@ export function Recover(phrase: string): $CancellablePromise<$models.LoginResult
 }
 
 /**
- * Register creates an account with this device.
+ * Register creates an account with this device (added as another account
+ * if there already are some).
  */
-export function Register(server: string, username: string, password: string, deviceName: string): $CancellablePromise<void> {
-    return $Call.ByID(2407790920, server, username, password, deviceName);
+export function Register(server: string, username: string, password: string, displayName: string, deviceName: string): $CancellablePromise<void> {
+    return $Call.ByID(2407790920, server, username, password, displayName, deviceName);
 }
 
 export function RejectLink(deviceID: string): $CancellablePromise<void> {
@@ -198,6 +257,14 @@ export function SetActiveChat(chatID: string): $CancellablePromise<void> {
 }
 
 /**
+ * SetAvatar sets the profile photo (base64 JPEG/PNG/WebP, the UI crops and
+ * scales it); empty removes it.
+ */
+export function SetAvatar(imageBase64: string): $CancellablePromise<$models.UserProfile | null> {
+    return $Call.ByID(71819890, imageBase64);
+}
+
+/**
  * SetForeground tells whether the user is looking at the app (window
  * focused / activity resumed / browser tab visible).
  */
@@ -213,10 +280,24 @@ export function SetSettings(s: $models.Settings): $CancellablePromise<void> {
 }
 
 /**
+ * SetUsername changes the @username.
+ */
+export function SetUsername(username: string): $CancellablePromise<$models.UserProfile | null> {
+    return $Call.ByID(4057701387, username);
+}
+
+/**
  * SetupRecovery creates a new recovery phrase (replacing an older one).
  */
 export function SetupRecovery(): $CancellablePromise<string> {
     return $Call.ByID(3336352441);
+}
+
+/**
+ * SwitchAccount makes another account the active one.
+ */
+export function SwitchAccount(id: string): $CancellablePromise<void> {
+    return $Call.ByID(1891082360, id);
 }
 
 /**
@@ -235,4 +316,19 @@ export function TakeOpenChat(): $CancellablePromise<string> {
 
 export function Trust(username: string, deviceID: string): $CancellablePromise<number> {
     return $Call.ByID(3758595485, username, deviceID);
+}
+
+/**
+ * UpdateProfile sets the display name and bio.
+ */
+export function UpdateProfile(name: string, bio: string): $CancellablePromise<$models.UserProfile | null> {
+    return $Call.ByID(2272625913, name, bio);
+}
+
+/**
+ * UserProfile returns someone's profile, refreshed from the server (the
+ * user opened it; offline the cached one is shown).
+ */
+export function UserProfile(userID: string): $CancellablePromise<$models.UserProfile | null> {
+    return $Call.ByID(1522381447, userID);
 }

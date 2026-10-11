@@ -67,11 +67,12 @@
 <Modal title="Настройки" onclose={() => (app.modal = null)} width={460}>
   {#if acc}
     <div class="profile">
-      <Avatar name={acc.username} id={acc.userId} size={64} />
-      <div>
-        <div class="name">{acc.username}</div>
-        <div class="muted small">{app.online ? 'в сети' : 'нет соединения'} · {app.state?.serverUrl}</div>
+      <Avatar name={app.me?.name || acc.name || acc.username} id={acc.userId} user={acc.userId} photo={app.me?.avatarId} size={64} />
+      <div class="grow">
+        <div class="name">{app.me?.name || acc.name || acc.username}</div>
+        <div class="muted small">@{app.me?.username ?? acc.username} · {app.online ? 'в сети' : 'нет соединения'}</div>
       </div>
+      <button class="btn flat" onclick={() => (app.modal = { kind: 'editProfile' })}>Изменить</button>
     </div>
 
     <div class="section">
@@ -159,6 +160,10 @@
       <button class="btn flat" disabled={backingUp} onclick={backup}>{backingUp ? 'Сохранение…' : 'Сохранить сейчас'}</button>
     </div>
 
+    <div class="section">
+      <button class="btn danger" onclick={() => (app.modal = { kind: 'logout' })}><Icon name="logout" size={18} /> Выйти из аккаунта</button>
+    </div>
+
     {#if app.state?.webMode}
       <p class="muted small">Веб-режим: этот процесс хранит ваши ключи. Не открывайте его другим людям.</p>
     {/if}
@@ -168,6 +173,7 @@
 <style>
   .profile { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; }
   .name { font-size: 18px; font-weight: 600; }
+  .grow { flex: 1; min-width: 0; }
   .small { font-size: 13px; }
   .section { border-top: 1px solid #243140; padding: 14px 0 6px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
   .label { display: flex; gap: 8px; align-items: center; font-weight: 500; color: var(--accent-light); }

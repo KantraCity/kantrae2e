@@ -30,11 +30,23 @@ service AuthService {
   rpc Recover(RecoverRequest) returns (RecoverResponse) {}
   // Username prefix search (to start a direct chat).
   rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse) {}
+
+  // --- Public profile (like Telegram: visible to everyone) ---
+  // Profiles of several users (clients cache them, avatar by avatar_id).
+  rpc GetProfiles(GetProfilesRequest) returns (GetProfilesResponse) {}
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse) {}
+  // Changes the caller's @username (unique, case-insensitive).
+  rpc SetUsername(SetUsernameRequest) returns (SetUsernameResponse) {}
+  // Sets (or with empty image removes) the caller's profile photo (JPEG/PNG/WebP, <= 512 KiB).
+  rpc SetAvatar(SetAvatarRequest) returns (SetAvatarResponse) {}
+  rpc GetAvatar(GetAvatarRequest) returns (GetAvatarResponse) {}
 }
 
 message RegisterRequest {
   string username = 1;
   string password = 2;
+  // Display name ("first last"); defaults to the username.
+  string display_name = 3;
 }
 
 message RegisterResponse {
@@ -97,6 +109,9 @@ message LookupUserRequest {
 message LookupUserResponse {
   string user_id = 1;
   string username = 2;
+  string display_name = 3;
+  string bio = 4;
+  string avatar_id = 5;
 }
 
 message RefreshTokenRequest {}
@@ -140,8 +155,54 @@ message SearchUsersRequest {
 message User {
   string user_id = 1;
   string username = 2;
+  string display_name = 3;
+  string bio = 4;
+  // Changes whenever the photo changes; empty: no photo.
+  string avatar_id = 5;
 }
 
 message SearchUsersResponse {
   repeated User users = 1;
+}
+
+message GetProfilesRequest {
+  repeated string user_ids = 1;
+}
+
+message GetProfilesResponse {
+  repeated User users = 1;
+}
+
+message UpdateProfileRequest {
+  string display_name = 1;
+  string bio = 2;
+}
+
+message UpdateProfileResponse {
+  User user = 1;
+}
+
+message SetUsernameRequest {
+  string username = 1;
+}
+
+message SetUsernameResponse {
+  User user = 1;
+}
+
+message SetAvatarRequest {
+  bytes image = 1;
+}
+
+message SetAvatarResponse {
+  User user = 1;
+}
+
+message GetAvatarRequest {
+  string user_id = 1;
+}
+
+message GetAvatarResponse {
+  string avatar_id = 1;
+  bytes image = 2;
 }
