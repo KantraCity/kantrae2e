@@ -136,6 +136,7 @@ services:
     command: caddy run --config /etc/caddy/Caddyfile.dev --adapter caddyfile
     ports:
       - "443:443"
+      - "127.0.0.1:8080:8080" # Android over USB (adb reverse), see README
     volumes:
       - ./Caddyfile.dev:/etc/caddy/Caddyfile.dev:ro
       - ./Caddyfile.routes:/etc/caddy/Caddyfile.routes:ro

@@ -12,6 +12,17 @@ export interface Account {
 
 export interface Chat {
     "id": string;
+
+    /**
+     * Kind: "direct" (one person, found by username) or "group".
+     */
+    "kind": string;
+
+    /**
+     * Peer of a direct chat (username / user id).
+     */
+    "peer"?: string;
+    "peerId"?: string;
     "name": string;
     "active": boolean;
     "last"?: Message | null;
@@ -49,7 +60,19 @@ export interface FileInfo {
     "size": number;
 }
 
+/**
+ * LinkRequest is a new device of the account waiting for approval.
+ */
+export interface LinkRequest {
+    "deviceId": string;
+    "name": string;
+    "code": string;
+    "at": number;
+}
+
 export interface LoginResult {
+    "pending": boolean;
+    "code"?: string;
     "restored": number;
     "joined": number;
     "requested": number;
@@ -100,6 +123,12 @@ export interface State {
     "account": Account | null;
     "online": boolean;
     "webMode": boolean;
+
+    /**
+     * Pending: this device waits for approval; show LinkCode.
+     */
+    "pending": boolean;
+    "linkCode"?: string;
 }
 
 /**
@@ -112,4 +141,17 @@ export interface UIEvent {
     "message"?: Message | null;
     "detail"?: string;
     "count"?: number;
+
+    /**
+     * DeviceID for link_request / link_resolved.
+     */
+    "deviceId"?: string;
+}
+
+/**
+ * UserHit is a global search result.
+ */
+export interface UserHit {
+    "userId": string;
+    "username": string;
 }

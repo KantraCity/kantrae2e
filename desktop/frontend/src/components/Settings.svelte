@@ -10,10 +10,21 @@
   let fingerprint = $state('')
   let devices = $state<Device[]>([])
   let backingUp = $state(false)
+  let hasRecovery = $state<boolean | null>(null)
+  let creating = $state(false)
 
   async function load() {
     fingerprint = (await app.try(() => Messenger.MyFingerprint())) ?? ''
     devices = (await app.try(() => Messenger.Devices())) ?? []
+    hasRecovery = (await Messenger.HasRecovery().catch(() => null)) ?? null
+  }
+
+  async function createRecovery() {
+    if (hasRecovery && !confirm('Создать новый ключ восстановления? Старый перестанет работать.')) return
+    creating = true
+    const phrase = await app.try(() => Messenger.SetupRecovery())
+    creating = false
+    if (phrase) app.modal = { kind: 'recovery', phrase }
   }
   $effect(() => { load() })
 
@@ -52,7 +63,16 @@
 
     <div class="section">
       <div class="label"><Icon name="device" size={18} /> Устройства</div>
-      {#each devices as d (d.id)}
+      {#each app.links as l (l.deviceId)}
+        <div class="device">
+          <div>
+            <div>{l.name || 'Новое устройство'}</div>
+            <div class="muted small">ждёт подтверждения · код {l.code}</div>
+          </div>
+          <button class="btn" onclick={() => (app.modal = { kind: 'approveLink', deviceId: l.deviceId })}>Проверить</button>
+        </div>
+      {/each}
+      {#each devices.filter((d) => !app.links.some((l) => l.deviceId === d.id)) as d (d.id)}
         <div class="device" class:revoked={d.revoked}>
           <div>
             <div>{d.name}{d.thisDevice ? ' · это устройство' : ''}</div>
@@ -66,8 +86,21 @@
     </div>
 
     <div class="section">
+      <div class="label"><Icon name="key" size={18} /> Ключ восстановления</div>
+      <p class="muted small">
+        {#if hasRecovery === null}…
+        {:else if hasRecovery}Создан. Нужен, только если вы потеряете все устройства.
+        {:else}Не создан. Новые устройства подтверждаются с этого — но если потеряете все,
+          историю можно будет вернуть только по ключу из 12 слов.{/if}
+      </p>
+      <button class="btn flat" disabled={creating || hasRecovery === null} onclick={createRecovery}>
+        {creating ? 'Создание…' : hasRecovery ? 'Создать новый ключ' : 'Создать ключ восстановления'}
+      </button>
+    </div>
+
+    <div class="section">
       <div class="label"><Icon name="cloud" size={18} /> Резервная копия истории</div>
-      <p class="muted small">Сообщения автоматически сохраняются в зашифрованном виде (ключ — ваша seed-фраза).</p>
+      <p class="muted small">Сообщения автоматически сохраняются на сервере в зашифрованном виде; ключ есть только на ваших устройствах.</p>
       <button class="btn flat" disabled={backingUp} onclick={backup}>{backingUp ? 'Сохранение…' : 'Сохранить сейчас'}</button>
     </div>
 

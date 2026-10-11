@@ -783,6 +783,14 @@ func TestLinkingAndDirectChats(t *testing.T) {
 		}
 	}
 
+	// ...and the phone trusts the laptop that approved it: no "new device" alerts.
+	if ev := alice.eventsOf(core.EventNewDevice); len(ev) != 0 {
+		t.Fatalf("approver warned about the device it approved: %+v", ev)
+	}
+	if ev := phone.eventsOf(core.EventNewDevice); len(ev) != 0 {
+		t.Fatalf("new device warned about its approver: %+v", ev)
+	}
+
 	// Direct chat: find bob by nickname, write to him.
 	found, err := alice.SearchUsers(ctx, "bo")
 	ok(t, err)

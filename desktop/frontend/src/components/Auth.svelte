@@ -9,7 +9,6 @@
   let username = $state('')
   let password = $state('')
   let device = $state('')
-  let seed = $state('')
   let busy = $state(false)
   let error = $state('')
 
@@ -22,10 +21,10 @@
     error = ''
     try {
       if (mode === 'register') {
-        app.seedPhrase = await Messenger.Register(server, username.trim(), password, device)
+        await Messenger.Register(server, username.trim(), password, device)
       } else {
-        const r = await Messenger.Login(server, username.trim(), password, device, seed)
-        if (r) {
+        const r = await Messenger.Login(server, username.trim(), password, device)
+        if (r && !r.pending) {
           const parts = []
           if (r.restored) parts.push(`восстановлено ${r.restored} ${plural(r.restored, 'сообщение', 'сообщения', 'сообщений')}`)
           if (r.joined) parts.push(`${r.joined} ${plural(r.joined, 'чат подключён', 'чата подключено', 'чатов подключено')}`)
@@ -47,7 +46,7 @@
     <img class="logo" src="/icon.svg" alt="" />
     <h1>Kantra</h1>
     <p class="muted sub">
-      {mode === 'register' ? 'Создайте аккаунт. Сообщения шифруются на устройстве (MLS).' : 'Войдите, чтобы подключить это устройство к аккаунту.'}
+      {mode === 'register' ? 'Создайте аккаунт. Сообщения шифруются на устройстве (MLS).' : 'Войдите — затем подтвердите вход на другом своём устройстве.'}
     </p>
 
     <div class="tabs">
@@ -59,9 +58,6 @@
     <input class="field" type="password" placeholder="Пароль (от 8 символов)"
       autocomplete={mode === 'register' ? 'new-password' : 'current-password'} bind:value={password} />
     <input class="field" placeholder="Название устройства (необязательно)" bind:value={device} />
-    {#if mode === 'login'}
-      <textarea class="field seed" rows="3" placeholder="Seed-фраза из 24 слов — чтобы восстановить историю (необязательно)" bind:value={seed}></textarea>
-    {/if}
 
     {#if editServer}
       <input class="field" placeholder="Адрес сервера" bind:value={server} />
@@ -88,7 +84,6 @@
   .tabs { display: flex; background: var(--bg-input); border-radius: 10px; padding: 3px; margin-bottom: 4px; }
   .tabs button { flex: 1; padding: 8px; border-radius: 8px; color: var(--text-muted); font-weight: 500; }
   .tabs button.active { background: var(--bg-active); color: var(--text); }
-  .seed { resize: none; }
   .server { font-size: 13px; text-align: center; }
   .server span { color: var(--accent-light); }
   .note { font-size: 12px; margin: 0; }

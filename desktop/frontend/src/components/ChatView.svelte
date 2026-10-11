@@ -56,7 +56,7 @@
     const id = chat?.id
     const active = chat?.active
     memberCount = null
-    if (id && active) Messenger.Members(id).then((ms) => (memberCount = new Set((ms ?? []).map((x) => x.userId)).size)).catch(() => {})
+    if (id && active && chat?.kind === 'group') Messenger.Members(id).then((ms) => (memberCount = new Set((ms ?? []).map((x) => x.userId)).size)).catch(() => {})
     input?.focus()
   })
 
@@ -102,12 +102,13 @@
     <header>
       <button class="icon-btn back" aria-label="Назад" onclick={() => app.openChat(null)}><Icon name="back" /></button>
       <button class="title" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}>
-        <Avatar name={chat.name} id={chat.id} size={42} />
+        <Avatar name={chat.name} id={chat.peerId || chat.id} size={42} />
         <div class="title-text">
           <div class="name">{chat.name}</div>
           <div class="status muted">
-            {#if !chat.active}вы не участник этой группы
+            {#if !chat.active}{chat.kind === 'direct' ? 'чат недоступен' : 'вы не участник этой группы'}
             {:else if !app.online}соединение…
+            {:else if chat.kind === 'direct'}@{chat.peer}
             {:else if memberCount !== null}{memberCount} {plural(memberCount, 'участник', 'участника', 'участников')}
             {:else}&nbsp;{/if}
           </div>
@@ -123,7 +124,7 @@
           {#if r.kind === 'day'}
             <div class="day"><span>{r.label}</span></div>
           {:else}
-            <Bubble m={r.m} first={r.first} last={r.last} group={true} />
+            <Bubble m={r.m} first={r.first} last={r.last} group={chat.kind === 'group'} />
           {/if}
         {/each}
       </div>
@@ -139,7 +140,7 @@
         <button class="send" aria-label="Отправить" disabled={!text.trim()} onclick={send}><Icon name="send" /></button>
       </footer>
     {:else}
-      <footer class="readonly muted">Вы не участник этой группы — доступна только история</footer>
+      <footer class="readonly muted">{chat.kind === 'direct' ? 'Чат пока недоступен на этом устройстве — доступна только история' : 'Вы не участник этой группы — доступна только история'}</footer>
     {/if}
 
     {#if dragging}

@@ -3,12 +3,12 @@ module github.com/kantracity/kantrae2e/desktop
 go 1.26.8
 
 require (
+	connectrpc.com/connect v1.21.0
 	github.com/kantracity/kantrae2e v0.0.0
 	github.com/wailsapp/wails/v3 v3.0.0-beta.26
 )
 
 require (
-	connectrpc.com/connect v1.21.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect

@@ -4,9 +4,12 @@
   import Auth from './components/Auth.svelte'
   import ChatInfo from './components/ChatInfo.svelte'
   import ChatView from './components/ChatView.svelte'
-  import NewChat from './components/NewChat.svelte'
+  import ApproveLink from './components/ApproveLink.svelte'
+  import NewDirect from './components/NewDirect.svelte'
+  import NewGroup from './components/NewGroup.svelte'
+  import PendingDevice from './components/PendingDevice.svelte'
+  import RecoveryPhrase from './components/RecoveryPhrase.svelte'
   import Relogin from './components/Relogin.svelte'
-  import SeedPhrase from './components/SeedPhrase.svelte'
   import Settings from './components/Settings.svelte'
   import Sidebar from './components/Sidebar.svelte'
   import Toasts from './components/Toasts.svelte'
@@ -17,10 +20,10 @@
 
 {#if !app.loaded}
   <div class="splash"><img src="/icon.svg" alt="" width="96" /></div>
-{:else if app.seedPhrase}
-  <SeedPhrase phrase={app.seedPhrase} />
 {:else if !app.loggedIn}
   <Auth />
+{:else if app.pending}
+  <PendingDevice />
 {:else}
   <div class="layout" class:chat-open={!!app.currentId}>
     <Sidebar />
@@ -28,7 +31,11 @@
   </div>
 {/if}
 
-{#if app.modal?.kind === 'newChat'}<NewChat />
+{#if app.pending}{#if app.modal?.kind === 'relogin'}<Relogin />{/if}
+{:else if app.modal?.kind === 'newGroup'}<NewGroup />
+{:else if app.modal?.kind === 'newDirect'}<NewDirect />
+{:else if app.modal?.kind === 'approveLink'}<ApproveLink deviceId={app.modal.deviceId} />
+{:else if app.modal?.kind === 'recovery'}<RecoveryPhrase phrase={app.modal.phrase} />
 {:else if app.modal?.kind === 'chatInfo'}<ChatInfo chatId={app.modal.chatId} />
 {:else if app.modal?.kind === 'verify'}<Verify username={app.modal.username} />
 {:else if app.modal?.kind === 'settings'}<Settings />

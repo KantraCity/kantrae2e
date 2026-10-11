@@ -15,6 +15,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function ApproveLink(deviceID: string): $CancellablePromise<void> {
+    return $Call.ByID(3157958442, deviceID);
+}
+
 /**
  * Backup uploads messages not yet in the history backup now.
  */
@@ -22,12 +26,30 @@ export function Backup(): $CancellablePromise<number> {
     return $Call.ByID(758421255);
 }
 
+/**
+ * CancelPending forgets this device's local profile (only while it is still
+ * waiting for approval: nothing is lost).
+ */
+export function CancelPending(): $CancellablePromise<void> {
+    return $Call.ByID(1708660658);
+}
+
+/**
+ * Chat returns one chat.
+ */
+export function Chat(chatID: string): $CancellablePromise<$models.Chat | null> {
+    return $Call.ByID(336985171, chatID);
+}
+
 export function Chats(): $CancellablePromise<$models.Chat[] | null> {
     return $Call.ByID(3197888096);
 }
 
-export function CreateChat(name: string, usernames: string[] | null): $CancellablePromise<string> {
-    return $Call.ByID(3275383003, name, usernames);
+/**
+ * CreateGroup creates a group chat with the given members.
+ */
+export function CreateGroup(name: string, usernames: string[] | null): $CancellablePromise<string> {
+    return $Call.ByID(956109340, name, usernames);
 }
 
 export function Devices(): $CancellablePromise<$models.Device[] | null> {
@@ -48,6 +70,13 @@ export function GetState(): $CancellablePromise<$models.State> {
     return $Call.ByID(3948464848);
 }
 
+/**
+ * HasRecovery reports whether a recovery phrase exists for the account.
+ */
+export function HasRecovery(): $CancellablePromise<boolean> {
+    return $Call.ByID(4175914496);
+}
+
 export function Invite(chatID: string, usernames: string[] | null): $CancellablePromise<void> {
     return $Call.ByID(1649811096, chatID, usernames);
 }
@@ -57,10 +86,11 @@ export function Keys(username: string): $CancellablePromise<$models.DeviceKey[] 
 }
 
 /**
- * Login adds this app as a new device of an existing account.
+ * Login adds this app as a new device of an existing account. Usually the
+ * result is Pending: approve it on another device (same Code) or Recover.
  */
-export function Login(server: string, username: string, password: string, deviceName: string, seedPhrase: string): $CancellablePromise<$models.LoginResult | null> {
-    return $Call.ByID(1734906618, server, username, password, deviceName, seedPhrase);
+export function Login(server: string, username: string, password: string, deviceName: string): $CancellablePromise<$models.LoginResult | null> {
+    return $Call.ByID(1734906618, server, username, password, deviceName);
 }
 
 export function Members(chatID: string): $CancellablePromise<$models.Member[] | null> {
@@ -76,10 +106,32 @@ export function MyFingerprint(): $CancellablePromise<string> {
 }
 
 /**
- * Register creates an account and returns the seed phrase (shown once).
+ * OpenDirect opens (or starts) the direct chat with a user.
  */
-export function Register(server: string, username: string, password: string, deviceName: string): $CancellablePromise<string> {
+export function OpenDirect(username: string): $CancellablePromise<$models.Chat | null> {
+    return $Call.ByID(3064201712, username);
+}
+
+export function PendingLinks(): $CancellablePromise<$models.LinkRequest[] | null> {
+    return $Call.ByID(3055171637);
+}
+
+/**
+ * Recover approves this new device with the recovery phrase.
+ */
+export function Recover(phrase: string): $CancellablePromise<$models.LoginResult | null> {
+    return $Call.ByID(3535219507, phrase);
+}
+
+/**
+ * Register creates an account with this device.
+ */
+export function Register(server: string, username: string, password: string, deviceName: string): $CancellablePromise<void> {
     return $Call.ByID(2407790920, server, username, password, deviceName);
+}
+
+export function RejectLink(deviceID: string): $CancellablePromise<void> {
+    return $Call.ByID(2706933510, deviceID);
 }
 
 /**
@@ -93,8 +145,22 @@ export function Remove(chatID: string, username: string): $CancellablePromise<vo
     return $Call.ByID(4231631669, chatID, username);
 }
 
+/**
+ * RequestLink asks the other devices again to approve this one.
+ */
+export function RequestLink(): $CancellablePromise<void> {
+    return $Call.ByID(442657138);
+}
+
 export function RevokeDevice(deviceID: string): $CancellablePromise<number> {
     return $Call.ByID(2532478977, deviceID);
+}
+
+/**
+ * SearchUsers finds people by username (global search, like in Telegram).
+ */
+export function SearchUsers(query: string): $CancellablePromise<$models.UserHit[] | null> {
+    return $Call.ByID(4144624503, query);
 }
 
 export function Send(chatID: string, text: string): $CancellablePromise<$models.Message | null> {
@@ -106,6 +172,13 @@ export function Send(chatID: string, text: string): $CancellablePromise<$models.
  */
 export function SendFile(chatID: string, name: string, dataBase64: string): $CancellablePromise<$models.Message | null> {
     return $Call.ByID(1589692329, chatID, name, dataBase64);
+}
+
+/**
+ * SetupRecovery creates a new recovery phrase (replacing an older one).
+ */
+export function SetupRecovery(): $CancellablePromise<string> {
+    return $Call.ByID(3336352441);
 }
 
 /**

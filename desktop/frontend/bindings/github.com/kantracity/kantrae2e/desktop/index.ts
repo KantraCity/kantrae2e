@@ -13,9 +13,11 @@ export type {
     DeviceKey,
     FileData,
     FileInfo,
+    LinkRequest,
     LoginResult,
     Member,
     Message,
     State,
-    UIEvent
+    UIEvent,
+    UserHit
 } from "./models.js";

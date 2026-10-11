@@ -4,15 +4,27 @@
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
 
-  const filtered = $derived(
-    app.search.trim()
-      ? app.chats.filter((c) => c.name.toLowerCase().includes(app.search.trim().toLowerCase()))
-      : app.chats,
-  )
+  const q = $derived(app.search.trim().replace(/^@/, '').toLowerCase())
+  const filtered = $derived(q ? app.chats.filter((c) => c.name.toLowerCase().includes(q)) : app.chats)
+  // People found globally that are not already a private chat in the list.
+  const people = $derived(app.userHits.filter((u) => !filtered.some((c) => c.kind === 'direct' && c.peerId === u.userId)))
+  let menu = $state(false)
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  function searchInput() {
+    clearTimeout(timer)
+    timer = setTimeout(() => app.searchUsers(app.search), 250)
+  }
+
+  function clearSearch() {
+    app.search = ''
+    app.searchUsers('')
+  }
 
   function preview(c: (typeof app.chats)[number]): string {
-    if (!c.last) return c.active ? 'Нет сообщений' : 'Вы не участник'
-    const who = c.last.outgoing ? 'Вы: ' : c.last.sender ? `${c.last.sender}: ` : ''
+    if (!c.last) return c.active ? (c.kind === 'direct' ? 'Личный чат' : 'Нет сообщений') : 'Вы не участник'
+    // Like Telegram: sender names only in groups.
+    const who = c.last.outgoing ? 'Вы: ' : c.kind === 'group' && c.last.sender ? `${c.last.sender}: ` : ''
     const body = c.last.kind === 'file' ? `📎 ${c.last.file?.name ?? 'файл'}` : c.last.text
     return who + body
   }
@@ -23,14 +35,24 @@
     <button class="icon-btn" aria-label="Меню" onclick={() => (app.modal = { kind: 'settings' })}><Icon name="menu" /></button>
     <div class="search">
       <Icon name="search" size={18} />
-      <input placeholder={app.online ? 'Поиск' : 'Соединение…'} bind:value={app.search} />
+      <input placeholder={app.online ? 'Поиск' : 'Соединение…'} bind:value={app.search} oninput={searchInput}
+        onkeydown={(e) => e.key === 'Escape' && clearSearch()} />
+      {#if app.search}<button class="clear" aria-label="Очистить" onclick={clearSearch}><Icon name="close" size={16} /></button>{/if}
     </div>
   </header>
 
+  {#if app.links.length}
+    <button class="link-banner" onclick={() => (app.modal = { kind: 'approveLink', deviceId: app.links[0].deviceId })}>
+      <Icon name="device" size={20} />
+      <span>Запрос на вход: <b>{app.links[0].name || 'новое устройство'}</b></span>
+    </button>
+  {/if}
+
   <div class="list">
+    {#if q && filtered.length}<div class="section-title">Чаты</div>{/if}
     {#each filtered as c (c.id)}
       <button class="chat-item" class:active={c.id === app.currentId} onclick={() => app.openChat(c.id)}>
-        <Avatar name={c.name} id={c.id} size={54} />
+        <Avatar name={c.name} id={c.peerId || c.id} size={54} />
         <div class="meta">
           <div class="row">
             <span class="name">
@@ -46,14 +68,39 @@
         </div>
       </button>
     {:else}
-      <div class="empty muted">
-        {#if app.search}Ничего не найдено{:else}Пока нет чатов.<br />Создайте группу кнопкой ниже.{/if}
-      </div>
+      {#if !q}
+        <div class="empty muted">Пока нет чатов.<br />Найдите собеседника по нику в поиске выше.</div>
+      {/if}
     {/each}
+
+    {#if q}
+      <div class="section-title">Глобальный поиск</div>
+      {#each people as u (u.userId)}
+        <button class="chat-item" onclick={() => app.openDirect(u.username)}>
+          <Avatar name={u.username} id={u.userId} size={54} />
+          <div class="meta">
+            <span class="name">{u.username}</span>
+            <span class="preview">@{u.username}</span>
+          </div>
+        </button>
+      {:else}
+        <div class="empty muted small">
+          {#if app.searching}Поиск…{:else if q.length < 2}Введите ник (от 2 символов){:else}Пользователи не найдены{/if}
+        </div>
+      {/each}
+    {/if}
   </div>
 
-  <button class="fab" aria-label="Новая группа" title="Новая группа" onclick={() => (app.modal = { kind: 'newChat' })}>
-    <Icon name="pencil" />
+  {#if menu}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="menu-backdrop" onclick={() => (menu = false)}></div>
+    <div class="fab-menu">
+      <button onclick={() => { menu = false; app.modal = { kind: 'newDirect' } }}><Icon name="user" size={20} /> Новый чат</button>
+      <button onclick={() => { menu = false; app.modal = { kind: 'newGroup' } }}><Icon name="group" size={20} /> Новая группа</button>
+    </div>
+  {/if}
+  <button class="fab" class:open={menu} aria-label="Новое сообщение" title="Новое сообщение" onclick={() => (menu = !menu)}>
+    <Icon name={menu ? 'close' : 'pencil'} />
   </button>
 </aside>
 
@@ -77,6 +124,18 @@
   .badge { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
   .chat-item.active .badge { background: #fff; color: var(--bg-active); }
   .empty { text-align: center; padding: 40px 20px; line-height: 1.5; }
+  .empty.small { padding: 16px; font-size: 14px; }
+  .clear { color: var(--text-muted); display: inline-flex; }
+  .section-title { font-size: 14px; font-weight: 500; color: var(--text-muted); padding: 10px 12px 6px; background: var(--bg-sidebar); }
+  .link-banner { display: flex; align-items: center; gap: 10px; margin: 0 12px 6px; padding: 10px 14px; border-radius: 10px; background: var(--bg-active); color: #fff; text-align: left; font-size: 14px; }
+  .menu-backdrop { position: absolute; inset: 0; z-index: 2; }
+  .fab-menu { position: absolute; right: 20px; bottom: 84px; z-index: 3; background: var(--bg-menu, #212d3b); border-radius: 12px; padding: 6px 0; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; min-width: 200px; animation: pop .12s ease-out; transform-origin: bottom right; }
+  .fab-menu button { display: flex; align-items: center; gap: 14px; padding: 10px 18px; font-size: 15px; text-align: left; }
+  .fab-menu button:hover { background: var(--bg-hover); }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } }
+  .fab { z-index: 3; }
+  .fab.open { transform: rotate(90deg); }
   .fab { position: absolute; right: 20px; bottom: 20px; width: 54px; height: 54px; border-radius: 50%; background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); transition: transform .15s, filter .15s; }
   .fab:hover { filter: brightness(1.1); transform: scale(1.04); }

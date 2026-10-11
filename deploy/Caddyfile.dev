@@ -9,3 +9,10 @@ localhost {
 	tls internal
 	import Caddyfile.routes
 }
+
+# Plain HTTP on 127.0.0.1:8080 for the Android app over USB:
+# `adb reverse tcp:8080 tcp:8080` tunnels the phone's localhost:8080 to here,
+# so traffic never leaves the cable (and MLS encrypts it end-to-end anyway).
+http://:8080 {
+	import Caddyfile.routes
+}

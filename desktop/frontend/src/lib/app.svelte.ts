@@ -1,10 +1,13 @@
-import { Messenger, onEvent, errorText, type Chat, type Message, type State, type UIEvent } from './api'
+import { Messenger, onEvent, errorText, type Chat, type LinkRequest, type Message, type State, type UIEvent, type UserHit } from './api'
 import { readFileBase64, plural } from './util'
 
 export type Toast = { id: number; text: string; kind: 'info' | 'error' | 'warning' | 'security' }
 
 export type Modal =
-  | { kind: 'newChat' }
+  | { kind: 'newGroup' }
+  | { kind: 'newDirect' }
+  | { kind: 'approveLink'; deviceId: string }
+  | { kind: 'recovery'; phrase: string }
   | { kind: 'chatInfo'; chatId: string }
   | { kind: 'verify'; username: string }
   | { kind: 'settings' }
@@ -29,12 +32,17 @@ class AppState {
   unread = $state<Record<string, number>>(loadUnread())
   toasts = $state<Toast[]>([])
   online = $state(false)
-  seedPhrase = $state<string | null>(null)
   modal = $state<Modal | null>(null)
   search = $state('')
+  /** Global search results (people by username). */
+  userHits = $state<UserHit[]>([])
+  searching = $state(false)
+  /** New devices of this account waiting for approval. */
+  links = $state<LinkRequest[]>([])
 
   current = $derived(this.chats.find((c) => c.id === this.currentId) ?? null)
   loggedIn = $derived(!!this.state?.account)
+  pending = $derived(!!this.state?.pending)
 
   private toastSeq = 0
   private unsubscribe: (() => void) | null = null
@@ -45,7 +53,10 @@ class AppState {
     try {
       this.state = await Messenger.GetState()
       this.online = this.state.online
-      if (this.state.account) await this.refreshChats()
+      if (this.state.account && !this.state.pending) {
+        await this.refreshChats()
+        await this.refreshLinks()
+      }
     } catch (e) {
       this.toast(errorText(e), 'error')
     }
@@ -54,7 +65,48 @@ class AppState {
 
   async afterAuth() {
     this.state = await Messenger.GetState()
-    await this.refreshChats()
+    if (!this.state.pending) await this.refreshChats()
+  }
+
+  async refreshLinks() {
+    const ls = await Messenger.PendingLinks().catch(() => null)
+    if (!ls) return
+    this.links = ls
+    // Ask about the oldest request unless something else is open.
+    if (ls.length && !this.modal) this.modal = { kind: 'approveLink', deviceId: ls[0].deviceId }
+    if (this.modal?.kind === 'approveLink') {
+      const id = this.modal.deviceId
+      if (!ls.some((l) => l.deviceId === id)) this.modal = ls.length ? { kind: 'approveLink', deviceId: ls[0].deviceId } : null
+    }
+  }
+
+  private searchSeq = 0
+
+  /** Global search by username (debounced by the caller). */
+  async searchUsers(q: string) {
+    const seq = ++this.searchSeq
+    q = q.trim().replace(/^@/, '')
+    if (q.length < 2) {
+      this.userHits = []
+      this.searching = false
+      return
+    }
+    this.searching = true
+    const hits = await Messenger.SearchUsers(q).catch(() => [] as UserHit[])
+    if (seq !== this.searchSeq) return
+    this.userHits = hits ?? []
+    this.searching = false
+  }
+
+  /** Opens (or starts) the private chat with a user, like tapping a person in Telegram. */
+  async openDirect(username: string) {
+    const chat = await this.try(() => Messenger.OpenDirect(username))
+    if (!chat) return
+    this.search = ''
+    this.userHits = []
+    if (!this.chats.some((c) => c.id === chat.id)) this.chats = [chat, ...this.chats]
+    await this.openChat(chat.id)
+    this.refreshChats()
   }
 
   toast(text: string, kind: Toast['kind'] = 'info', ms = 4000) {
@@ -199,6 +251,20 @@ class AppState {
         break
       case 'new_device':
         this.toast(`Новое устройство: ${e.detail ?? ''}. Сверьте отпечатки.`, 'warning', 9000)
+        break
+      case 'link_request':
+      case 'link_resolved':
+        await this.refreshLinks()
+        break
+      case 'approved':
+        if (this.state?.pending) {
+          await this.afterAuth()
+          this.toast('Устройство подтверждено')
+        }
+        if (e.count) {
+          this.toast(`Восстановлено ${e.count} ${plural(e.count, 'сообщение', 'сообщения', 'сообщений')} из резервной копии`)
+        }
+        await this.refreshChats()
         break
     }
   }

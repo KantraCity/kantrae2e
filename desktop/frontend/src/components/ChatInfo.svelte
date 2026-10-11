@@ -53,8 +53,23 @@
   }
 </script>
 
-<Modal title="Информация о группе" onclose={() => (app.modal = null)}>
-  {#if chat}
+<Modal title={chat?.kind === 'direct' ? 'Информация' : 'Информация о группе'} onclose={() => (app.modal = null)}>
+  {#if chat && chat.kind === 'direct'}
+    {@const peer = users.find((u) => !u.me)}
+    <div class="head">
+      <Avatar name={chat.name} id={chat.peerId || chat.id} size={72} />
+      <div>
+        <div class="name">{chat.name}</div>
+        <div class="muted">@{chat.peer}</div>
+      </div>
+    </div>
+    <button class="row-btn" onclick={() => (app.modal = { kind: 'verify', username: chat.peer! })}>
+      <Icon name="shield" size={20} />
+      <span class="grow">Ключи шифрования</span>
+      {#if peer}<StatusBadge status={peer.status} />{/if}
+    </button>
+    <p class="muted small hint">Сверьте отпечатки с собеседником лично или по звонку, чтобы исключить подмену ключей.</p>
+  {:else if chat}
     <div class="head">
       <Avatar name={chat.name} id={chat.id} size={72} />
       <div>
@@ -104,4 +119,8 @@
   .who-text { min-width: 0; }
   .uname { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .small { font-size: 13px; }
+  .row-btn { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 10px; border-radius: 10px; text-align: left; color: var(--accent-light); }
+  .row-btn:hover { background: var(--bg-hover); }
+  .grow { flex: 1; color: var(--text); }
+  .hint { margin: 6px 10px 0; }
 </style>

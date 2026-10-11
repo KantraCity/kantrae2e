@@ -113,14 +113,27 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 		if GroupKind(string(gid)) == KindDirect {
 			peer = c.directPeer(members)
 		}
+		// Added to the self-group = approved by an own device after the user
+		// compared codes: the account's devices in it are verified.
+		var trusted []store.DeviceKey
+		if GroupKind(string(gid)) == KindSelf {
+			trusted = c.ownDeviceKeysLocked(ctx, gid)
+		}
 		writes = func(tx *store.Tx) error {
 			if err := seen(tx); err != nil {
 				return err
 			}
+			for _, k := range trusted {
+				if err := tx.PutDeviceKey(k); err != nil {
+					return err
+				}
+			}
 			return tx.UpsertGroup(store.Group{ID: string(gid), Peer: peer, Epoch: epoch, Active: true, CreatedAt: time.Now().Unix()})
 		}
 		events = append(events, Event{Type: EventGroupJoined, GroupID: string(gid)})
-		observed = string(gid)
+		if trusted == nil {
+			observed = string(gid)
+		}
 		// Joined as an additional device of this account: fetch what we missed.
 		if GroupKind(string(gid)) != KindSelf && c.otherDevicesOf(members, c.acct.UserID, c.acct.DeviceID) {
 			c.deferHistoryRequestLocked(string(gid))

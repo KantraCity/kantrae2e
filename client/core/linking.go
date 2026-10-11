@@ -267,16 +267,18 @@ func (c *Client) ApproveLink(ctx context.Context, deviceID string) error {
 		_, members, err := c.m.GroupInfo([]byte(gid))
 		return err == nil && !hasIdentity(members, want), nil
 	}
+	// The user compared the code: the new device's key is verified.
+	if _, key, err := mls.KeyPackageInfo(req.kp); err == nil {
+		if err := c.st.Update(ctx, func(tx *store.Tx) error {
+			return tx.PutDeviceKey(store.DeviceKey{UserID: c.acct.UserID, DeviceID: deviceID, Key: key,
+				Status: store.KeyVerified, FirstSeen: time.Now().UnixMilli()})
+		}); err != nil {
+			return err
+		}
+	}
 	if err := c.commitLocked(ctx, gid, commitSpec{adds: [][]byte{req.kp}, addedDevices: []string{deviceID},
 		addedUsers: []string{c.acct.UserID}, still: still}); err != nil {
 		return err
-	}
-	// The user compared the code: the new device's key is verified.
-	if _, key, err := mls.KeyPackageInfo(req.kp); err == nil {
-		_ = c.st.Update(ctx, func(tx *store.Tx) error {
-			return tx.PutDeviceKey(store.DeviceKey{UserID: c.acct.UserID, DeviceID: deviceID, Key: key,
-				Status: store.KeyVerified, FirstSeen: time.Now().UnixMilli()})
-		})
 	}
 	delete(c.links, deviceID)
 	c.emit(Event{Type: EventLinkResolved, DeviceID: deviceID})
@@ -520,6 +522,26 @@ func (c *Client) OpenDirect(ctx context.Context, username string) (string, error
 		}
 	}
 	return gid, nil
+}
+
+// ownDeviceKeysLocked returns the account's other devices in a group as
+// verified keys.
+func (c *Client) ownDeviceKeysLocked(ctx context.Context, gid []byte) []store.DeviceKey {
+	members, err := c.m.Members(gid)
+	if err != nil {
+		return nil
+	}
+	out := []store.DeviceKey{}
+	now := time.Now().UnixMilli()
+	for _, m := range members {
+		if uid, did := splitIdentity(m.Identity); uid == c.acct.UserID && did != c.acct.DeviceID {
+			if k, err := c.st.DeviceKey(ctx, uid, did); err == nil && string(k.Key) != string(m.SignatureKey) {
+				continue // never overwrite a known different key
+			}
+			out = append(out, store.DeviceKey{UserID: uid, DeviceID: did, Key: m.SignatureKey, Status: store.KeyVerified, FirstSeen: now})
+		}
+	}
+	return out
 }
 
 // directPeer returns the other user of a direct chat from the MLS roster.
