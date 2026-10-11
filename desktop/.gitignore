@@ -1,5 +1,7 @@
 .task
 bin
+# `go build` output in this directory
+/desktop
 frontend/dist
 frontend/node_modules
 build/linux/appimage/build
