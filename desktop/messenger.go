@@ -149,6 +149,7 @@ var errNoServer = errors.New("server address is not set")
 // desktop app and in server (web) mode.
 type Messenger struct {
 	app    *application.App
+	dbFunc func() string
 	dbPath string
 	hc     *http.Client
 	web    bool
@@ -160,12 +161,15 @@ type Messenger struct {
 	online bool
 }
 
-func NewMessenger(dbPath, defaultServer string, hc *http.Client, web bool) *Messenger {
-	return &Messenger{dbPath: dbPath, server: defaultServer, hc: hc, web: web}
+// NewMessenger: dbPath is resolved at startup (on Android the storage
+// directory is only known once the app runs).
+func NewMessenger(dbPath func() string, defaultServer string, hc *http.Client, web bool) *Messenger {
+	return &Messenger{dbFunc: dbPath, server: defaultServer, hc: hc, web: web}
 }
 
 func (m *Messenger) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	m.app = application.Get()
+	m.dbPath = m.dbFunc()
 	if _, err := os.Stat(m.dbPath); err == nil {
 		// Existing profile: the server URL is stored in it.
 		if err := m.open(""); err != nil {
@@ -511,10 +515,13 @@ func orDefault(device string) string {
 	if strings.TrimSpace(device) != "" {
 		return device
 	}
-	if h, err := os.Hostname(); err == nil {
-		return "desktop@" + h
+	if deviceKind == "Android" {
+		return deviceKind
 	}
-	return "desktop"
+	if h, err := os.Hostname(); err == nil {
+		return deviceKind + "@" + h
+	}
+	return deviceKind
 }
 
 // ---- chats --------------------------------------------------------------------

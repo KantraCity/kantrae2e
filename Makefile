@@ -6,7 +6,7 @@ COMPOSE_DEV  = docker compose -f deploy/docker-compose.yml
 COMPOSE_PROD = docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env
 SERVICES = auth directory delivery history media
 
-.PHONY: all mls-ffi mls-ffi-windows gen build cli services test test-unit test-rust lint up down logs dev-ca prod-up desktop desktop-web desktop-windows
+.PHONY: all mls-ffi mls-ffi-windows gen build cli services test test-unit test-rust lint up down logs dev-ca prod-up desktop desktop-web desktop-windows mls-ffi-android android
 
 all: build
 
@@ -17,6 +17,12 @@ mls-ffi:
 ## Same library for Windows (GNU toolchain; cgo links it with MinGW gcc)
 mls-ffi-windows:
 	cd mls-ffi && cargo build --release --target x86_64-pc-windows-gnu
+
+## Same library for Android (arm64 phones, x86_64 emulator). Only the static
+## library is built: cgo links it into the app's .so with the NDK.
+mls-ffi-android:
+	cd mls-ffi && for t in aarch64-linux-android x86_64-linux-android; do \
+		cargo rustc --release --target $$t --lib --crate-type staticlib || exit 1; done
 
 ## Regenerate protobuf + connect-go code (needs buf, protoc-gen-go, protoc-gen-connect-go)
 gen:
@@ -81,3 +87,9 @@ desktop-windows: mls-ffi-windows
 	cd desktop && GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
 		go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o bin/kantra-desktop.exe . ; \
 		rc=$$?; rm -f *.syso; exit $$rc
+
+## Android APK (needs the Android SDK + NDK, JDK 17+, `rustup target add
+## aarch64-linux-android`). Result: desktop/bin/kantra-desktop.apk, install with
+## `adb install -r`, then `adb reverse tcp:8080 tcp:8080` (see README).
+android: mls-ffi-android
+	cd desktop && wails3 task android:package ARCH=$${ARCH:-arm64}

@@ -50,6 +50,10 @@ class AppState {
   async init() {
     this.unsubscribe?.()
     this.unsubscribe = onEvent((e) => this.handleEvent(e))
+    window.addEventListener('popstate', () => {
+      if (this.modal && this.modal.kind !== 'approveLink') this.modal = null
+      if (!history.state?.chat) this.currentId = null
+    })
     try {
       this.state = await Messenger.GetState()
       this.online = this.state.online
@@ -136,6 +140,13 @@ class AppState {
   }
 
   async openChat(id: string | null) {
+    // A history entry per open chat: the Android back button (WebView
+    // goBack) and the browser's back button return to the chat list.
+    if (!id && history.state?.chat) {
+      history.back() // popstate clears currentId
+      return
+    }
+    if (id && !this.currentId) history.pushState({ chat: true }, '')
     this.currentId = id
     if (!id) return
     this.unread[id] = 0

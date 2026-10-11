@@ -26,9 +26,9 @@ func main() {
 	}
 	server := os.Getenv("KANTRA_SERVER")
 	if server == "" {
-		server = "https://localhost"
+		server = defaultServer
 	}
-	messenger := NewMessenger(defaultDBPath(), server, hc, webMode)
+	messenger := NewMessenger(dbPath, server, hc, webMode)
 
 	app := application.New(application.Options{
 		Name:        "Kantra",

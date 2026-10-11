@@ -88,6 +88,7 @@ login screen. The profile lives in `%AppData%\kantra\kantra.db`.
 
 - `messenger.go` — the bound service (typed methods + `kantra` event stream)
 - `frontend/src/lib/app.svelte.ts` — UI state (Svelte 5 runes), event handling
-- `frontend/src/components/` — Telegram-dark-style UI: auth + seed phrase,
+- `frontend/src/components/` — Telegram-dark-style UI: auth, device linking (code), recovery key,
+  global search → private chats, groups,
   chat list, chat with bubbles/files/drag&drop, group info with key
   verification status, fingerprint comparison, settings (devices, backup)

@@ -9,7 +9,9 @@ package mls
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../mls-ffi/include
-#cgo linux LDFLAGS: ${SRCDIR}/../../mls-ffi/target/release/libmls_ffi.a -lm -ldl -lpthread
+#cgo linux,!android LDFLAGS: ${SRCDIR}/../../mls-ffi/target/release/libmls_ffi.a -lm -ldl -lpthread
+#cgo android,arm64 LDFLAGS: ${SRCDIR}/../../mls-ffi/target/aarch64-linux-android/release/libmls_ffi.a -lm -ldl -llog -lunwind
+#cgo android,amd64 LDFLAGS: ${SRCDIR}/../../mls-ffi/target/x86_64-linux-android/release/libmls_ffi.a -lm -ldl -llog -lunwind
 #cgo darwin LDFLAGS: ${SRCDIR}/../../mls-ffi/target/release/libmls_ffi.a -lm
 #cgo windows LDFLAGS: ${SRCDIR}/../../mls-ffi/target/x86_64-pc-windows-gnu/release/libmls_ffi.a -lbcrypt -ladvapi32 -lkernel32 -lntdll -luserenv -lws2_32 -ldbghelp
 #include <stdlib.h>

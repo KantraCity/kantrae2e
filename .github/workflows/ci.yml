@@ -102,3 +102,34 @@ jobs:
         with:
           name: kantra-windows-amd64
           path: desktop/bin/kantra-desktop.exe
+
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mls-ffi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.26
+      - name: MLS library (Rust, Android)
+        run: make mls-ffi-android
+      # The runner ships the Android SDK and NDK (ANDROID_HOME, ANDROID_NDK_HOME).
+      - name: Build APK (arm64, release, debug-signed)
+        run: make android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kantra-android-arm64
+          path: desktop/bin/kantra-desktop.apk
