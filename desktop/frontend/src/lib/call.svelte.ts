@@ -520,38 +520,46 @@ class CallStore {
   selfSpeaking = $state(false)
 }
 
-export type CallCheck = { servers: string[]; host: boolean; srflx: boolean; relay: boolean; relayIp: string; errors: string[] }
+export type CallProbe = { url: string; ok: boolean; ip: string; err: string }
+export type CallCheck = { probes: CallProbe[]; relay: boolean; relayIp: string; error: string }
 
-/** Settings → "Проверить звонки": can this device reach the server's
- * STUN/TURN? relay = calls work even when a direct path is impossible. */
+/** Settings → "Проверить звонки": tries every STUN/TURN address of the
+ * server on its own (STUN: is the server reachable; TURN: can it relay —
+ * then calls work from any network). Errors of a working address are not
+ * shown: browsers report one per network interface (IPv6, VPN, WSL…). */
 export async function checkCalls(): Promise<CallCheck> {
-  const res: CallCheck = { servers: [], host: false, srflx: false, relay: false, relayIp: '', errors: [] }
+  const res: CallCheck = { probes: [], relay: false, relayIp: '', error: '' }
   const list = (await Messenger.IceServers().catch(() => null)) ?? []
-  const ice = list.map((x) => ({ urls: x.urls ?? [], username: x.username || undefined, credential: x.credential || undefined }))
-  res.servers = ice.flatMap((s) => s.urls)
-  if (!ice.length) {
-    res.errors.push('сервер не выдал STUN/TURN (обновите сервер: deploy/init-env.sh --upgrade)')
+  if (!list.length) {
+    res.error = 'Сервер не выдал адреса для звонков — обновите сервер (deploy/init-env.sh --upgrade)'
     return res
   }
-  const pc = new RTCPeerConnection({ iceServers: ice })
-  pc.createDataChannel('check')
-  pc.onicecandidate = (e) => {
-    const c = e.candidate
-    if (!c) return
-    if (c.type === 'host') res.host = true
-    if (c.type === 'srflx') res.srflx = true
-    if (c.type === 'relay') { res.relay = true; res.relayIp = c.address ?? '' }
-  }
-  pc.onicecandidateerror = (e: Event) => {
-    const x = e as RTCPeerConnectionIceErrorEvent
-    const why = x.errorCode === 401 ? 'неверная учётка TURN (TURN_SECRET у coturn и auth-service разный?)'
-      : x.errorCode === 701 ? 'сервер не отвечает (порт 3478 закрыт?)' : x.errorText || String(x.errorCode)
-    const msg = `${x.url ?? ''}: ${why}`
-    if (!res.errors.includes(msg)) res.errors.push(msg)
-  }
-  await pc.setLocalDescription(await pc.createOffer())
-  await new Promise((r) => setTimeout(r, 6000))
-  pc.close()
+  const probes = list.flatMap((x) => (x.urls ?? []).map((url) => ({ url, username: x.username || undefined, credential: x.credential || undefined })))
+  res.probes = await Promise.all(probes.map(async (p): Promise<CallProbe> => {
+    const turn = p.url.startsWith('turn')
+    const out: CallProbe = { url: p.url, ok: false, ip: '', err: '' }
+    const codes = new Set<number>()
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: p.url, username: p.username, credential: p.credential }], iceTransportPolicy: turn ? 'relay' : 'all' })
+    pc.createDataChannel('check')
+    pc.onicecandidate = (e) => {
+      const c = e.candidate
+      if (c && c.type === (turn ? 'relay' : 'srflx')) { out.ok = true; out.ip = c.address ?? '' }
+    }
+    pc.onicecandidateerror = (e: Event) => codes.add((e as RTCPeerConnectionIceErrorEvent).errorCode)
+    await pc.setLocalDescription(await pc.createOffer())
+    const t0 = Date.now()
+    while (!out.ok && pc.iceGatheringState !== 'complete' && Date.now() - t0 < 7000) await new Promise((r) => setTimeout(r, 200))
+    pc.close()
+    if (!out.ok) {
+      out.err = codes.has(401) ? 'неверный пароль TURN (перезапустите сервер: up -d)'
+        : codes.has(701) || !codes.size ? 'нет ответа (порт закрыт или UDP режется по пути)'
+        : 'ошибка ' + [...codes].join(', ')
+    }
+    return out
+  }))
+  const relay = res.probes.find((p) => p.ok && p.url.startsWith('turn'))
+  res.relay = !!relay
+  res.relayIp = relay?.ip ?? ''
   return res
 }
 

@@ -175,15 +175,22 @@
       <button class="btn flat" disabled={checking} onclick={runCheck}>{checking ? 'Проверка…' : 'Проверить звонки'}</button>
       {#if check}
         <div class="check-res">
-          <div class:ok={check.relay} class:bad={!check.relay}>
-            {check.relay ? '✓ TURN работает — звонки соединятся из любой сети' : '✗ TURN недоступен — звонки соединятся только в одной сети'}
-          </div>
-          {#if check.relay && check.relayIp}<div class="muted small">адрес пересылки: {check.relayIp}</div>{/if}
-          {#if check.relay && check.relayIp && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(check.relayIp)}
-            <div class="bad small">Сервер выдаёт приватный адрес: добавьте TURN_EXTERNAL_IP=&lt;публичный IP&gt; в deploy/.env</div>
+          {#if check.error}
+            <div class="bad">{check.error}</div>
+          {:else}
+            <div class:ok={check.relay} class:bad={!check.relay}>
+              {check.relay ? '✓ Звонки соединятся из любой сети' : '✗ Пересылка (TURN) недоступна — звонки соединятся не из всех сетей'}
+            </div>
+            {#each check.probes as p}
+              <div class="small probe" class:ok={p.ok} class:bad={!p.ok}>
+                {p.ok ? '✓' : '✗'} {p.url.replace(/\?transport=/, ' по ').replace(/^(stun|turn):/, (m) => m.toUpperCase().slice(0, -1) + ' ')}
+                <span class="muted">{p.ok ? (p.ip ? `· ${p.ip}` : '') : `· ${p.err}`}</span>
+              </div>
+            {/each}
+            {#if check.relay && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(check.relayIp)}
+              <div class="bad small">Сервер выдаёт приватный адрес {check.relayIp}: проверьте TURN_EXTERNAL_IP в deploy/.env</div>
+            {/if}
           {/if}
-          <div class="muted small">STUN: {check.srflx ? 'да' : 'нет'} · серверы: {check.servers.join(', ') || '—'}</div>
-          {#each check.errors as e}<div class="bad small">{e}</div>{/each}
         </div>
       {/if}
     </div>
