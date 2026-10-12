@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
@@ -41,7 +42,35 @@ func ParseExtra(m *store.Message) *Extra {
 	if json.Unmarshal([]byte(m.Extra), &x) != nil {
 		return nil
 	}
+	x.sanitize()
 	return &x
+}
+
+// sanitize drops what another member could abuse: links that are not
+// http(s) (javascript: in the preview card), oversized images and polls
+// out of bounds. Extras come from other people's apps.
+func (x *Extra) sanitize() {
+	if l := x.Link; l != nil {
+		u, err := url.Parse(l.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			x.Link = nil
+		} else {
+			l.Site, l.Title, l.Desc = clip(l.Site, 100), clip(l.Title, 200), clip(l.Desc, 400)
+			if len(l.Image) > MaxThumb {
+				l.Image = nil
+			}
+		}
+	}
+	if p := x.Poll; p != nil {
+		if len(p.Options) < 2 || len(p.Options) > 10 || strings.TrimSpace(p.Question) == "" {
+			x.Poll = nil
+			return
+		}
+		p.Question = clip(p.Question, 300)
+		for i := range p.Options {
+			p.Options[i] = clip(p.Options[i], 100)
+		}
+	}
 }
 
 // LinkPreview of the first link of a text message.

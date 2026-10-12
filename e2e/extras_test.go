@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kantracity/kantrae2e/client/core"
+	"github.com/kantracity/kantrae2e/client/store"
 )
 
 func TestMessageExtras(t *testing.T) {
@@ -120,5 +121,22 @@ func TestMessageExtras(t *testing.T) {
 	ok(t, phone.Sync(ctx))
 	if ps, _ = phone.ScheduledIn(ctx, dm); len(ps) != 0 {
 		t.Fatalf("still scheduled: %+v", ps)
+	}
+}
+
+func TestExtraSanitized(t *testing.T) {
+	for _, raw := range []string{
+		`{"link":{"url":"javascript:alert(1)","title":"x"}}`,
+		`{"link":{"url":"data:text/html,hi"}}`,
+		`{"poll":{"q":"?","o":["one"]}}`,
+	} {
+		x := core.ParseExtra(&store.Message{Extra: raw})
+		if x != nil && (x.Link != nil || x.Poll != nil) {
+			t.Fatalf("%s accepted: %+v", raw, x)
+		}
+	}
+	x := core.ParseExtra(&store.Message{Extra: `{"link":{"url":"https://example.org/a","title":"ok"}}`})
+	if x == nil || x.Link == nil {
+		t.Fatal("valid link dropped")
 	}
 }
