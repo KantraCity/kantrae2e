@@ -21,6 +21,7 @@ export type Modal =
   | { kind: 'verify'; username: string }
   | { kind: 'settings' }
   | { kind: 'relogin' }
+  | { kind: 'deleteChat'; chatId: string; action: 'delete' | 'clear' | 'leave' }
 
 // Unread counters per account (localStorage, this device only).
 const unreadKey = (userId?: string) => 'kantra.unread' + (userId ? '.' + userId : '')
@@ -51,6 +52,8 @@ class AppState {
   sending = $state<Record<string, boolean>>({})
   /** Message context menu. */
   menu = $state<{ m: Message; x: number; y: number } | null>(null)
+  /** Context menu of a chat in the list. */
+  chatMenu = $state<{ chat: Chat; x: number; y: number } | null>(null)
   /** This account's profile and all accounts on this device. */
   me = $state<UserProfile | null>(null)
   accounts = $state<AccountInfo[]>([])
@@ -106,6 +109,8 @@ class AppState {
     this.messages = {}
     this.currentId = null
     this.links = []
+    this.gifs = []
+    this.gifsLoaded = false
     this.me = null
     this.search = ''
     this.userHits = []
@@ -170,7 +175,9 @@ class AppState {
   /** Web mode: a browser notification (the Go side decided it is due). */
   private browserNotify(e: UIEvent) {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
-    const n = new Notification(e.title || 'Kantra', { body: e.body, tag: e.chatId, icon: '/icon.svg' })
+    // image: the photo/GIF/video preview (Chrome, Edge, Android browsers).
+    const opts = { body: e.body, tag: e.chatId, icon: '/icon.svg', image: e.image || undefined } as NotificationOptions
+    const n = new Notification(e.title || 'Kantra', opts)
     n.onclick = () => {
       window.focus()
       if (e.chatId) Messenger.OpenNotification(e.chatId) // key "<account>/<chat>"
@@ -279,8 +286,11 @@ class AppState {
     const ms = await this.try(() => Messenger.Messages(id, 500))
     if (!ms) return
     // Keep messages that arrived via events while the request was running.
+    // (Only those: an older cached message missing from the answer was
+    // deleted meanwhile and must go.)
     const seen = new Set(ms.map((m) => m.id))
-    const extra = (this.messages[id] ?? []).filter((m) => !seen.has(m.id))
+    const newest = ms.length ? ms[ms.length - 1].sentAt : 0
+    const extra = (this.messages[id] ?? []).filter((m) => !seen.has(m.id) && (m.id.startsWith('local-') || m.sentAt > newest))
     this.messages[id] = extra.length ? [...ms, ...extra].sort((a, b) => a.sentAt - b.sentAt || a.seq - b.seq) : ms
   }
 
@@ -405,6 +415,29 @@ class AppState {
       list[i] = { ...list[i], reactions: rs.filter((r) => r.count > 0) }
     }
     if ((await this.try(() => Messenger.React(m.chatId, m.id, next))) === undefined) await this.refreshMessage(m.chatId, m.id)
+  }
+
+  /** Deletes / clears / leaves a chat; the list updates first (undone on failure). */
+  async chatAction(chatId: string, action: 'delete' | 'clear' | 'leave', forAll: boolean) {
+    const chats = this.chats
+    const msgs = this.messages[chatId]
+    if (action !== 'clear') {
+      if (this.currentId === chatId) this.openChat(null)
+      this.chats = chats.filter((c) => c.id !== chatId)
+      delete this.unread[chatId]
+      this.saveUnread()
+    }
+    this.messages[chatId] = []
+    try {
+      if (action === 'delete') await Messenger.DeleteChat(chatId, forAll)
+      else if (action === 'clear') await Messenger.ClearHistory(chatId, forAll)
+      else await Messenger.LeaveGroup(chatId)
+      if (action === 'clear') await this.refreshChats()
+    } catch (e) {
+      this.chats = chats
+      if (msgs) this.messages[chatId] = msgs
+      this.toast(errorText(e), 'error')
+    }
   }
 
   /** Deletion, removed from the screen first (restored if it fails). */
@@ -533,6 +566,67 @@ class AppState {
     return run
   }
 
+  // ---- saved GIFs ----
+  gifs = $state<Message[]>([])
+  gifsLoaded = false
+
+  async loadGifs() {
+    const list = await Messenger.SavedGIFs().catch(() => null)
+    if (list) {
+      this.gifs = list
+      this.gifsLoaded = true
+    }
+  }
+
+  async saveGif(m: Message) {
+    try {
+      await Messenger.SaveGIF(m.chatId, m.id)
+      this.toast('GIF сохранён')
+      await this.loadGifs()
+    } catch (e) {
+      this.toast(errorText(e), 'error')
+    }
+  }
+
+  async removeGif(g: Message) {
+    const before = this.gifs
+    this.gifs = before.filter((x) => x.id !== g.id)
+    try {
+      await Messenger.RemoveSavedGIF(g.id)
+    } catch (e) {
+      this.gifs = before
+      this.toast(errorText(e), 'error')
+    }
+  }
+
+  /** Sends a saved GIF: shown at once, nothing is uploaded again. */
+  async sendGif(g: Message) {
+    const chatId = this.currentId
+    if (!chatId) return
+    const replyTo = this.reply?.id ?? ''
+    this.reply = null
+    const tmp = 'local-' + Math.random().toString(36).slice(2)
+    const temp: Message = { ...g, id: tmp, chatId, outgoing: true, sentAt: Date.now(), seq: 0, read: false, reactions: [],
+      forwarded: '', reply: undefined, origin: '' }
+    this.sending[tmp] = true
+    this.addMessage(temp)
+    this.touchChat(temp)
+    try {
+      const msg = await Messenger.SendSavedGIF(chatId, g.id, replyTo)
+      const list = this.messages[chatId]
+      const i = list?.findIndex((x) => x.id === tmp) ?? -1
+      if (list && i >= 0 && msg) list[i] = msg
+      else if (msg) this.addMessage(msg)
+    } catch (e) {
+      const list = this.messages[chatId]
+      const i = list?.findIndex((x) => x.id === tmp) ?? -1
+      if (list && i >= 0) list.splice(i, 1)
+      this.toast(errorText(e), 'error')
+    } finally {
+      delete this.sending[tmp]
+    }
+  }
+
   /** Where to load a media message from (local copy if we sent it). */
   mediaUrl(m: Message): string {
     return this.localUrls[m.id] ?? m.file?.url ?? ''
@@ -618,9 +712,17 @@ class AppState {
       case 'group_updated':
         await this.refreshChats()
         break
-      case 'removed':
+      case 'removed': {
+        const known = this.chats.some((c) => c.id === e.chatId) // not if we left it ourselves
         await this.refreshChats()
-        this.toast('Вас удалили из группы', 'warning')
+        if (known) this.toast('Вас удалили из группы', 'warning')
+        break
+      }
+      case 'chat_cleared':
+        // Deleted/cleared on another device of ours (or by the other person).
+        await this.refreshChats()
+        if (e.chatId && this.messages[e.chatId]) await this.loadMessages(e.chatId)
+        if (e.chatId && this.currentId === e.chatId && !this.chats.some((c) => c.id === e.chatId)) this.openChat(null)
         break
       case 'history':
         if (e.count) {
@@ -645,6 +747,9 @@ class AppState {
         break
       case 'open_chat':
         await this.openTappedChat()
+        break
+      case 'gifs':
+        if (this.gifsLoaded) await this.loadGifs()
         break
       case 'files_dropped':
         if (e.files?.length) this.filesDropped(e.files)

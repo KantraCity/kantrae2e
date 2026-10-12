@@ -14,3 +14,5 @@ func platformSetup(*application.App, *application.WebviewWindow, *Messenger) {}
 func platformStatus(*Settings)                                               {}
 func platformApplyBackground(bool)                                           {}
 func platformOpenSettings(string)                                            {}
+
+func titlebarStyle() string { return "" }

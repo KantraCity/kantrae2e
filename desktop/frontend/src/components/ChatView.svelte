@@ -6,6 +6,7 @@
   import { loadDraft, saveDraft } from '../lib/persist'
   import Avatar from './Avatar.svelte'
   import MessageList from './MessageList.svelte'
+  import GifPanel from './GifPanel.svelte'
   import Icon from './Icon.svelte'
   import { duration, hasRecordPermission, micError, rememberRecordPermission, requestRecordPermission, RoundRecorder, VoiceRecorder } from '../lib/media'
   import { fade, scale } from 'svelte/transition'
@@ -14,6 +15,7 @@
   let input: HTMLTextAreaElement | undefined = $state()
   let fileInput: HTMLInputElement | undefined = $state()
   let dragging = $state(false)
+  let gifsOpen = $state(false)
   let memberCount = $state<number | null>(null)
 
   const chat = $derived(app.current)
@@ -88,6 +90,13 @@
     }
   })
   $effect(() => { if (app.reply) input?.focus() })
+
+  // The field follows its text: grows while typing, shrinks back after a
+  // send/cancel (resize after the DOM has the new value).
+  $effect(() => {
+    void text
+    if (input) tick().then(resize)
+  })
 
   function resize() {
     if (!input) return
@@ -268,6 +277,7 @@
     {/if}
     {#if chat.active}
       <footer>
+        {#if gifsOpen}<GifPanel onclose={() => { gifsOpen = false; input?.focus() }} />{/if}
         <div class="composer">
           {#if rec}
             <div class="recbar">
@@ -284,6 +294,9 @@
             <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => fileInput?.click()}><Icon name="clip" /></button>
             <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} onpaste={paste}
               oninput={() => { resize(); app.typingTick() }}></textarea>
+            {#if !app.editing}
+              <button class="icon-btn gif-btn" class:on={gifsOpen} aria-label="GIF" title="Сохранённые GIF" onclick={() => (gifsOpen = !gifsOpen)}><Icon name="gif" /></button>
+            {/if}
           {/if}
           <input type="file" multiple hidden accept="*/*" bind:this={fileInput} onchange={(e) => pick((e.currentTarget as HTMLInputElement).files)} />
         </div>
@@ -337,7 +350,8 @@
   .title-text { min-width: 0; }
   .name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status { font-size: 13px; }
-  footer { display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px 14px; max-width: 792px; width: 100%; margin: 0 auto; }
+  footer { position: relative; display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px 14px; max-width: 792px; width: 100%; margin: 0 auto; }
+  .gif-btn.on { color: var(--accent-light); }
   .composer { flex: 1; display: flex; align-items: flex-end; background: var(--bg-sidebar); border-radius: 18px; padding: 4px 6px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 10px 6px; font-size: 15px; line-height: 1.35; max-height: 180px; }
   textarea::placeholder { color: var(--text-muted); }

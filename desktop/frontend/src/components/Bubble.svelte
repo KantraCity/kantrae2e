@@ -9,7 +9,7 @@
   let { m, first, last, group }: { m: Message; first: boolean; last: boolean; group: boolean } = $props()
   // Round video messages have no bubble (as in Telegram); photos/videos a tight one.
   const bare = $derived(m.file?.kind === 'round' && !m.reply && !m.forwarded)
-  const isVisual = $derived(m.file?.kind === 'photo' || m.file?.kind === 'video')
+  const isVisual = $derived(m.file?.kind === 'photo' || m.file?.kind === 'video' || m.file?.kind === 'gif')
 
   // Context menu: right click, or a long press on touch screens.
   function openMenu(e: MouseEvent | { clientX: number; clientY: number }) {

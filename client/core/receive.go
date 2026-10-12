@@ -120,9 +120,17 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 		if GroupKind(string(gid)) == KindSelf {
 			trusted = c.ownDeviceKeysLocked(ctx, gid)
 		}
+		// Added back to a group this account had left (by someone else, not
+		// as one more device of ours): it is a member again.
+		rejoined := GroupKind(string(gid)) == KindGroup && !c.otherDevicesOf(members, c.acct.UserID, c.acct.DeviceID)
 		writes = func(tx *store.Tx) error {
 			if err := seen(tx); err != nil {
 				return err
+			}
+			if rejoined {
+				if err := tx.ResetChatFlags(string(gid), false, true); err != nil {
+					return err
+				}
 			}
 			for _, k := range trusted {
 				if err := tx.PutDeviceKey(k); err != nil {
@@ -215,7 +223,20 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 				break
 			}
 			if GroupKind(e.GroupId) == KindSelf {
-				break // nothing else is expected in the self-group
+				// Saved GIFs (gifs.go) are the only messages there, and only
+				// from the account's own devices.
+				if uid != c.acct.UserID || (pl.Type != "media" && pl.Type != "delete") {
+					break
+				}
+			}
+			if w, ev := c.applyChatControlLocked(e.GroupId, uid, &pl); ev != nil {
+				writes = w
+				events = append(events, *ev)
+				c.scheduleBackup()
+				break
+			}
+			if g, err := c.st.Group(ctx, e.GroupId); err == nil && g.LeftAt > 0 {
+				break // left this group: its messages are not ours any more
 			}
 			if w, ev := c.applyControlLocked(e.GroupId, uid, &pl); ev != nil {
 				writes = w

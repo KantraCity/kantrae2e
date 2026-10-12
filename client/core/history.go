@@ -23,8 +23,10 @@ type historyChunk struct {
 }
 
 type chunkGroup struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	HiddenAt int64  `json:"hidden_at,omitempty"`
+	LeftAt   int64  `json:"left_at,omitempty"`
 }
 
 const (
@@ -70,11 +72,11 @@ func (c *Client) BackupHistory(ctx context.Context) (int, error) {
 			m.Seq = 0
 			if !seen[m.GroupID] {
 				seen[m.GroupID] = true
-				name := ""
+				cg := chunkGroup{ID: m.GroupID}
 				if g, err := c.st.Group(ctx, m.GroupID); err == nil {
-					name = g.Name
+					cg.Name, cg.HiddenAt, cg.LeftAt = g.Name, g.HiddenAt, g.LeftAt
 				}
-				chunk.Groups = append(chunk.Groups, chunkGroup{ID: m.GroupID, Name: name})
+				chunk.Groups = append(chunk.Groups, cg)
 			}
 			if _, ok := chunk.Users[m.SenderUser]; !ok {
 				if n, err := c.st.Username(ctx, m.SenderUser); err == nil {
@@ -154,6 +156,9 @@ func (c *Client) RestoreHistory(ctx context.Context) (int, error) {
 			for _, g := range chunk.Groups {
 				// Restored groups are read-only until someone adds this device.
 				if err := tx.InsertGroupIfMissing(store.Group{ID: g.ID, Name: g.Name}); err != nil {
+					return err
+				}
+				if err := tx.SetChatFlags(g.ID, g.HiddenAt, g.LeftAt); err != nil {
 					return err
 				}
 			}

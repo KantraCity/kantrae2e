@@ -22,6 +22,9 @@
   import Sidebar from './components/Sidebar.svelte'
   import Toasts from './components/Toasts.svelte'
   import Verify from './components/Verify.svelte'
+  import TitleBar from './components/TitleBar.svelte'
+  import ChatMenu from './components/ChatMenu.svelte'
+  import DeleteChat from './components/DeleteChat.svelte'
 
   onMount(() => { app.init() })
 
@@ -43,6 +46,9 @@
   }
 </script>
 
+<div class="root">
+{#if app.state?.titlebar === 'custom' || app.state?.titlebar === 'mac'}<TitleBar style={app.state.titlebar} />{/if}
+<div class="content">
 {#if !app.loaded}
   <div class="splash"><img src="/icon.svg" alt="" width="96" /></div>
 {:else if !app.loggedIn}
@@ -58,6 +64,8 @@
     <ChatView />
   </div>
 {/if}
+</div>
+</div>
 
 {#if app.pending}{#if app.modal?.kind === 'relogin'}<Relogin />{/if}
 {:else if app.modal?.kind === 'drawer'}<Drawer />
@@ -75,13 +83,17 @@
 {:else if app.modal?.kind === 'verify'}<Verify username={app.modal.username} />
 {:else if app.modal?.kind === 'settings'}<Settings />
 {:else if app.modal?.kind === 'relogin'}<Relogin />
+{:else if app.modal?.kind === 'deleteChat'}<DeleteChat chatId={app.modal.chatId} action={app.modal.action} />
 {/if}
 
 {#if app.menu}<MessageMenu />{/if}
+{#if app.chatMenu}<ChatMenu />{/if}
 
 <Toasts />
 
 <style>
+  .root { height: 100%; display: flex; flex-direction: column; }
+  .content { flex: 1; min-height: 0; position: relative; }
   .splash { height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-sidebar); }
   .layout { height: 100%; display: grid; grid-template-columns: var(--sidebar-w) 0 1fr; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
   .layout > :global(*) { min-height: 0; min-width: 0; }

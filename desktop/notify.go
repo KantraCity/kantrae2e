@@ -3,7 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kantracity/kantrae2e/client/core"
 )
@@ -25,6 +29,11 @@ type Notice struct {
 	Title  string
 	Body   string
 	Count  int
+	// Image: a picture shown in the notification (photo, GIF frame, video
+	// thumbnail): a file path for native notifications, ImageURL for the
+	// browser.
+	Image    string
+	ImageURL string
 }
 
 func noticeKey(account, chatID string) string { return account + "/" + chatID }
@@ -192,7 +201,7 @@ func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 		if preview {
 			body := msg.Text
 			if msg.Kind == "file" && msg.File != nil {
-				body = "📎 " + msg.File.Name
+				body = fileLabel(msg.File)
 			}
 			if ch.Kind == core.KindGroup {
 				body = msg.Sender + ": " + body
@@ -210,14 +219,103 @@ func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 		}
 	}
 	n.Body = strings.TrimSpace(n.Body)
+	if preview && msg.File != nil && notifyPicture[msg.File.Kind] {
+		// Fetching the picture needs the client, which is busy delivering
+		// this very message: show the notification once it is ready.
+		go func() {
+			n.Image, n.ImageURL = m.noticeImage(c, msg)
+			m.notif.Show(n)
+		}()
+		return
+	}
 	m.notif.Show(n)
+}
+
+// Kinds of media whose picture goes into the notification.
+var notifyPicture = map[string]bool{"photo": true, "gif": true, "video": true, "round": true}
+
+// fileLabel: how a media message reads in a notification / the chat list.
+func fileLabel(f *FileInfo) string {
+	label := map[string]string{"photo": "🖼 Фото", "video": "📹 Видео", "voice": "🎤 Голосовое сообщение",
+		"round": "⏺ Видеосообщение", "gif": "GIF"}[f.Kind]
+	if label == "" {
+		label = "📎 " + f.Name
+	}
+	if f.Caption != "" {
+		label += ", " + f.Caption
+	}
+	return label
+}
+
+// noticeImage writes the notification picture of a media message to the
+// notification cache: the photo / GIF itself (up to a few MB) or, for
+// videos, the preview frame.
+func (m *Messenger) noticeImage(c *core.Client, msg *Message) (path, url string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	sm, err := c.Message(ctx, msg.ChatID, msg.ID)
+	if err != nil {
+		return "", ""
+	}
+	ref, err := core.ParseMedia(sm)
+	if err != nil {
+		return "", ""
+	}
+	var data []byte
+	ext := ".jpg"
+	if (ref.Kind == "photo" || ref.Kind == "gif") && ref.Size <= 8<<20 {
+		if e, ok := decrypted.get(ref.Hash); ok {
+			data = e.data
+		} else if _, d, err := c.DownloadMedia(ctx, sm); err == nil {
+			data = d
+		}
+		switch http.DetectContentType(data) {
+		case "image/gif":
+			ext = ".gif"
+		case "image/png":
+			ext = ".png"
+		case "image/webp":
+			ext = ".webp"
+		}
+	}
+	if len(data) == 0 {
+		data, ext = ref.Thumb, ".jpg"
+	}
+	if msg.File != nil {
+		url = msg.File.URL
+	}
+	if len(data) == 0 {
+		return "", url
+	}
+	m.mu.Lock()
+	dir := filepath.Join(m.dir, "notify")
+	m.mu.Unlock()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", url
+	}
+	cleanNoticeImages(dir)
+	p := filepath.Join(dir, ref.Hash[:min(16, len(ref.Hash))]+ext)
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		return "", url
+	}
+	return p, url
+}
+
+// cleanNoticeImages removes pictures of old notifications (a day old).
+func cleanNoticeImages(dir string) {
+	es, _ := os.ReadDir(dir)
+	for _, e := range es {
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > 24*time.Hour {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // eventNotifier shows notifications through the frontend (web mode).
 type eventNotifier struct{ m *Messenger }
 
 func (e eventNotifier) Show(n Notice) {
-	e.m.emit(UIEvent{Type: "notify", ChatID: n.Key, Title: n.Title, Body: n.Body, Count: n.Count})
+	e.m.emit(UIEvent{Type: "notify", ChatID: n.Key, Title: n.Title, Body: n.Body, Count: n.Count, Image: n.ImageURL})
 }
 
 func (e eventNotifier) Clear(string) {}

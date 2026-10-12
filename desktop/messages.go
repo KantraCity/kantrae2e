@@ -125,7 +125,7 @@ func fileInfo(ref *core.MediaRef) *FileInfo {
 // mediaLabel: how a media message is quoted / previewed, like Telegram.
 func mediaLabel(ref *core.MediaRef) string {
 	label := map[string]string{"photo": "🖼 Фото", "video": "📹 Видео", "voice": "🎤 Голосовое сообщение",
-		"round": "⏺ Видеосообщение"}[ref.Kind]
+		"round": "⏺ Видеосообщение", "gif": "GIF"}[ref.Kind]
 	if label == "" {
 		label = "📎 " + ref.Name
 	}

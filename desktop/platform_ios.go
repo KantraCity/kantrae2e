@@ -23,8 +23,15 @@ type iosNotifier struct {
 func newNotifier(*Messenger) notifier { return &iosNotifier{ns: notifications.New()} }
 
 func (n *iosNotifier) Show(x Notice) {
-	_ = n.ns.SendNotification(notifications.NotificationOptions{ID: "chat-" + x.Key, Title: x.Title, Body: x.Body,
-		Data: map[string]any{"key": x.Key}})
+	opts := notifications.NotificationOptions{ID: "chat-" + x.Key, Title: x.Title, Body: x.Body,
+		Data: map[string]any{"key": x.Key}}
+	if x.Image != "" {
+		opts.Attachments = []notifications.NotificationAttachment{{Path: x.Image}}
+	}
+	if err := n.ns.SendNotification(opts); err != nil && x.Image != "" {
+		opts.Attachments = nil
+		_ = n.ns.SendNotification(opts)
+	}
 }
 
 func (n *iosNotifier) Clear(key string) { _ = n.ns.RemoveNotification("chat-" + key) }
@@ -57,3 +64,5 @@ func platformSetup(_ *application.App, _ *application.WebviewWindow, m *Messenge
 func platformStatus(*Settings)     {}
 func platformApplyBackground(bool) {}
 func platformOpenSettings(string)  {}
+
+func titlebarStyle() string { return "" }

@@ -78,10 +78,26 @@ export function Chats(): $CancellablePromise<$models.Chat[] | null> {
 }
 
 /**
+ * ClearHistory deletes all messages of a chat; forAll (direct chats) also
+ * for the other person.
+ */
+export function ClearHistory(chatID: string, forAll: boolean): $CancellablePromise<void> {
+    return $Call.ByID(3573554122, chatID, forAll);
+}
+
+/**
  * CreateGroup creates a group chat with the given members.
  */
 export function CreateGroup(name: string, usernames: string[] | null): $CancellablePromise<string> {
     return $Call.ByID(956109340, name, usernames);
+}
+
+/**
+ * DeleteChat deletes a chat (removes it from the list until a new message
+ * arrives); forAll (direct chats) deletes it for the other person too.
+ */
+export function DeleteChat(chatID: string, forAll: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1636442092, chatID, forAll);
 }
 
 /**
@@ -151,6 +167,13 @@ export function Invite(chatID: string, usernames: string[] | null): $Cancellable
 
 export function Keys(username: string): $CancellablePromise<$models.DeviceKey[] | null> {
     return $Call.ByID(3504242277, username);
+}
+
+/**
+ * LeaveGroup deletes a group and leaves it.
+ */
+export function LeaveGroup(chatID: string): $CancellablePromise<void> {
+    return $Call.ByID(183057147, chatID);
 }
 
 /**
@@ -266,6 +289,13 @@ export function Remove(chatID: string, username: string): $CancellablePromise<vo
 }
 
 /**
+ * RemoveSavedGIF removes a saved GIF (id from SavedGIFs).
+ */
+export function RemoveSavedGIF(id: string): $CancellablePromise<void> {
+    return $Call.ByID(3377775986, id);
+}
+
+/**
  * RequestLink asks the other devices again to approve this one.
  */
 export function RequestLink(): $CancellablePromise<void> {
@@ -274,6 +304,21 @@ export function RequestLink(): $CancellablePromise<void> {
 
 export function RevokeDevice(deviceID: string): $CancellablePromise<number> {
     return $Call.ByID(2532478977, deviceID);
+}
+
+/**
+ * SaveGIF adds the GIF of a message to the saved GIFs.
+ */
+export function SaveGIF(chatID: string, id: string): $CancellablePromise<void> {
+    return $Call.ByID(1580136454, chatID, id);
+}
+
+/**
+ * SavedGIFs returns the saved GIFs, newest first. Their file URLs work like
+ * any media URL.
+ */
+export function SavedGIFs(): $CancellablePromise<$models.Message[] | null> {
+    return $Call.ByID(318338779);
 }
 
 /**
@@ -302,6 +347,13 @@ export function SendFile(chatID: string, name: string, dataBase64: string): $Can
  */
 export function SendMedia(chatID: string, up: $models.MediaUpload, replyTo: string): $CancellablePromise<$models.Message | null> {
     return $Call.ByID(3225930153, chatID, up, replyTo);
+}
+
+/**
+ * SendSavedGIF sends a saved GIF to a chat.
+ */
+export function SendSavedGIF(chatID: string, id: string, replyTo: string): $CancellablePromise<$models.Message | null> {
+    return $Call.ByID(4211156348, chatID, id, replyTo);
 }
 
 /**

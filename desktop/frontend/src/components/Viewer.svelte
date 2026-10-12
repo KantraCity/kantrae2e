@@ -7,7 +7,7 @@
   let { m: start }: { m: Message } = $props()
   // svelte-ignore state_referenced_locally
   let m = $state(start)
-  const items = $derived((app.messages[m.chatId] ?? []).filter((x) => x.file && (x.file.kind === 'photo' || x.file.kind === 'video')))
+  const items = $derived((app.messages[m.chatId] ?? []).filter((x) => x.file && (x.file.kind === 'photo' || x.file.kind === 'video' || x.file.kind === 'gif')))
   const idx = $derived(items.findIndex((x) => x.id === m.id))
   const url = $derived(app.mediaUrl(m))
 

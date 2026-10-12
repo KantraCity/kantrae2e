@@ -35,10 +35,19 @@ func (d *desktopNotifier) Show(n Notice) {
 	if n.Count > 1 {
 		body += "  (" + strconv.Itoa(n.Count) + ")"
 	}
-	_ = d.ns.SendNotification(notifications.NotificationOptions{
+	opts := notifications.NotificationOptions{
 		ID: noticeID(n.Key), Title: n.Title, Body: body,
-		Data: map[string]any{"key": n.Key},
-	})
+		Data:     map[string]any{"key": n.Key},
+		ThreadID: n.Key,
+	}
+	if n.Image != "" {
+		// Windows: a large picture under the text, like Telegram Desktop.
+		opts.Attachments = []notifications.NotificationAttachment{{Path: n.Image, Type: "hero"}}
+	}
+	if err := d.ns.SendNotification(opts); err != nil && n.Image != "" {
+		opts.Attachments = nil // picture refused: the text alone
+		_ = d.ns.SendNotification(opts)
+	}
 }
 
 func (d *desktopNotifier) Clear(key string) { _ = d.ns.RemoveNotification(noticeID(key)) }
@@ -114,3 +123,15 @@ func platformSetup(app *application.App, w *application.WebviewWindow, m *Messen
 func platformStatus(*Settings)     {}
 func platformApplyBackground(bool) {}
 func platformOpenSettings(string)  {}
+
+// titlebarStyle: see State.Titlebar. Linux keeps the system frame (window
+// managers differ too much for a frameless window to behave everywhere).
+func titlebarStyle() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "custom"
+	case "darwin":
+		return "mac"
+	}
+	return ""
+}

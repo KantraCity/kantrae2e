@@ -273,6 +273,12 @@ export interface State {
     "webMode": boolean;
 
     /**
+     * Titlebar: "custom" (draw window buttons), "mac" (native traffic
+     * lights over our own bar) or "" (system frame, browser, mobile).
+     */
+    "titlebar": string;
+
+    /**
      * Pending: this device waits for approval; show LinkCode.
      */
     "pending": boolean;
@@ -310,6 +316,11 @@ export interface UIEvent {
      * Files dropped onto the window ("files_dropped", drop.go).
      */
     "files"?: DroppedFile[] | null;
+
+    /**
+     * Image of a "notify" event (browser notification picture).
+     */
+    "image"?: string;
 }
 
 /**

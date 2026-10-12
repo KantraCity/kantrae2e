@@ -116,6 +116,22 @@
       </div>
     {/if}
   {/if}
+  {#if chat}
+    <div class="danger-zone">
+      <button class="row-btn plain" onclick={() => (app.modal = { kind: 'deleteChat', chatId: chat.id, action: 'clear' })}>
+        <Icon name="broom" size={20} /><span>Очистить историю</span>
+      </button>
+      {#if chat.kind === 'group'}
+        <button class="row-btn red" onclick={() => (app.modal = { kind: 'deleteChat', chatId: chat.id, action: 'leave' })}>
+          <Icon name="leave" size={20} /><span>Покинуть группу</span>
+        </button>
+      {:else}
+        <button class="row-btn red" onclick={() => (app.modal = { kind: 'deleteChat', chatId: chat.id, action: 'delete' })}>
+          <Icon name="trash" size={20} /><span>Удалить чат</span>
+        </button>
+      {/if}
+    </div>
+  {/if}
 </Modal>
 
 <style>
@@ -133,6 +149,10 @@
   .small { font-size: 13px; }
   .row-btn { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 10px; border-radius: 10px; text-align: left; color: var(--accent-light); }
   .row-btn:hover { background: var(--bg-hover); }
+  .danger-zone { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 8px; display: flex; flex-direction: column; }
+  .row-btn.plain { color: var(--text-muted); }
+  .row-btn.plain span { color: var(--text); }
+  .row-btn.red { color: #e17076; }
   .grow { flex: 1; color: var(--text); }
   .hint { margin: 6px 10px 0; }
   .info-rows { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }

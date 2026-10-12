@@ -80,7 +80,8 @@ export async function prepareFile(file: File, compress: boolean): Promise<Prepar
   } else if (compress && file.type === 'image/gif') {
     try {
       const bmp = await createImageBitmap(file)
-      Object.assign(base, { kind: 'photo', w: bmp.width, h: bmp.height, thumb: await thumb(bmp, bmp.width, bmp.height) })
+      // Animated, sent as is: a GIF (plays in the chat, can be saved).
+      Object.assign(base, { kind: 'gif', w: bmp.width, h: bmp.height, thumb: await thumb(bmp, bmp.width, bmp.height) })
     } catch { /* file */ }
   } else if (compress && file.type.startsWith('video/')) {
     const url = URL.createObjectURL(file)

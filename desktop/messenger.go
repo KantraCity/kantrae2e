@@ -42,6 +42,8 @@ type UIEvent struct {
 	Body  string `json:"body,omitempty"`
 	// Files dropped onto the window ("files_dropped", drop.go).
 	Files []DroppedFile `json:"files,omitempty"`
+	// Image of a "notify" event (browser notification picture).
+	Image string `json:"image,omitempty"`
 }
 
 // Account is the logged-in identity of this device.
@@ -59,6 +61,9 @@ type State struct {
 	Account   *Account `json:"account"`
 	Online    bool     `json:"online"`
 	WebMode   bool     `json:"webMode"`
+	// Titlebar: "custom" (draw window buttons), "mac" (native traffic
+	// lights over our own bar) or "" (system frame, browser, mobile).
+	Titlebar string `json:"titlebar"`
 	// Pending: this device waits for approval; show LinkCode.
 	Pending  bool   `json:"pending"`
 	LinkCode string `json:"linkCode,omitempty"`
@@ -338,6 +343,21 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 		}
 		return
 	}
+	// The self-group holds the saved GIFs (and never shows up as a chat).
+	if e.GroupID != "" && core.GroupKind(e.GroupID) == core.KindSelf {
+		if isActive && (e.Type == core.EventMessage || e.Type == core.EventMessageUpdated) {
+			m.emit(UIEvent{Type: "gifs"})
+		}
+		if e.Type == core.EventMessage || e.Type == core.EventMessageUpdated {
+			return
+		}
+	}
+	if e.Type == core.EventChatCleared {
+		m.mu.Lock()
+		delete(s.unread, e.GroupID)
+		m.mu.Unlock()
+		m.notif.Clear(noticeKey(s.file, e.GroupID))
+	}
 	if !isActive {
 		// Background account: only notifications and its unread badge.
 		if e.Type == core.EventMessage && e.Message != nil && s.c != nil {
@@ -377,7 +397,7 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 // GetState returns what the UI needs on start.
 func (m *Messenger) GetState() State {
 	m.mu.Lock()
-	st := State{WebMode: m.web, ServerURL: m.defaultServer}
+	st := State{WebMode: m.web, ServerURL: m.defaultServer, Titlebar: titlebarStyle()}
 	var c *core.Client
 	if s := m.active; s != nil {
 		st.Online = s.online
@@ -614,9 +634,14 @@ func (m *Messenger) Chats() ([]Chat, error) {
 	out := make([]Chat, 0, len(gs))
 	for _, g := range gs {
 		ch := m.toChat(c, g)
+		var last int64
 		if ms, err := c.Messages(ctx, g.ID, 1); err == nil && len(ms) == 1 {
 			ch.Last = m.toMessage(c, &ms[0])
 			ch.UpdatedAt = ms[0].SentAt
+			last = ms[0].SentAt
+		}
+		if core.ChatHidden(g, last) {
+			continue // deleted (until a new message) or left
 		}
 		out = append(out, ch)
 	}
@@ -681,6 +706,10 @@ func (m *Messenger) OpenDirect(username string) (*Chat, error) {
 		return nil, err
 	}
 	id, err := c.OpenDirect(context.Background(), username)
+	if id != "" {
+		// Writing to someone whose chat was deleted brings it back.
+		_ = c.UnhideChat(context.Background(), id)
+	}
 	if errors.Is(err, core.ErrNoKeyPackages) {
 		return nil, errors.New("пользователь ещё ни разу не был в сети — написать ему пока нельзя")
 	}

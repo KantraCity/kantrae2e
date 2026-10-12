@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte'
+  import type { Chat } from '../lib/api'
   import { chatListTime } from '../lib/util'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
@@ -21,7 +22,7 @@
     app.searchUsers('')
   }
 
-  const MEDIA: Record<string, string> = { photo: '🖼 Фото', video: '📹 Видео', voice: '🎤 Голосовое сообщение', round: '⏺ Видеосообщение' }
+  const MEDIA: Record<string, string> = { photo: '🖼 Фото', video: '📹 Видео', voice: '🎤 Голосовое сообщение', round: '⏺ Видеосообщение', gif: 'GIF' }
 
   function preview(c: (typeof app.chats)[number]): string {
     if (!c.last) return c.active ? (c.kind === 'direct' ? 'Личный чат' : 'Нет сообщений') : 'Вы не участник'
@@ -31,6 +32,20 @@
     const body = c.last.kind === 'file' && f ? (MEDIA[f.kind] ?? `📎 ${f.name}`) + (f.caption ? ', ' + f.caption : '') : c.last.text
     return who + body
   }
+
+  // Long press on a chat (phones) opens its menu, like a right click.
+  let pressTimer: ReturnType<typeof setTimeout> | undefined
+  let longPressed = false
+  function pressStart(e: TouchEvent, c: Chat) {
+    const t = e.touches[0]
+    longPressed = false
+    pressTimer = setTimeout(() => {
+      longPressed = true
+      navigator.vibrate?.(15)
+      app.chatMenu = { chat: c, x: t.clientX, y: t.clientY }
+    }, 480)
+  }
+  function pressEnd() { clearTimeout(pressTimer) }
 </script>
 
 <aside class="sidebar">
@@ -54,7 +69,9 @@
   <div class="list">
     {#if q && filtered.length}<div class="section-title">Чаты</div>{/if}
     {#each filtered as c (c.id)}
-      <button class="chat-item" class:active={c.id === app.currentId} onclick={() => app.openChat(c.id)}>
+      <button class="chat-item" class:active={c.id === app.currentId} onclick={() => { if (longPressed) longPressed = false; else app.openChat(c.id) }}
+        oncontextmenu={(e) => { e.preventDefault(); app.chatMenu = { chat: c, x: e.clientX, y: e.clientY } }}
+        ontouchstart={(e) => pressStart(e, c)} ontouchend={pressEnd} ontouchmove={pressEnd}>
         <Avatar name={c.name} id={c.peerId || c.id} user={c.peerId} photo={c.peerAvatar} size={54} />
         <div class="meta">
           <div class="row">

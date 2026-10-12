@@ -89,7 +89,7 @@ type androidNotifier struct{}
 
 func (androidNotifier) Show(n Notice) {
 	// chatId is the notice key ("<account>/<chat>"), handed back on tap.
-	b, _ := json.Marshal(map[string]any{"chatId": n.Key, "title": n.Title, "body": n.Body, "count": n.Count})
+	b, _ := json.Marshal(map[string]any{"chatId": n.Key, "title": n.Title, "body": n.Body, "count": n.Count, "image": n.Image})
 	javaCall("notify", string(b))
 }
 

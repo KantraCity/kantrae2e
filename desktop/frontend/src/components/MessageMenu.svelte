@@ -47,6 +47,7 @@
   {#if chat?.active}<button onclick={() => act(() => app.startReply(m))}><Icon name="reply" size={20} /> Ответить</button>{/if}
   {#if m.text || m.file?.caption}<button onclick={() => act(copy)}><Icon name="copy" size={20} /> Копировать текст</button>{/if}
   {#if canEdit}<button onclick={() => act(() => app.startEdit(m))}><Icon name="pencil" size={20} /> Изменить</button>{/if}
+  {#if m.file?.kind === 'gif' && !app.sending[m.id]}<button onclick={() => act(() => app.saveGif(m))}><Icon name="gif" size={20} /> Сохранить GIF</button>{/if}
   <button onclick={() => act(() => (app.modal = { kind: 'forward', chatId: m.chatId, ids: [m.id] }))}><Icon name="forward" size={20} /> Переслать</button>
   <button class="danger" onclick={() => act(() => (app.modal = { kind: 'deleteMsg', chatId: m.chatId, ids: [m.id], canAll: !!(canDeleteAll && chat?.active) }))}>
     <Icon name="trash" size={20} /> Удалить

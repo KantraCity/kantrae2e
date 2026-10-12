@@ -126,6 +126,24 @@ public final class KantraNative {
                     .setAutoCancel(true)
                     .setContentIntent(pi);
             if (count > 1) b.setNumber(count).setSubText(count + " новых");
+            // Photo / GIF / video preview, like Telegram (collapsed: a small
+            // picture on the right; expanded: the whole picture).
+            String image = o.optString("image", "");
+            if (!image.isEmpty()) {
+                android.graphics.BitmapFactory.Options opt = new android.graphics.BitmapFactory.Options();
+                opt.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeFile(image, opt);
+                int sample = 1;
+                while (Math.max(opt.outWidth, opt.outHeight) / sample > 1024) sample *= 2;
+                opt = new android.graphics.BitmapFactory.Options();
+                opt.inSampleSize = sample;
+                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeFile(image, opt);
+                if (bmp != null) {
+                    b.setLargeIcon(bmp).setStyle(new NotificationCompat.BigPictureStyle()
+                            .bigPicture(bmp).bigLargeIcon((android.graphics.Bitmap) null)
+                            .setSummaryText(o.optString("body", "")));
+                }
+            }
             if (NotificationManagerCompat.from(app).areNotificationsEnabled()) {
                 NotificationManagerCompat.from(app).notify(notificationId(chatId), b.build());
             }

@@ -38,7 +38,10 @@ type payload struct {
 	Fwd     string `json:"fwd,omitempty"`   // text/media: forwarded from (author's name)
 	Target  string `json:"tgt,omitempty"`   // edit/delete/reaction: uid
 	Emoji   string `json:"emoji,omitempty"` // reaction ("" removes)
-	UpTo    int64  `json:"upto,omitempty"`  // read: read up to (unix ms)
+	UpTo    int64  `json:"upto,omitempty"`  // read, clear: up to (unix ms)
+	// clear (see chats.go): for everyone (direct chats), and hide the chat.
+	All  bool `json:"all,omitempty"`
+	Hide bool `json:"hide,omitempty"`
 }
 
 // storable reports whether a payload type is a user-visible message.
@@ -212,9 +215,21 @@ func (c *Client) Remove(ctx context.Context, groupID, username string) error {
 	if err := c.syncLocked(ctx); err != nil {
 		return err
 	}
-	_, members, err := c.m.GroupInfo([]byte(groupID))
+	ids, devices, err := c.devicesOfLocked(groupID, uid)
 	if err != nil {
 		return err
+	}
+	if len(ids) == 0 {
+		return fmt.Errorf("%s is not a member", username)
+	}
+	return c.commitLocked(ctx, groupID, commitSpec{removeIDs: ids, removedDevices: devices})
+}
+
+// devicesOfLocked lists the member identities (and device ids) of a user.
+func (c *Client) devicesOfLocked(groupID, uid string) ([][]byte, []string, error) {
+	_, members, err := c.m.GroupInfo([]byte(groupID))
+	if err != nil {
+		return nil, nil, err
 	}
 	var ids [][]byte
 	var devices []string
@@ -226,10 +241,7 @@ func (c *Client) Remove(ctx context.Context, groupID, username string) error {
 			devices = append(devices, d)
 		}
 	}
-	if len(ids) == 0 {
-		return fmt.Errorf("%s is not a member", username)
-	}
-	return c.commitLocked(ctx, groupID, commitSpec{removeIDs: ids, removedDevices: devices})
+	return ids, devices, nil
 }
 
 // commitSpec describes the membership change of a Commit.

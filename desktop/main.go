@@ -4,6 +4,7 @@ import (
 	"embed"
 	"log"
 	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -56,9 +57,30 @@ func main() {
 	}
 	messenger := sharedMessenger()
 
+	// Desktop: one running app per user. Starting it again (shortcut,
+	// autostart) brings the existing window to the front instead of a
+	// second copy fighting over the same database.
+	var window *application.WebviewWindow
+	var single *application.SingleInstanceOptions
+	if !webMode && (runtime.GOOS == "windows" || runtime.GOOS == "darwin" || runtime.GOOS == "linux") {
+		single = &application.SingleInstanceOptions{
+			UniqueID: "city.kantra.desktop",
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+				application.InvokeAsync(func() {
+					if window != nil {
+						window.Show()
+						window.UnMinimise()
+						window.Focus()
+					}
+				})
+			},
+		}
+	}
+
 	app := application.New(application.Options{
-		Name:        "Kantra",
-		Description: "E2EE messenger (MLS)",
+		SingleInstance: single,
+		Name:           "Kantra",
+		Description:    "E2EE messenger (MLS)",
 		Services: append([]application.Service{
 			application.NewService(messenger),
 		}, platformServices(messenger)...),
@@ -76,7 +98,7 @@ func main() {
 		Server: application.ServerOptions{Host: "localhost", Port: 8090},
 	})
 
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Kantra",
 		Width:            1100,
 		Height:           720,
@@ -86,6 +108,13 @@ func main() {
 		URL:              "/",
 		// Drag & drop of files from the OS into a chat (drop.go).
 		EnableFileDrop: true,
+		// Our own title bar (TitleBar.svelte): window buttons drawn by the
+		// app on Windows, the native traffic lights over it on macOS.
+		Frameless: titlebarStyle() == "custom",
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBarHidden,
+			Backdrop: application.MacBackdropNormal,
+		},
 		// Voice and video messages (getUserMedia).
 		Permissions: map[application.PermissionType]application.Permission{
 			application.PermissionMicrophone: application.PermissionAllow,

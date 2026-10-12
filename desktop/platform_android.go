@@ -37,3 +37,5 @@ func newNotifier(*Messenger) notifier { return androidNotifier{} }
 
 func platformServices(*Messenger) []application.Service                      { return nil }
 func platformSetup(*application.App, *application.WebviewWindow, *Messenger) {}
+
+func titlebarStyle() string { return "" }

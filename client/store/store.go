@@ -126,6 +126,10 @@ var migrations = []string{
 	     upto     INTEGER NOT NULL,
 	     PRIMARY KEY (group_id, user_id)
 	 );`,
+	// Chat deletion: hidden_at hides the chat until a newer message arrives;
+	// left_at marks a group this account left (its messages are dropped).
+	`ALTER TABLE groups ADD COLUMN hidden_at INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE groups ADD COLUMN left_at INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func migrate(db *sql.DB) error {
@@ -305,6 +309,8 @@ type Group struct {
 	Active    bool
 	CreatedAt int64
 	Peer      string // direct chats: the other user's id
+	HiddenAt  int64  // deleted ("hidden") by the user at this time (unix ms), 0 = never
+	LeftAt    int64  // the account left this group at this time (unix ms), 0 = member
 }
 
 func (t *Tx) UpsertGroup(g Group) error {
@@ -324,7 +330,7 @@ func (t *Tx) InsertGroupIfMissing(g Group) error {
 }
 
 func (s *Store) Groups(ctx context.Context) ([]Group, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, epoch, active, created_at, peer FROM groups ORDER BY created_at`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, epoch, active, created_at, peer, hidden_at, left_at FROM groups ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +339,7 @@ func (s *Store) Groups(ctx context.Context) ([]Group, error) {
 	for rows.Next() {
 		var g Group
 		var ep int64
-		if err := rows.Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer, &g.HiddenAt, &g.LeftAt); err != nil {
 			return nil, err
 		}
 		g.Epoch = uint64(ep)
@@ -345,8 +351,8 @@ func (s *Store) Groups(ctx context.Context) ([]Group, error) {
 func (s *Store) Group(ctx context.Context, id string) (*Group, error) {
 	var g Group
 	var ep int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, name, epoch, active, created_at, peer FROM groups WHERE id=?`, id).
-		Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer)
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, epoch, active, created_at, peer, hidden_at, left_at FROM groups WHERE id=?`, id).
+		Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer, &g.HiddenAt, &g.LeftAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -419,6 +425,44 @@ func (t *Tx) DeleteMessage(groupID, uid, sender string) (bool, error) {
 		_, err = t.tx.Exec(`DELETE FROM reactions WHERE group_id=? AND msg_uid=?`, groupID, uid)
 	}
 	return n > 0, err
+}
+
+// ClearMessages deletes (as tombstones, so the history backup carries the
+// deletion) the messages of a group sent up to a time.
+func (t *Tx) ClearMessages(groupID string, upto int64) (int64, error) {
+	r, err := t.tx.Exec(`UPDATE messages SET body='', deleted=1, backed_up=0 WHERE group_id=? AND sent_at<=? AND deleted=0`, groupID, upto)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := r.RowsAffected()
+	if n > 0 {
+		_, err = t.tx.Exec(`DELETE FROM reactions WHERE group_id=? AND msg_uid IN
+			(SELECT uid FROM messages WHERE group_id=? AND deleted=1)`, groupID, groupID)
+	}
+	return n, err
+}
+
+// SetChatFlags records that the chat was hidden / left at a time (the
+// newest time wins, so merging copies from other devices is order-free).
+// A zero value leaves the flag as it is.
+func (t *Tx) SetChatFlags(groupID string, hiddenAt, leftAt int64) error {
+	_, err := t.tx.Exec(`UPDATE groups SET hidden_at=max(hidden_at, ?), left_at=max(left_at, ?) WHERE id=?`, hiddenAt, leftAt, groupID)
+	return err
+}
+
+// ResetChatFlags shows a hidden chat again / clears "left" (joined again).
+func (t *Tx) ResetChatFlags(groupID string, hidden, left bool) error {
+	if hidden {
+		if _, err := t.tx.Exec(`UPDATE groups SET hidden_at=0 WHERE id=?`, groupID); err != nil {
+			return err
+		}
+	}
+	if left {
+		if _, err := t.tx.Exec(`UPDATE groups SET left_at=0 WHERE id=?`, groupID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetReaction sets (emoji "" removes) a user's reaction to a message.
