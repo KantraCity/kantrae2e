@@ -9,6 +9,7 @@
 //   join   {call}              a device entered the call
 //   hello  {call, to}          "please send me an offer" (see below)
 //   offer  {call, to, sdp}     / answer {call, to, sdp}
+//   ice    {call, to, cand}    a candidate found after the SDP went out
 //   leave  {call}              a device left; end {call}: the caller cancelled
 //   decline {call}             declined (1:1: the caller stops)
 //   media  {call, mic, cam}    mute / camera state for the others' tiles
@@ -32,7 +33,7 @@ export type Peer = {
 type Ringing = { call: string; chatId: string; from: string; fromKey: string; name: string; video: boolean; at: number }
 
 const RING_MS = 45_000
-const ICE_WAIT_MS = 2500
+const ICE_WAIT_MS = 3500
 const ALIVE_MS = 30_000
 
 function rid(): string {
@@ -62,6 +63,11 @@ class CallStore {
   private camTrack: MediaStreamTrack | null = null
   private meters = new Map<string, () => void>()
   private aliveTimer: ReturnType<typeof setInterval> | undefined
+  /** Candidates that arrived before the remote description was set. */
+  private pendingIce = new Map<string, RTCIceCandidateInit[]>()
+  /** Connections whose SDP is out: later candidates are trickled. */
+  private trickle = new WeakSet<RTCPeerConnection>()
+  private restarts = new Map<string, number>()
 
   constructor() {
     // Group calls nobody announced for a while are over.
@@ -129,7 +135,17 @@ class CallStore {
       case 'answer':
         if (inThis && b.to === this.myKey) {
           const pc = this.pcs.get(from)
-          if (pc && pc.signalingState === 'have-local-offer') await pc.setRemoteDescription({ type: 'answer', sdp: b.sdp }).catch((e) => console.warn(e))
+          if (pc && pc.signalingState === 'have-local-offer') {
+            await pc.setRemoteDescription({ type: 'answer', sdp: b.sdp }).catch((e) => console.warn(e))
+            this.flushIce(from, pc)
+          }
+        }
+        return
+      case 'ice':
+        if (inThis && b.to === this.myKey && b.cand) {
+          const pc = this.pcs.get(from)
+          if (pc && pc.remoteDescription) pc.addIceCandidate(b.cand).catch(() => {})
+          else this.pendingIce.set(from, [...(this.pendingIce.get(from) ?? []), b.cand])
         }
         return
       case 'media':
@@ -273,17 +289,48 @@ class CallStore {
       this.peers[key] = { ...p, stream }
       if (e.track.kind === 'audio') this.meter(key, stream)
     }
+    pc.onicecandidate = (e) => {
+      if (e.candidate && this.trickle.has(pc) && this.call && this.pcs.get(key) === pc) {
+        this.send(this.call.chatId, { t: 'ice', call: this.call.id, to: key, cand: e.candidate.toJSON() })
+      }
+    }
+    let lost: ReturnType<typeof setTimeout> | undefined
     pc.onconnectionstatechange = () => {
       const p = this.peers[key]
-      if (!p) return
+      if (!p || this.pcs.get(key) !== pc) return
+      clearTimeout(lost)
       if (pc.connectionState === 'connected') {
         p.state = 'connected'
+        this.restarts.delete(key)
         if (this.call && !this.call.connectedAt) this.call.connectedAt = Date.now()
       } else if (pc.connectionState === 'failed') {
-        p.state = 'failed'
+        this.reconnect(key)
+      } else if (pc.connectionState === 'disconnected') {
+        // Network change (Wi-Fi <-> mobile): give it a moment, then rebuild.
+        lost = setTimeout(() => pc.connectionState !== 'connected' && this.reconnect(key), 6000)
       }
     }
     return pc
+  }
+
+  /** Rebuilds a connection that failed (the offering side starts over). */
+  private reconnect(key: string) {
+    const p = this.peers[key]
+    if (!p || !this.call) return
+    const n = (this.restarts.get(key) ?? 0) + 1
+    this.restarts.set(key, n)
+    if (n > 3) {
+      p.state = 'failed'
+      return
+    }
+    p.state = 'connecting'
+    if (this.myKey < key) setTimeout(() => this.call && this.offer(key), 300 * n)
+  }
+
+  private flushIce(key: string, pc: RTCPeerConnection) {
+    const list = this.pendingIce.get(key)
+    this.pendingIce.delete(key)
+    for (const c of list ?? []) pc.addIceCandidate(c).catch(() => {})
   }
 
   /** Our tracks on the audio/video transceivers (camera can be switched
@@ -304,8 +351,11 @@ class CallStore {
     pc.addTransceiver('audio', { direction: 'sendrecv' })
     pc.addTransceiver('video', { direction: 'sendrecv' })
     this.attach(pc)
+    this.pendingIce.delete(key)
     await pc.setLocalDescription(await pc.createOffer())
     await iceGathered(pc)
+    if (!this.call || this.pcs.get(key) !== pc) return
+    this.trickle.add(pc)
     this.send(this.call.chatId, { t: 'offer', call: this.call.id, to: key, sdp: pc.localDescription?.sdp })
   }
 
@@ -314,9 +364,12 @@ class CallStore {
     this.addPeer(key, userId, name)
     const pc = this.newPC(key)
     await pc.setRemoteDescription({ type: 'offer', sdp })
+    this.flushIce(key, pc)
     this.attach(pc)
     await pc.setLocalDescription(await pc.createAnswer())
     await iceGathered(pc)
+    if (!this.call || this.pcs.get(key) !== pc) return
+    this.trickle.add(pc)
     this.send(this.call.chatId, { t: 'answer', call: this.call.id, to: key, sdp: pc.localDescription?.sdp })
     this.sendMedia()
   }
@@ -422,6 +475,8 @@ class CallStore {
     }
     for (const pc of this.pcs.values()) pc.close()
     this.pcs.clear()
+    this.pendingIce.clear()
+    this.restarts.clear()
     for (const stop of this.meters.values()) stop()
     this.meters.clear()
     this.local?.getTracks().forEach((t) => t.stop())
@@ -463,6 +518,41 @@ class CallStore {
     } catch { /* no Web Audio */ }
   }
   selfSpeaking = $state(false)
+}
+
+export type CallCheck = { servers: string[]; host: boolean; srflx: boolean; relay: boolean; relayIp: string; errors: string[] }
+
+/** Settings → "Проверить звонки": can this device reach the server's
+ * STUN/TURN? relay = calls work even when a direct path is impossible. */
+export async function checkCalls(): Promise<CallCheck> {
+  const res: CallCheck = { servers: [], host: false, srflx: false, relay: false, relayIp: '', errors: [] }
+  const list = (await Messenger.IceServers().catch(() => null)) ?? []
+  const ice = list.map((x) => ({ urls: x.urls ?? [], username: x.username || undefined, credential: x.credential || undefined }))
+  res.servers = ice.flatMap((s) => s.urls)
+  if (!ice.length) {
+    res.errors.push('сервер не выдал STUN/TURN (обновите сервер: deploy/init-env.sh --upgrade)')
+    return res
+  }
+  const pc = new RTCPeerConnection({ iceServers: ice })
+  pc.createDataChannel('check')
+  pc.onicecandidate = (e) => {
+    const c = e.candidate
+    if (!c) return
+    if (c.type === 'host') res.host = true
+    if (c.type === 'srflx') res.srflx = true
+    if (c.type === 'relay') { res.relay = true; res.relayIp = c.address ?? '' }
+  }
+  pc.onicecandidateerror = (e: Event) => {
+    const x = e as RTCPeerConnectionIceErrorEvent
+    const why = x.errorCode === 401 ? 'неверная учётка TURN (TURN_SECRET у coturn и auth-service разный?)'
+      : x.errorCode === 701 ? 'сервер не отвечает (порт 3478 закрыт?)' : x.errorText || String(x.errorCode)
+    const msg = `${x.url ?? ''}: ${why}`
+    if (!res.errors.includes(msg)) res.errors.push(msg)
+  }
+  await pc.setLocalDescription(await pc.createOffer())
+  await new Promise((r) => setTimeout(r, 6000))
+  pc.close()
+  return res
 }
 
 /** Waits until ICE candidates are gathered (non-trickle: one SDP message). */

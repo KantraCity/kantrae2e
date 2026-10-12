@@ -5,6 +5,15 @@
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
   import Modal from './Modal.svelte'
+  import { checkCalls, type CallCheck } from '../lib/call.svelte'
+
+  let checking = $state(false)
+  let check = $state<CallCheck | null>(null)
+  async function runCheck() {
+    checking = true
+    check = null
+    try { check = await checkCalls() } finally { checking = false }
+  }
 
   const acc = $derived(app.state?.account)
   let fingerprint = $state('')
@@ -161,6 +170,25 @@
     </div>
 
     <div class="section">
+      <div class="label"><Icon name="phone" size={18} /> Звонки</div>
+      <p class="muted small">Проверка связи с сервером звонков (STUN/TURN). Занимает несколько секунд.</p>
+      <button class="btn flat" disabled={checking} onclick={runCheck}>{checking ? 'Проверка…' : 'Проверить звонки'}</button>
+      {#if check}
+        <div class="check-res">
+          <div class:ok={check.relay} class:bad={!check.relay}>
+            {check.relay ? '✓ TURN работает — звонки соединятся из любой сети' : '✗ TURN недоступен — звонки соединятся только в одной сети'}
+          </div>
+          {#if check.relay && check.relayIp}<div class="muted small">адрес пересылки: {check.relayIp}</div>{/if}
+          {#if check.relay && check.relayIp && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(check.relayIp)}
+            <div class="bad small">Сервер выдаёт приватный адрес: добавьте TURN_EXTERNAL_IP=&lt;публичный IP&gt; в deploy/.env</div>
+          {/if}
+          <div class="muted small">STUN: {check.srflx ? 'да' : 'нет'} · серверы: {check.servers.join(', ') || '—'}</div>
+          {#each check.errors as e}<div class="bad small">{e}</div>{/each}
+        </div>
+      {/if}
+    </div>
+
+    <div class="section">
       <button class="btn danger" onclick={() => (app.modal = { kind: 'logout' })}><Icon name="logout" size={18} /> Выйти из аккаунта</button>
     </div>
 
@@ -188,4 +216,7 @@
   .switch:checked::after { transform: translateX(16px); }
   .switch:disabled { opacity: .4; }
   .warn-row { width: 100%; display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 8px 10px; border-radius: 10px; background: rgba(250, 167, 116, .12); color: #faa774; font-size: 14px; }
+  .check-res { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  .check-res .ok { color: var(--success); }
+  .check-res .bad { color: #ff8a80; }
 </style>

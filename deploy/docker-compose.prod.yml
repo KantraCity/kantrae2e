@@ -161,6 +161,12 @@ services:
       - --use-auth-secret
       - --static-auth-secret=${TURN_SECRET:?run deploy/init-env.sh --upgrade}
       - --realm=${DOMAIN}
+      # The public address to hand out. Cloud VMs (Yandex Cloud, AWS, GCP…)
+      # only have a private address on the interface; without this the
+      # relay would advertise 10.x and calls through it would never connect.
+      # TURN_EXTERNAL_IP in deploy/.env overrides the detection.
+      - --external-ip=${TURN_EXTERNAL_IP:-$$(detect-external-ip)}
+      - --log-file=stdout
       - --fingerprint
       - --no-cli
       - --no-tls
