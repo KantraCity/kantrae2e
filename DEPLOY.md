@@ -136,9 +136,10 @@ deploy/backup.sh
 Если TURN недоступен:
 - откройте порты: `ufw allow 3478 && ufw allow 49160:49200/udp` **и** в файрволе облака (Yandex Cloud:
   «Группы безопасности» ВМ → входящие правила 3478 TCP+UDP и 49160–49200 UDP);
-- в облаке у ВМ на интерфейсе только приватный адрес: в `deploy/.env` должна быть строка
-  `TURN_EXTERNAL_IP=<публичный IPv4>` (её добавляет `deploy/init-env.sh --upgrade`), затем
-  `docker compose ... up -d coturn`;
+- в `deploy/.env` должны быть `TURN_EXTERNAL_IP=<публичный IPv4>` и `TURN_RELAY_IP=<адрес eth0>`
+  (в облаке это разные адреса, например 158.160.x.x и 10.130.x.x; обе строки добавляет
+  `deploy/init-env.sh --upgrade`), затем `docker compose ... up -d coturn`. В логах coturn должно быть
+  `Relay address to use: <адрес eth0>` и `external-ip`, без адресов Docker (172.17…);
 - логи: `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --tail=50 coturn`. Групповые звонки — «каждый
 с каждым», комфортно до 5–6 участников. Если звонки соединяются только в одной сети (Wi-Fi), а через
 мобильный интернет — нет, проверьте, что порты 3478 и 49160–49200/udp открыты.

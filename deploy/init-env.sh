@@ -11,6 +11,10 @@ public_ip() {
 	done
 	return 1
 }
+# The address of the interface that reaches the internet (private on cloud VMs).
+local_ip() {
+	ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}'
+}
 if [ "${1:-}" = "--upgrade" ]; then
 	cd "$(dirname "$0")"
 	[ -f .env ] || { echo "deploy/.env not found: run deploy/init-env.sh <domain> <email> first" >&2; exit 1; }
@@ -27,6 +31,15 @@ if [ "${1:-}" = "--upgrade" ]; then
 			changed=1
 		else
 			echo "could not detect the public IP: add TURN_EXTERNAL_IP=<public IPv4> to deploy/.env by hand" >&2
+		fi
+	fi
+	if ! grep -q '^TURN_RELAY_IP=' .env; then
+		if ip=$(local_ip) && [ -n "$ip" ]; then
+			printf 'TURN_RELAY_IP=%s\n' "$ip" >> .env
+			echo "deploy/.env: added TURN_RELAY_IP=$ip (this server's interface address for calls)"
+			changed=1
+		else
+			echo "could not detect the interface address: add TURN_RELAY_IP=<address of eth0> to deploy/.env by hand" >&2
 		fi
 	fi
 	[ "$changed" = 1 ] || echo "deploy/.env is up to date"
@@ -54,6 +67,7 @@ MINIO_ROOT_PASSWORD=$(rnd 24)
 # Calls: shared with coturn (TURN credentials); the server's public IPv4.
 TURN_SECRET=$(rnd 32)
 TURN_EXTERNAL_IP=$(public_ip || true)
+TURN_RELAY_IP=$(local_ip || true)
 # Go module mirror for building the images (uncomment if proxy.golang.org
 # times out from this server):
 # GOPROXY=https://goproxy.cn,https://goproxy.io,direct
