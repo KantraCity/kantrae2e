@@ -278,6 +278,14 @@ export function Messages(chatID: string, limit: number): $CancellablePromise<$mo
     return $Call.ByID(2792303965, chatID, limit);
 }
 
+/**
+ * MuteChat turns notifications of a chat off for minutes (-1: forever,
+ * 0: back on).
+ */
+export function MuteChat(chatID: string, minutes: number): $CancellablePromise<void> {
+    return $Call.ByID(2421959690, chatID, minutes);
+}
+
 export function MyFingerprint(): $CancellablePromise<string> {
     return $Call.ByID(3488752829);
 }
@@ -327,6 +335,13 @@ export function PendingLinks(): $CancellablePromise<$models.LinkRequest[] | null
  */
 export function Pin(chatID: string, id: string, pin: boolean, forAll: boolean): $CancellablePromise<void> {
     return $Call.ByID(3061908764, chatID, id, pin, forAll);
+}
+
+/**
+ * PinChat pins a chat to the top of the list (at most 5), on all devices.
+ */
+export function PinChat(chatID: string, pin: boolean): $CancellablePromise<void> {
+    return $Call.ByID(3348437962, chatID, pin);
 }
 
 /**

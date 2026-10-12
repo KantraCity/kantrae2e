@@ -36,6 +36,7 @@
 
   function preview(c: (typeof app.chats)[number]): string {
     if (!c.last) return c.active ? (c.kind === 'direct' ? 'Личный чат' : 'Нет сообщений') : 'Вы не участник'
+    if (c.last.kind === 'system') return c.last.text
     // Like Telegram: sender names only in groups.
     const who = c.last.outgoing ? 'Вы: ' : c.kind === 'group' && c.last.sender ? `${c.last.sender}: ` : ''
     const f = c.last.file
@@ -94,7 +95,8 @@
           <div class="row">
             <span class="name">
               {#if !c.active}<span class="inactive" title="Вы не участник"><Icon name="lock" size={13} /></span>{/if}
-              {c.name}
+              <span class="nm">{c.name}</span>
+              {#if (c.mutedUntil ?? 0) > Date.now()}<span class="muted-ic" title="Без звука"><Icon name="bell-off" size={14} /></span>{/if}
             </span>
             <span class="time">{chatListTime(c.last?.sentAt ?? c.updatedAt)}</span>
           </div>
@@ -104,7 +106,8 @@
             {:else}
               <span class="preview">{preview(c)}</span>
             {/if}
-            {#if (app.unread[c.id] ?? 0) > 0}<span class="badge">{app.unread[c.id]}</span>{/if}
+            {#if (app.unread[c.id] ?? 0) > 0}<span class="badge" class:quiet={(c.mutedUntil ?? 0) > Date.now()}>{app.unread[c.id]}</span>
+            {:else if c.pinned}<span class="pin-ic" title="Закреплён"><Icon name="pin" size={16} /></span>{/if}
           </div>
         </div>
       </button>
@@ -167,6 +170,10 @@
   .typing { color: var(--accent-light); }
   .badge { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
   .chat-item.active .badge { background: #fff; color: var(--bg-active); }
+  .badge.quiet { background: #5b6b7b; }
+  .nm { overflow: hidden; text-overflow: ellipsis; }
+  .muted-ic, .pin-ic { color: var(--text-muted); display: inline-flex; flex-shrink: 0; }
+  .chat-item.active .muted-ic, .chat-item.active .pin-ic { color: #cfe2f6; }
   .empty { text-align: center; padding: 40px 20px; line-height: 1.5; }
   .empty.small { padding: 16px; font-size: 14px; }
   .clear { color: var(--text-muted); display: inline-flex; }

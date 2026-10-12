@@ -575,7 +575,7 @@
   </section>
 {:else}
   <section class="chat-view placeholder">
-    <span class="pill">Выберите чат, чтобы начать общение</span>
+    <span class="pill">{#if app.opening}<span class="spin-sm"></span> Открываем чат с @{app.opening}…{:else}Выберите чат, чтобы начать общение{/if}</span>
   </section>
 {/if}
 
@@ -668,6 +668,9 @@
   .round-rec svg { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); transform: rotate(-90deg); fill: none; stroke: var(--accent); stroke-width: 2; }
   .readonly { justify-content: center; padding: 18px; font-size: 14px; background: var(--bg-header); max-width: none; }
   .placeholder { align-items: center; justify-content: center; }
+  .spin-sm { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border: 2px solid currentColor;
+    border-right-color: transparent; border-radius: 50%; animation: spin-sm .8s linear infinite; }
+  @keyframes spin-sm { to { transform: rotate(360deg) } }
   .pill { background: rgba(0, 0, 0, 0.35); padding: 6px 14px; border-radius: 14px; font-size: 14px; color: #d4dde6; }
   .dropzone { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 16px; background: rgba(14, 22, 33, 0.85);
     display: flex; align-items: center; justify-content: center; text-align: center; color: var(--accent-light); font-size: 18px; pointer-events: none;

@@ -50,7 +50,12 @@ type payload struct {
 }
 
 // storable reports whether a payload type is a user-visible message.
-func storable(t string) bool { return t == "text" || t == "media" || t == "poll" || t == "sched" }
+func storable(t string) bool {
+	return t == "text" || t == "media" || t == "poll" || t == "sys" || t == "sched" || t == "cpref"
+}
+
+// selfOnly: stored kinds that belong only in the self-group.
+func selfOnly(t string) bool { return t == "sched" || t == "cpref" }
 
 // groupMeta: group info shared among the members (groupinfo.go). Nil
 // pointers leave a field unchanged; Name is always set by older clients.
@@ -83,7 +88,11 @@ func (c *Client) CreateGroup(ctx context.Context, name string) (string, error) {
 	if err := c.requireLogin(); err != nil {
 		return "", err
 	}
-	return c.createGroupLocked(ctx, uuid.NewString(), name, "")
+	gid, err := c.createGroupLocked(ctx, uuid.NewString(), name, "")
+	if err == nil {
+		_ = c.st.Update(ctx, c.sysLocal(gid, uuid.NewString(), c.acct.UserID, time.Now().UnixMilli(), SysEvent{Action: "create", Name: name}))
+	}
+	return gid, err
 }
 
 func (c *Client) createGroupLocked(ctx context.Context, gid, name, peer string) (string, error) {
@@ -149,16 +158,21 @@ func (c *Client) Invite(ctx context.Context, groupID string, usernames ...string
 	if err := c.requireLogin(); err != nil {
 		return err
 	}
-	return c.inviteLocked(ctx, groupID, usernames)
+	users, err := c.inviteLocked(ctx, groupID, usernames)
+	if err == nil {
+		c.sysLocked(ctx, groupID, SysEvent{Action: "add", Users: users})
+	}
+	return err
 }
 
-func (c *Client) inviteLocked(ctx context.Context, groupID string, usernames []string) error {
+// inviteLocked adds all devices of users; it returns the ids of the users added.
+func (c *Client) inviteLocked(ctx context.Context, groupID string, usernames []string) ([]string, error) {
 	_, current, err := c.m.GroupInfo([]byte(groupID))
 	if errors.Is(err, mls.ErrNotFound) {
-		return ErrNotMember
+		return nil, ErrNotMember
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	inGroup := map[string]bool{}
 	for _, id := range current {
@@ -169,24 +183,24 @@ func (c *Client) inviteLocked(ctx context.Context, groupID string, usernames []s
 	for _, u := range usernames {
 		uid, err := c.resolveUser(ctx, u)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		r, err := c.dir.FetchUserKeyPackages(ctx, &directoryv1.FetchUserKeyPackagesRequest{UserId: uid})
 		if connect.CodeOf(err) == connect.CodeNotFound {
-			return fmt.Errorf("%s: %w", u, ErrNoKeyPackages)
+			return nil, fmt.Errorf("%s: %w", u, ErrNoKeyPackages)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, dk := range r.KeyPackages {
 			// The KeyPackage must belong to the device the directory claims,
 			// with the key we know for it (if any).
 			id, key, err := mls.KeyPackageInfo(dk.KeyPackage)
 			if err != nil || !bytes.Equal(id, identity(uid, dk.DeviceId)) {
-				return fmt.Errorf("directory returned a key package with unexpected identity %q", id)
+				return nil, fmt.Errorf("directory returned a key package with unexpected identity %q", id)
 			}
 			if err := c.checkKeyPackageLocked(ctx, uid, dk.DeviceId, key); err != nil {
-				return fmt.Errorf("%s: %w", u, err)
+				return nil, fmt.Errorf("%s: %w", u, err)
 			}
 			if inGroup[string(id)] {
 				continue // device already a member (its KeyPackage is wasted)
@@ -197,19 +211,24 @@ func (c *Client) inviteLocked(ctx context.Context, groupID string, usernames []s
 		}
 	}
 	if len(kps) == 0 {
-		return fmt.Errorf("all devices of %s are already members", strings.Join(usernames, ", "))
+		return nil, fmt.Errorf("all devices of %s are already members", strings.Join(usernames, ", "))
 	}
 	if err := c.commitLocked(ctx, groupID, commitSpec{adds: kps, addedDevices: devices, addedUsers: users}); err != nil {
-		return err
+		return nil, err
 	}
-	// Tell the new members the group's name.
+	var added []string
+	for _, u := range users {
+		if len(added) == 0 || added[len(added)-1] != u {
+			added = append(added, u)
+		}
+	}
 	// Tell the new members the group's info (name, description, photo,
 	// invite link).
 	if g, err := c.st.Group(ctx, groupID); err == nil {
 		_, err = c.sendLocked(ctx, groupID, payload{Type: "meta", Meta: fullMeta(g)})
-		return err
+		return added, err
 	}
-	return nil
+	return added, nil
 }
 
 // Remove removes all devices of a user from the group.
@@ -236,7 +255,11 @@ func (c *Client) Remove(ctx context.Context, groupID, username string) error {
 	if len(ids) == 0 {
 		return fmt.Errorf("%s is not a member", username)
 	}
-	return c.commitLocked(ctx, groupID, commitSpec{removeIDs: ids, removedDevices: devices})
+	if err := c.commitLocked(ctx, groupID, commitSpec{removeIDs: ids, removedDevices: devices}); err != nil {
+		return err
+	}
+	c.sysLocked(ctx, groupID, SysEvent{Action: "remove", Users: []string{uid}})
+	return nil
 }
 
 // devicesOfLocked lists the member identities (and device ids) of a user.

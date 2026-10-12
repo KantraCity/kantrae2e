@@ -43,7 +43,7 @@ func (c *Client) Saved(ctx context.Context, kind string) ([]store.Message, error
 	if self == "" {
 		return nil, ErrNotLoggedIn
 	}
-	ms, err := c.st.Messages(ctx, self, MaxSavedGIFs*2)
+	ms, err := c.st.MessagesOfKind(ctx, self, "media", MaxSavedGIFs*2)
 	if err != nil {
 		return nil, err
 	}

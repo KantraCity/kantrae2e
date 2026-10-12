@@ -540,5 +540,6 @@ func (c *Client) handleInviteJoinLocked(groupID, uid, did, secret string, kp []b
 		if g, err := c.st.Group(ctx, groupID); err == nil {
 			_, _ = c.sendLocked(ctx, groupID, payload{Type: "meta", Meta: fullMeta(g)})
 		}
+		c.sysLocked(ctx, groupID, SysEvent{Action: "join", Users: []string{uid}})
 	})
 }

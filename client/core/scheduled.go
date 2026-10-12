@@ -60,7 +60,7 @@ func (c *Client) ScheduledIn(ctx context.Context, groupID string) ([]Scheduled, 
 	if self == "" {
 		return nil, ErrNotLoggedIn
 	}
-	ms, err := c.st.Messages(ctx, self, 2000)
+	ms, err := c.st.MessagesOfKind(ctx, self, "sched", 2000)
 	if err != nil {
 		return nil, err
 	}

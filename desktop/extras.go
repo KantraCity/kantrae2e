@@ -253,3 +253,71 @@ func (m *Messenger) SendScheduledNow(id string) error {
 	_, err = c.SendScheduledNow(context.Background(), id)
 	return friendly(err)
 }
+
+// sysText: a group event as Telegram shows it ("Анна добавила Бориса").
+func (m *Messenger) sysText(c *core.Client, v *chatView, s *store.Message, e *core.SysEvent) string {
+	me := ""
+	if v != nil {
+		me = v.me
+	} else {
+		// Called from core event callbacks too: never c.Account() here.
+		me = m.userIDOf(c)
+	}
+	actor := core.DisplayName(v.profile(c, s.SenderUser))
+	self := s.SenderUser == me
+	if self {
+		actor = "Вы"
+	}
+	verb := func(one, you string) string {
+		if self {
+			return you
+		}
+		return one
+	}
+	names := func(ids []string, you string) string {
+		out := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if id == me {
+				out = append(out, you)
+			} else {
+				out = append(out, core.DisplayName(v.profile(c, id)))
+			}
+		}
+		return strings.Join(out, ", ")
+	}
+	switch e.Action {
+	case "create":
+		return actor + " " + verb("создал(а)", "создали") + " группу «" + e.Name + "»"
+	case "add":
+		return actor + " " + verb("добавил(а)", "добавили") + " " + names(e.Users, "вас")
+	case "join":
+		who := names(e.Users, "Вы")
+		if len(e.Users) == 1 && e.Users[0] == me {
+			return "Вы присоединились к группе по ссылке"
+		}
+		return who + " присоединился(-лась) к группе по ссылке"
+	case "leave":
+		return actor + " " + verb("покинул(а)", "покинули") + " группу"
+	case "remove":
+		return actor + " " + verb("удалил(а)", "удалили") + " " + names(e.Users, "вас")
+	case "rename":
+		return actor + " " + verb("изменил(а)", "изменили") + " название группы на «" + e.Name + "»"
+	case "photo":
+		return actor + " " + verb("изменил(а)", "изменили") + " фото группы"
+	case "nophoto":
+		return actor + " " + verb("удалил(а)", "удалили") + " фото группы"
+	}
+	return actor + ": событие в группе"
+}
+
+// userIDOf: the account of a client, without calling into the client.
+func (m *Messenger) userIDOf(c *core.Client) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.slots {
+		if s.c == c {
+			return s.userID
+		}
+	}
+	return ""
+}

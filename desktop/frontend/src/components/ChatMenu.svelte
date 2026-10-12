@@ -7,12 +7,14 @@
   const menu = app.chatMenu!
   const chat = menu.chat
   const pos = (() => {
-    const w = 230, h = 180
+    const w = 230, h = 300
     return { x: Math.max(8, Math.min(menu.x, window.innerWidth - w - 8)), y: menu.y + h > window.innerHeight ? Math.max(8, menu.y - h) : menu.y }
   })()
 
   function close() { app.chatMenu = null }
   function act(fn: () => void) { close(); fn() }
+  let muteOpen = $state(false)
+  const muted = (chat.mutedUntil ?? 0) > Date.now()
   const ask = (action: 'delete' | 'clear' | 'leave') => act(() => (app.modal = { kind: 'deleteChat', chatId: chat.id, action }))
 </script>
 
@@ -22,6 +24,20 @@
 <div class="backdrop" onclick={close} oncontextmenu={(e) => { e.preventDefault(); close() }}></div>
 <div class="menu" transition:scale|global={{ start: 0.9, duration: 140 }} style="left:{pos.x}px;top:{pos.y}px" role="menu">
   <button onclick={() => act(() => app.openChat(chat.id))}><Icon name="chat" size={20} /> Открыть</button>
+  <button onclick={() => act(() => app.pinChat(chat, !chat.pinned))}><Icon name="pin" size={20} /> {chat.pinned ? 'Открепить' : 'Закрепить'}</button>
+  {#if muted}
+    <button onclick={() => act(() => app.muteChat(chat, 0))}><Icon name="bell" size={20} /> Включить уведомления</button>
+  {:else}
+    <button onclick={() => (muteOpen = !muteOpen)}><Icon name="bell-off" size={20} /> Отключить уведомления <span class="chev" class:open={muteOpen}><Icon name="down" size={16} /></span></button>
+    {#if muteOpen}
+      <div class="sub">
+        <button onclick={() => act(() => app.muteChat(chat, 60))}>На 1 час</button>
+        <button onclick={() => act(() => app.muteChat(chat, 480))}>На 8 часов</button>
+        <button onclick={() => act(() => app.muteChat(chat, 1440))}>На 1 день</button>
+        <button onclick={() => act(() => app.muteChat(chat, -1))}>Навсегда</button>
+      </div>
+    {/if}
+  {/if}
   <button onclick={() => act(() => (app.modal = { kind: 'chatInfo', chatId: chat.id }))}><Icon name="info" size={20} /> {chat.kind === 'group' ? 'Информация о группе' : 'Профиль'}</button>
   <button onclick={() => ask('clear')}><Icon name="broom" size={20} /> Очистить историю</button>
   {#if chat.kind === 'group'}
@@ -38,4 +54,9 @@
   .menu > button { display: flex; align-items: center; gap: 14px; padding: 9px 16px; text-align: left; font-size: 15px; }
   .menu > button:hover { background: var(--bg-hover); }
   .menu .danger { color: #e17076; }
+  .chev { margin-left: auto; display: inline-flex; color: var(--text-muted); transition: transform .15s; }
+  .chev.open { transform: rotate(180deg); }
+  .sub { display: flex; flex-direction: column; background: rgba(0,0,0,.15); }
+  .sub button { padding: 8px 16px 8px 50px; text-align: left; font-size: 14px; }
+  .sub button:hover { background: var(--bg-hover); }
 </style>

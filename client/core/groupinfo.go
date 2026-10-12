@@ -70,6 +70,16 @@ func (c *Client) sendMeta(ctx context.Context, groupID string, m *groupMeta) err
 	if _, err := c.sendLocked(ctx, groupID, payload{Type: "meta", Meta: m}); err != nil {
 		return err
 	}
+	if !m.KeepName && m.Name != g.Name {
+		c.sysLocked(ctx, groupID, SysEvent{Action: "rename", Name: m.Name})
+	}
+	if m.Avatar != nil {
+		act := "photo"
+		if m.Avatar.Hash == "" {
+			act = "nophoto"
+		}
+		c.sysLocked(ctx, groupID, SysEvent{Action: act})
+	}
 	return c.st.Update(ctx, func(tx *store.Tx) error {
 		if !m.KeepName {
 			if err := tx.SetGroupInfo(groupID, store.GroupInfoUpdate{Name: &m.Name}); err != nil {

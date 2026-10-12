@@ -230,6 +230,12 @@
     {/if}
   {/if}
   {#if chat}
+    {@const isMuted = (chat.mutedUntil ?? 0) > Date.now()}
+    <label class="row-btn plain notif">
+      <Icon name={isMuted ? 'bell-off' : 'bell'} size={20} />
+      <span class="grow">Уведомления{#if isMuted}<small class="muted"> · {chat.mutedUntil! >= 253402300799000 ? 'выключены' : 'до ' + new Date(chat.mutedUntil!).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>{/if}</span>
+      <input type="checkbox" class="switch" checked={!isMuted} onchange={(e) => app.muteChat(chat, (e.currentTarget as HTMLInputElement).checked ? 0 : -1)} />
+    </label>
     <div class="danger-zone">
       <button class="row-btn plain" onclick={() => (app.modal = { kind: 'deleteChat', chatId: chat.id, action: 'clear' })}>
         <Icon name="broom" size={20} /><span>Очистить историю</span>
@@ -264,6 +270,12 @@
   .row-btn:hover { background: var(--bg-hover); }
   .danger-zone { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 8px; display: flex; flex-direction: column; }
   .row-btn.plain { color: var(--text-muted); }
+  .notif { cursor: pointer; }
+  .notif .grow { flex: 1; }
+  .switch { appearance: none; width: 36px; height: 20px; border-radius: 10px; background: #46525e; position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch:checked { background: var(--accent); }
+  .switch:checked::after { transform: translateX(16px); }
   .row-btn.plain span { color: var(--text); }
   .row-btn.red { color: #e17076; }
   .grow { flex: 1; color: var(--text); }

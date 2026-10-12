@@ -234,8 +234,27 @@ class AppState {
   }
 
   /** Opens (or starts) the private chat with a user, like tapping a person in Telegram. */
+  /** A direct chat being opened (created) for this username. */
+  opening = $state('')
+
   async openDirect(username: string) {
-    const chat = await this.try(() => Messenger.OpenDirect(username))
+    // Already in the list: open it at once.
+    const known = this.chats.find((c) => c.kind === 'direct' && c.peer === username)
+    if (known) {
+      this.search = ''
+      this.userHits = []
+      await this.openChat(known.id)
+      return
+    }
+    // Creating it takes a moment: the chat that was open must not keep its
+    // composer (a message typed now would go to the wrong chat).
+    this.opening = username
+    if (this.currentId) {
+      this.reply = null
+      this.editing = null
+      this.currentId = null
+    }
+    const chat = await this.try(() => Messenger.OpenDirect(username)).finally(() => (this.opening = ''))
     if (!chat) return
     this.search = ''
     this.userHits = []
@@ -277,7 +296,7 @@ class AppState {
       history.back() // popstate clears currentId
       return
     }
-    if (id && !this.currentId) history.pushState({ chat: true }, '')
+    if (id && !this.currentId && !history.state?.chat) history.pushState({ chat: true }, '')
     if (id !== this.currentId) {
       this.reply = null
       this.editing = null
@@ -376,7 +395,7 @@ class AppState {
     if (!chat) return
     chat.last = m
     chat.updatedAt = m.sentAt
-    this.chats.sort((a, b) => b.updatedAt - a.updatedAt)
+    this.chats.sort(chatOrder)
   }
 
 
@@ -628,6 +647,18 @@ class AppState {
     this.jump = { chatId, id, n: ++this.jumpSeq }
   }
 
+  // ---- pinned / muted chats (synced across the account's devices) ----
+  async pinChat(chat: Chat, pin: boolean) {
+    if ((await this.try(() => Messenger.PinChat(chat.id, pin))) === undefined) return
+    chat.pinned = pin ? Date.now() : 0
+    this.chats.sort(chatOrder)
+  }
+  /** minutes: -1 forever, 0 unmute. */
+  async muteChat(chat: Chat, minutes: number) {
+    if ((await this.try(() => Messenger.MuteChat(chat.id, minutes))) === undefined) return
+    chat.mutedUntil = minutes < 0 ? 253402300799000 : minutes > 0 ? Date.now() + minutes * 60000 : 0
+  }
+
   // ---- scheduled messages (sent by this device at their time) ----
   /** Bumped when the list may have changed (scheduled event, own changes). */
   scheduledTick = $state(0)
@@ -768,7 +799,7 @@ class AppState {
         chat.last = m
         chat.updatedAt = m.sentAt
       }
-      this.chats.sort((a, b) => b.updatedAt - a.updatedAt)
+      this.chats.sort(chatOrder)
     } else {
       this.refreshChats()
     }
@@ -792,7 +823,9 @@ class AppState {
         if (e.message) {
           this.addMessage(e.message)
           if (e.chatId) delete this.typing[e.chatId] // the message arrived: no longer typing
-          if (!e.message.outgoing && (e.chatId !== this.currentId || document.hidden)) {
+          if (e.message.kind === 'system') {
+            // group events: not unread
+          } else if (!e.message.outgoing && (e.chatId !== this.currentId || document.hidden)) {
             this.unread[e.chatId!] = (this.unread[e.chatId!] ?? 0) + 1
             this.saveUnread()
           } else if (!e.message.outgoing && e.chatId === this.currentId) {
@@ -810,6 +843,9 @@ class AppState {
       case 'message_updated':
         if (e.chatId && e.detail) await this.refreshMessage(e.chatId, e.detail)
         if (e.chatId && this.pinned[e.chatId]) await this.loadPinned(e.chatId)
+        break
+      case 'chatprefs':
+        await this.refreshChats()
         break
       case 'scheduled':
         this.scheduledTick++
@@ -830,6 +866,8 @@ class AppState {
       case 'group_joined':
       case 'group_updated':
         await this.refreshChats()
+        // e.g. "X left the group" was stored locally
+        if (e.chatId && e.chatId === this.currentId) await this.loadMessages(e.chatId)
         break
       case 'removed': {
         const known = this.chats.some((c) => c.id === e.chatId) // not if we left it ourselves
@@ -896,3 +934,11 @@ class AppState {
 }
 
 export const app = new AppState()
+
+/** Chat list order: pinned chats first (last pinned on top), then newest. */
+export function chatOrder(a: Chat, b: Chat): number {
+  const pa = a.pinned ?? 0, pb = b.pinned ?? 0
+  if (!!pa !== !!pb) return pa ? -1 : 1
+  if (pa !== pb) return pb - pa
+  return b.updatedAt - a.updatedAt
+}

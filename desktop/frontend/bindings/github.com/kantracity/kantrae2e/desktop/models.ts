@@ -73,6 +73,12 @@ export interface Chat {
     "about"?: string;
     "photo"?: string;
     "hasInvite"?: boolean;
+
+    /**
+     * Pinned to the top of the list at (unix ms); notifications muted until.
+     */
+    "pinned"?: number;
+    "mutedUntil"?: number;
 }
 
 export interface Device {

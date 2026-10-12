@@ -51,7 +51,7 @@
       if (al) albums.set(m.id, [m])
     }
     const same = (a?: Message, b?: Message) =>
-      !!a && !!b && a.senderId === b.senderId && a.outgoing === b.outgoing &&
+      !!a && !!b && a.kind !== 'system' && b.kind !== 'system' && a.senderId === b.senderId && a.outgoing === b.outgoing &&
       Math.abs(a.sentAt - b.sentAt) < 5 * 60000 && new Date(a.sentAt).toDateString() === new Date(b.sentAt).toDateString()
     for (let i = ms.length - 1; i >= 0; i--) {
       const m = ms[i]
@@ -140,6 +140,8 @@
   {#each rows as r (r.key)}
     {#if r.kind === 'day'}
       <div class="day"><span>{r.label}</span></div>
+    {:else if r.m.kind === 'system'}
+      <div class="day sys" id={'msg-' + r.m.id} in:fly={{ y: 8, duration: r.animate ? 200 : 0 }}><span>{r.m.text}</span></div>
     {:else if r.animate}
       <div class="row" in:grow>
         <Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} />
@@ -176,6 +178,7 @@
     background: rgba(0, 0, 0, 0.3); border-radius: 12px; padding: 6px 12px; margin: 12px 0; text-align: center; }
   .day { display: flex; justify-content: center; margin: 10px 0; flex-shrink: 0; }
   .day span { background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; font-weight: 500; padding: 4px 10px; border-radius: 12px; }
+  .day.sys span { font-weight: 400; max-width: 80%; text-align: center; line-height: 1.35; }
   .down { position: absolute; right: 20px; bottom: 90px; z-index: 3; width: 48px; height: 48px; border-radius: 50%;
     background: var(--bg-sidebar); color: var(--text-muted); box-shadow: 0 2px 8px rgba(0,0,0,.4);
     display: flex; align-items: center; justify-content: center; transition: color .15s, transform .15s; }

@@ -19,6 +19,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/kantracity/kantrae2e/client/core"
+	"github.com/kantracity/kantrae2e/client/store"
 	"github.com/kantracity/kantrae2e/client/mls"
 	deliveryv1 "github.com/kantracity/kantrae2e/gen/kantra/delivery/v1"
 	"github.com/kantracity/kantrae2e/gen/kantra/delivery/v1/deliveryv1connect"
@@ -197,7 +198,9 @@ func texts(t *testing.T, u *user, gid string) []string {
 	}
 	var out []string
 	for _, m := range ms {
-		out = append(out, m.Body)
+		if m.Kind != "sys" { // group events ("X added Y")
+			out = append(out, m.Body)
+		}
 	}
 	return out
 }
@@ -451,7 +454,8 @@ func TestSeamlessNewDevice(t *testing.T) {
 	ok(t, err)
 	res, err := phone.Recover(ctx, phrase)
 	ok(t, err)
-	if res.Restored != 3 || res.Joined != 3 || res.Requested != 0 { // + self-group
+	// 3 messages + 4 group events (two groups: created, members added); joined: + self-group.
+	if res.Restored != 7 || res.Joined != 3 || res.Requested != 0 {
 		t.Fatalf("login %+v", res)
 	}
 	g, _ := phone.ResolveGroup(ctx, "team")
@@ -472,7 +476,13 @@ func TestSeamlessNewDevice(t *testing.T) {
 	ok(t, phone.Sync(ctx))
 	eq(t, texts(t, phone, gid), "hi all", "last words from the laptop", "while alice was offline")
 	eq(t, texts(t, phone, gid2), "private hello", "are you there?")
-	ms, _ := phone.Messages(ctx, gid, 10)
+	all, _ := phone.Messages(ctx, gid, 20)
+	var ms []store.Message
+	for _, m := range all {
+		if m.Kind != "sys" {
+			ms = append(ms, m)
+		}
+	}
 	if ms[2].Origin != "shared" || ms[0].Origin != "backup" {
 		t.Fatalf("origins %q %q", ms[0].Origin, ms[2].Origin)
 	}

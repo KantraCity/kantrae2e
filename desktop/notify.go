@@ -180,12 +180,12 @@ func (m *Messenger) showChat(key string) {
 }
 
 func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
-	if msg.Outgoing || msg.Origin != "" { // own or restored/shared history
+	if msg.Outgoing || msg.Origin != "" || msg.Kind == "system" { // own, restored/shared history, group events
 		return
 	}
-	// Sent "without sound": counted as unread, but no notification —
-	// unless it mentions this account (like Telegram).
-	silent := msg.Silent && !mentions(msg.Text, s, c)
+	// Sent "without sound" or in a muted chat: counted as unread, but no
+	// notification — unless it mentions this account (like Telegram).
+	silent := (msg.Silent || chatMuted(c, msg.ChatID)) && !mentions(msg.Text, s, c)
 	m.mu.Lock()
 	if s == m.active && m.foreground && m.activeChat == msg.ChatID {
 		m.mu.Unlock()
@@ -374,4 +374,9 @@ func mentions(text string, s *slot, c *core.Client) bool {
 
 func isNameChar(b byte) bool {
 	return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_' || b == '.' || b == '-'
+}
+
+func chatMuted(c *core.Client, chatID string) bool {
+	prefs, err := c.ChatPrefs(context.Background())
+	return err == nil && prefs[chatID].Muted()
 }

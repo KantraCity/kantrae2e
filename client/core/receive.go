@@ -225,7 +225,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 			if GroupKind(e.GroupId) == KindSelf {
 				// Saved GIFs (gifs.go) are the only messages there, and only
 				// from the account's own devices.
-				if uid != c.acct.UserID || (pl.Type != "media" && pl.Type != "delete" && pl.Type != "sched") {
+				if uid != c.acct.UserID || (pl.Type != "media" && pl.Type != "delete" && !selfOnly(pl.Type)) {
 					break
 				}
 			}
@@ -269,7 +269,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 				}
 				break
 			}
-			if !storable(pl.Type) || (pl.Type == "sched" && GroupKind(e.GroupId) != KindSelf) {
+			if !storable(pl.Type) || (selfOnly(pl.Type) && GroupKind(e.GroupId) != KindSelf) || (pl.Type == "sys" && GroupKind(e.GroupId) != KindGroup) {
 				break // a kind of message this version does not know (or out of place): ignore
 			}
 			msg := store.Message{UID: pl.ID, GroupID: e.GroupId, SenderUser: uid, SenderDevice: did,

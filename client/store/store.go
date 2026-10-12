@@ -678,6 +678,16 @@ func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Mess
 	return scanMessages(rows)
 }
 
+// MessagesOfKind returns the newest messages of one kind (oldest first).
+func (s *Store) MessagesOfKind(ctx context.Context, groupID, kind string, limit int) ([]Message, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT * FROM (SELECT `+msgCols+` FROM messages WHERE group_id=? AND kind=? AND deleted=0
+		ORDER BY sent_at DESC, seq DESC LIMIT ?) ORDER BY sent_at, seq`, groupID, kind, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanMessages(rows)
+}
+
 // Pinned returns the pinned messages of a group, newest pin first.
 func (s *Store) Pinned(ctx context.Context, groupID string) ([]Message, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND pinned_at>0 AND deleted=0

@@ -515,7 +515,7 @@ func (c *Client) OpenDirect(ctx context.Context, username string) (string, error
 		return "", err
 	}
 	if !c.otherDevicesOf(members, peer, "") {
-		if err := c.inviteLocked(ctx, gid, []string{username}); err != nil {
+		if _, err := c.inviteLocked(ctx, gid, []string{username}); err != nil {
 			return gid, err
 		}
 	}

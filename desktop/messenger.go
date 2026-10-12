@@ -167,6 +167,9 @@ type Chat struct {
 	About     string `json:"about,omitempty"`
 	Photo     string `json:"photo,omitempty"`
 	HasInvite bool   `json:"hasInvite,omitempty"`
+	// Pinned to the top of the list at (unix ms); notifications muted until.
+	Pinned     int64 `json:"pinned,omitempty"`
+	MutedUntil int64 `json:"mutedUntil,omitempty"`
 }
 
 type Member struct {
@@ -366,6 +369,7 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 		if isActive && (e.Type == core.EventMessage || e.Type == core.EventMessageUpdated) {
 			m.emit(UIEvent{Type: "gifs"})      // saved GIFs / stickers
 			m.emit(UIEvent{Type: "scheduled"}) // scheduled messages
+			m.emit(UIEvent{Type: "chatprefs"}) // pinned / muted chats
 		}
 		if e.Type == core.EventMessage || e.Type == core.EventMessageUpdated {
 			return
@@ -650,9 +654,16 @@ func (m *Messenger) Chats() ([]Chat, error) {
 		}
 	}
 	_ = c.RefreshProfiles(ctx, stale...)
+	prefs, _ := c.ChatPrefs(ctx)
 	out := make([]Chat, 0, len(gs))
 	for _, g := range gs {
 		ch := m.toChat(c, g)
+		if p, ok := prefs[g.ID]; ok {
+			ch.Pinned = p.Pinned
+			if p.Muted() {
+				ch.MutedUntil = p.MutedUntil
+			}
+		}
 		var last int64
 		if ms, err := c.Messages(ctx, g.ID, 1); err == nil && len(ms) == 1 {
 			ch.Last = m.toMessage(c, &ms[0])
@@ -664,8 +675,20 @@ func (m *Messenger) Chats() ([]Chat, error) {
 		}
 		out = append(out, ch)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt > out[j].UpdatedAt })
+	sort.SliceStable(out, func(i, j int) bool { return chatBefore(&out[i], &out[j]) })
 	return out, nil
+}
+
+// chatBefore orders the chat list: pinned chats first (last pinned on
+// top), then by the newest message.
+func chatBefore(a, b *Chat) bool {
+	if (a.Pinned > 0) != (b.Pinned > 0) {
+		return a.Pinned > 0
+	}
+	if a.Pinned != b.Pinned {
+		return a.Pinned > b.Pinned
+	}
+	return a.UpdatedAt > b.UpdatedAt
 }
 
 func (m *Messenger) toChat(c *core.Client, g store.Group) Chat {

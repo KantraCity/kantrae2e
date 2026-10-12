@@ -138,10 +138,15 @@ func (c *Client) applyChatControlLocked(groupID, senderUser string, pl *payload)
 		}
 		// Someone left: remove their devices (any member may; the first
 		// commit wins, the others find nobody left to remove).
-		if GroupKind(groupID) == KindGroup && c.userID() != "" {
+		if GroupKind(groupID) != KindGroup {
+			return func(*store.Tx) error { return nil }, &Event{Type: EventGroupUpdated, GroupID: groupID}
+		}
+		if c.userID() != "" {
 			c.deferLocked(func(ctx context.Context) { c.removeLeaver(ctx, groupID, senderUser) })
 		}
-		return func(*store.Tx) error { return nil }, &Event{Type: EventGroupUpdated, GroupID: groupID}
+		// "X left the group" (the leave message's id: stored once).
+		return c.sysLocal(groupID, pl.ID, senderUser, pl.TS, SysEvent{Action: "leave"}),
+			&Event{Type: EventGroupUpdated, GroupID: groupID}
 	}
 	return nil, nil
 }
