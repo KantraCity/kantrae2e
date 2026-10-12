@@ -19,8 +19,8 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/kantracity/kantrae2e/client/core"
-	"github.com/kantracity/kantrae2e/client/store"
 	"github.com/kantracity/kantrae2e/client/mls"
+	"github.com/kantracity/kantrae2e/client/store"
 	deliveryv1 "github.com/kantracity/kantrae2e/gen/kantra/delivery/v1"
 	"github.com/kantracity/kantrae2e/gen/kantra/delivery/v1/deliveryv1connect"
 	directoryv1 "github.com/kantracity/kantrae2e/gen/kantra/directory/v1"
