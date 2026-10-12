@@ -130,6 +130,11 @@ var migrations = []string{
 	// left_at marks a group this account left (its messages are dropped).
 	`ALTER TABLE groups ADD COLUMN hidden_at INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE groups ADD COLUMN left_at INTEGER NOT NULL DEFAULT 0;`,
+	// Group info (description, photo as a media reference) and the invite
+	// link's secret, all shared among the members through MLS.
+	`ALTER TABLE groups ADD COLUMN about TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE groups ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE groups ADD COLUMN invite TEXT NOT NULL DEFAULT '';`,
 }
 
 func migrate(db *sql.DB) error {
@@ -311,6 +316,9 @@ type Group struct {
 	Peer      string // direct chats: the other user's id
 	HiddenAt  int64  // deleted ("hidden") by the user at this time (unix ms), 0 = never
 	LeftAt    int64  // the account left this group at this time (unix ms), 0 = member
+	About     string // group description
+	Avatar    string // group photo: MediaRef JSON ("" = none)
+	Invite    string // invite link secret ("" = no link)
 }
 
 func (t *Tx) UpsertGroup(g Group) error {
@@ -330,7 +338,7 @@ func (t *Tx) InsertGroupIfMissing(g Group) error {
 }
 
 func (s *Store) Groups(ctx context.Context) ([]Group, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, epoch, active, created_at, peer, hidden_at, left_at FROM groups ORDER BY created_at`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, epoch, active, created_at, peer, hidden_at, left_at, about, avatar, invite FROM groups ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +347,7 @@ func (s *Store) Groups(ctx context.Context) ([]Group, error) {
 	for rows.Next() {
 		var g Group
 		var ep int64
-		if err := rows.Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer, &g.HiddenAt, &g.LeftAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer, &g.HiddenAt, &g.LeftAt, &g.About, &g.Avatar, &g.Invite); err != nil {
 			return nil, err
 		}
 		g.Epoch = uint64(ep)
@@ -351,8 +359,8 @@ func (s *Store) Groups(ctx context.Context) ([]Group, error) {
 func (s *Store) Group(ctx context.Context, id string) (*Group, error) {
 	var g Group
 	var ep int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, name, epoch, active, created_at, peer, hidden_at, left_at FROM groups WHERE id=?`, id).
-		Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer, &g.HiddenAt, &g.LeftAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, epoch, active, created_at, peer, hidden_at, left_at, about, avatar, invite FROM groups WHERE id=?`, id).
+		Scan(&g.ID, &g.Name, &ep, &g.Active, &g.CreatedAt, &g.Peer, &g.HiddenAt, &g.LeftAt, &g.About, &g.Avatar, &g.Invite)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -448,6 +456,31 @@ func (t *Tx) ClearMessages(groupID string, upto int64) (int64, error) {
 func (t *Tx) SetChatFlags(groupID string, hiddenAt, leftAt int64) error {
 	_, err := t.tx.Exec(`UPDATE groups SET hidden_at=max(hidden_at, ?), left_at=max(left_at, ?) WHERE id=?`, hiddenAt, leftAt, groupID)
 	return err
+}
+
+// GroupInfoUpdate changes the shared group info; nil fields stay as they are.
+type GroupInfoUpdate struct {
+	Name, About, Avatar, Invite *string
+}
+
+// SetGroupInfo applies a group info change (from MLS "meta" messages).
+func (t *Tx) SetGroupInfo(groupID string, u GroupInfoUpdate) error {
+	set := func(col string, v *string) error {
+		if v == nil {
+			return nil
+		}
+		_, err := t.tx.Exec(`UPDATE groups SET `+col+`=? WHERE id=?`, *v, groupID)
+		return err
+	}
+	for _, f := range []struct {
+		col string
+		v   *string
+	}{{"name", u.Name}, {"about", u.About}, {"avatar", u.Avatar}, {"invite", u.Invite}} {
+		if err := set(f.col, f.v); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ResetChatFlags shows a hidden chat again / clears "left" (joined again).

@@ -47,8 +47,15 @@ type payload struct {
 // storable reports whether a payload type is a user-visible message.
 func storable(t string) bool { return t == "text" || t == "media" }
 
+// groupMeta: group info shared among the members (groupinfo.go). Nil
+// pointers leave a field unchanged; Name is always set by older clients.
 type groupMeta struct {
-	Name string `json:"name"`
+	Name   string    `json:"name"`
+	About  *string   `json:"about,omitempty"`
+	Avatar *MediaRef `json:"avatar,omitempty"` // Hash "" removes the photo
+	Invite *string   `json:"invite,omitempty"` // "" revokes the link
+	// Keep: the name is not part of this change (only other fields are).
+	KeepName bool `json:"keep_name,omitempty"`
 }
 
 // maxCommitRetries bounds re-attempts after epoch conflicts.
@@ -191,11 +198,13 @@ func (c *Client) inviteLocked(ctx context.Context, groupID string, usernames []s
 		return err
 	}
 	// Tell the new members the group's name.
-	g, err := c.st.Group(ctx, groupID)
-	if err == nil && g.Name != "" {
-		_, err = c.sendLocked(ctx, groupID, payload{Type: "meta", Meta: &groupMeta{Name: g.Name}})
+	// Tell the new members the group's info (name, description, photo,
+	// invite link).
+	if g, err := c.st.Group(ctx, groupID); err == nil {
+		_, err = c.sendLocked(ctx, groupID, payload{Type: "meta", Meta: fullMeta(g)})
+		return err
 	}
-	return err
+	return nil
 }
 
 // Remove removes all devices of a user from the group.

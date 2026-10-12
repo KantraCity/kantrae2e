@@ -81,6 +81,61 @@ func (MessageType) EnumDescriptor() ([]byte, []int) {
 	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{0}
 }
 
+// Who sees one's last seen time.
+type PresenceVisibility int32
+
+const (
+	// Not set: everybody (the default).
+	PresenceVisibility_PRESENCE_VISIBILITY_UNSPECIFIED PresenceVisibility = 0
+	PresenceVisibility_PRESENCE_VISIBILITY_EVERYBODY   PresenceVisibility = 1
+	// Only people one shares a chat with.
+	PresenceVisibility_PRESENCE_VISIBILITY_CHATS  PresenceVisibility = 2
+	PresenceVisibility_PRESENCE_VISIBILITY_NOBODY PresenceVisibility = 3
+)
+
+// Enum value maps for PresenceVisibility.
+var (
+	PresenceVisibility_name = map[int32]string{
+		0: "PRESENCE_VISIBILITY_UNSPECIFIED",
+		1: "PRESENCE_VISIBILITY_EVERYBODY",
+		2: "PRESENCE_VISIBILITY_CHATS",
+		3: "PRESENCE_VISIBILITY_NOBODY",
+	}
+	PresenceVisibility_value = map[string]int32{
+		"PRESENCE_VISIBILITY_UNSPECIFIED": 0,
+		"PRESENCE_VISIBILITY_EVERYBODY":   1,
+		"PRESENCE_VISIBILITY_CHATS":       2,
+		"PRESENCE_VISIBILITY_NOBODY":      3,
+	}
+)
+
+func (x PresenceVisibility) Enum() *PresenceVisibility {
+	p := new(PresenceVisibility)
+	*p = x
+	return p
+}
+
+func (x PresenceVisibility) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PresenceVisibility) Descriptor() protoreflect.EnumDescriptor {
+	return file_kantra_delivery_v1_delivery_proto_enumTypes[1].Descriptor()
+}
+
+func (PresenceVisibility) Type() protoreflect.EnumType {
+	return &file_kantra_delivery_v1_delivery_proto_enumTypes[1]
+}
+
+func (x PresenceVisibility) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PresenceVisibility.Descriptor instead.
+func (PresenceVisibility) EnumDescriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{1}
+}
+
 // One queued message for a device.
 type Envelope struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -1356,9 +1411,13 @@ func (x *ExternalJoinResponse) GetNewEpoch() uint64 {
 }
 
 type RequestJoinRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
-	KeyPackage    []byte                 `protobuf:"bytes,2,opt,name=key_package,json=keyPackage,proto3" json:"key_package,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	GroupId    string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	KeyPackage []byte                 `protobuf:"bytes,2,opt,name=key_package,json=keyPackage,proto3" json:"key_package,omitempty"`
+	// Joining by an invite link: the link's secret (hex). The server checks
+	// it against the stored hash; the members check it again (they know the
+	// secret through MLS) before adding the user.
+	InviteSecret  string `protobuf:"bytes,3,opt,name=invite_secret,json=inviteSecret,proto3" json:"invite_secret,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1405,6 +1464,13 @@ func (x *RequestJoinRequest) GetKeyPackage() []byte {
 		return x.KeyPackage
 	}
 	return nil
+}
+
+func (x *RequestJoinRequest) GetInviteSecret() string {
+	if x != nil {
+		return x.InviteSecret
+	}
+	return ""
 }
 
 type RequestJoinResponse struct {
@@ -1523,6 +1589,493 @@ func (*TypingResponse) Descriptor() ([]byte, []int) {
 	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{27}
 }
 
+type GetPresenceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPresenceRequest) Reset() {
+	*x = GetPresenceRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPresenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPresenceRequest) ProtoMessage() {}
+
+func (x *GetPresenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPresenceRequest.ProtoReflect.Descriptor instead.
+func (*GetPresenceRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetPresenceRequest) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+type Presence struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Online bool                   `protobuf:"varint,2,opt,name=online,proto3" json:"online,omitempty"`
+	// Unix seconds; 0 if hidden (then "recently" is shown, like Telegram).
+	LastSeen int64 `protobuf:"varint,3,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	// Hidden by the user's privacy, or because the caller hides their own.
+	Hidden        bool `protobuf:"varint,4,opt,name=hidden,proto3" json:"hidden,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Presence) Reset() {
+	*x = Presence{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Presence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Presence) ProtoMessage() {}
+
+func (x *Presence) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Presence.ProtoReflect.Descriptor instead.
+func (*Presence) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *Presence) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *Presence) GetOnline() bool {
+	if x != nil {
+		return x.Online
+	}
+	return false
+}
+
+func (x *Presence) GetLastSeen() int64 {
+	if x != nil {
+		return x.LastSeen
+	}
+	return 0
+}
+
+func (x *Presence) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
+}
+
+type GetPresenceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Presence      []*Presence            `protobuf:"bytes,1,rep,name=presence,proto3" json:"presence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPresenceResponse) Reset() {
+	*x = GetPresenceResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPresenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPresenceResponse) ProtoMessage() {}
+
+func (x *GetPresenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPresenceResponse.ProtoReflect.Descriptor instead.
+func (*GetPresenceResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetPresenceResponse) GetPresence() []*Presence {
+	if x != nil {
+		return x.Presence
+	}
+	return nil
+}
+
+type SetPresencePrivacyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Visibility    PresenceVisibility     `protobuf:"varint,1,opt,name=visibility,proto3,enum=kantra.delivery.v1.PresenceVisibility" json:"visibility,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetPresencePrivacyRequest) Reset() {
+	*x = SetPresencePrivacyRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPresencePrivacyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPresencePrivacyRequest) ProtoMessage() {}
+
+func (x *SetPresencePrivacyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPresencePrivacyRequest.ProtoReflect.Descriptor instead.
+func (*SetPresencePrivacyRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *SetPresencePrivacyRequest) GetVisibility() PresenceVisibility {
+	if x != nil {
+		return x.Visibility
+	}
+	return PresenceVisibility_PRESENCE_VISIBILITY_UNSPECIFIED
+}
+
+type SetPresencePrivacyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetPresencePrivacyResponse) Reset() {
+	*x = SetPresencePrivacyResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPresencePrivacyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPresencePrivacyResponse) ProtoMessage() {}
+
+func (x *SetPresencePrivacyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPresencePrivacyResponse.ProtoReflect.Descriptor instead.
+func (*SetPresencePrivacyResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{32}
+}
+
+type GetPresencePrivacyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPresencePrivacyRequest) Reset() {
+	*x = GetPresencePrivacyRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPresencePrivacyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPresencePrivacyRequest) ProtoMessage() {}
+
+func (x *GetPresencePrivacyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPresencePrivacyRequest.ProtoReflect.Descriptor instead.
+func (*GetPresencePrivacyRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{33}
+}
+
+type GetPresencePrivacyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Visibility    PresenceVisibility     `protobuf:"varint,1,opt,name=visibility,proto3,enum=kantra.delivery.v1.PresenceVisibility" json:"visibility,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPresencePrivacyResponse) Reset() {
+	*x = GetPresencePrivacyResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPresencePrivacyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPresencePrivacyResponse) ProtoMessage() {}
+
+func (x *GetPresencePrivacyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPresencePrivacyResponse.ProtoReflect.Descriptor instead.
+func (*GetPresencePrivacyResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *GetPresencePrivacyResponse) GetVisibility() PresenceVisibility {
+	if x != nil {
+		return x.Visibility
+	}
+	return PresenceVisibility_PRESENCE_VISIBILITY_UNSPECIFIED
+}
+
+type SetGroupInviteRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	GroupId string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// SHA-256 of the invite secret; empty revokes the link.
+	SecretHash    []byte `protobuf:"bytes,2,opt,name=secret_hash,json=secretHash,proto3" json:"secret_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetGroupInviteRequest) Reset() {
+	*x = SetGroupInviteRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetGroupInviteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetGroupInviteRequest) ProtoMessage() {}
+
+func (x *SetGroupInviteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetGroupInviteRequest.ProtoReflect.Descriptor instead.
+func (*SetGroupInviteRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SetGroupInviteRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *SetGroupInviteRequest) GetSecretHash() []byte {
+	if x != nil {
+		return x.SecretHash
+	}
+	return nil
+}
+
+type SetGroupInviteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetGroupInviteResponse) Reset() {
+	*x = SetGroupInviteResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetGroupInviteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetGroupInviteResponse) ProtoMessage() {}
+
+func (x *SetGroupInviteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetGroupInviteResponse.ProtoReflect.Descriptor instead.
+func (*SetGroupInviteResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{36}
+}
+
+type SetActiveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Active        bool                   `protobuf:"varint,1,opt,name=active,proto3" json:"active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetActiveRequest) Reset() {
+	*x = SetActiveRequest{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetActiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetActiveRequest) ProtoMessage() {}
+
+func (x *SetActiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetActiveRequest.ProtoReflect.Descriptor instead.
+func (*SetActiveRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *SetActiveRequest) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+type SetActiveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetActiveResponse) Reset() {
+	*x = SetActiveResponse{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetActiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetActiveResponse) ProtoMessage() {}
+
+func (x *SetActiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetActiveResponse.ProtoReflect.Descriptor instead.
+func (*SetActiveResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{38}
+}
+
 var File_kantra_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
@@ -1606,22 +2159,55 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
 	"group_info\x18\x04 \x01(\fR\tgroupInfo\"3\n" +
 	"\x14ExternalJoinResponse\x12\x1b\n" +
-	"\tnew_epoch\x18\x01 \x01(\x04R\bnewEpoch\"P\n" +
+	"\tnew_epoch\x18\x01 \x01(\x04R\bnewEpoch\"u\n" +
 	"\x12RequestJoinRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1f\n" +
 	"\vkey_package\x18\x02 \x01(\fR\n" +
-	"keyPackage\"\x15\n" +
+	"keyPackage\x12#\n" +
+	"\rinvite_secret\x18\x03 \x01(\tR\finviteSecret\"\x15\n" +
 	"\x13RequestJoinResponse\"*\n" +
 	"\rTypingRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"\x10\n" +
-	"\x0eTypingResponse*\xb4\x01\n" +
+	"\x0eTypingResponse\"/\n" +
+	"\x12GetPresenceRequest\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds\"p\n" +
+	"\bPresence\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
+	"\x06online\x18\x02 \x01(\bR\x06online\x12\x1b\n" +
+	"\tlast_seen\x18\x03 \x01(\x03R\blastSeen\x12\x16\n" +
+	"\x06hidden\x18\x04 \x01(\bR\x06hidden\"O\n" +
+	"\x13GetPresenceResponse\x128\n" +
+	"\bpresence\x18\x01 \x03(\v2\x1c.kantra.delivery.v1.PresenceR\bpresence\"c\n" +
+	"\x19SetPresencePrivacyRequest\x12F\n" +
+	"\n" +
+	"visibility\x18\x01 \x01(\x0e2&.kantra.delivery.v1.PresenceVisibilityR\n" +
+	"visibility\"\x1c\n" +
+	"\x1aSetPresencePrivacyResponse\"\x1b\n" +
+	"\x19GetPresencePrivacyRequest\"d\n" +
+	"\x1aGetPresencePrivacyResponse\x12F\n" +
+	"\n" +
+	"visibility\x18\x01 \x01(\x0e2&.kantra.delivery.v1.PresenceVisibilityR\n" +
+	"visibility\"S\n" +
+	"\x15SetGroupInviteRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1f\n" +
+	"\vsecret_hash\x18\x02 \x01(\fR\n" +
+	"secretHash\"\x18\n" +
+	"\x16SetGroupInviteResponse\"*\n" +
+	"\x10SetActiveRequest\x12\x16\n" +
+	"\x06active\x18\x01 \x01(\bR\x06active\"\x13\n" +
+	"\x11SetActiveResponse*\xb4\x01\n" +
 	"\vMessageType\x12\x1c\n" +
 	"\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MESSAGE_TYPE_COMMIT\x10\x01\x12\x1c\n" +
 	"\x18MESSAGE_TYPE_APPLICATION\x10\x02\x12\x18\n" +
 	"\x14MESSAGE_TYPE_WELCOME\x10\x03\x12\x1d\n" +
 	"\x19MESSAGE_TYPE_JOIN_REQUEST\x10\x04\x12\x17\n" +
-	"\x13MESSAGE_TYPE_TYPING\x10\x052\x91\t\n" +
+	"\x13MESSAGE_TYPE_TYPING\x10\x05*\x9b\x01\n" +
+	"\x12PresenceVisibility\x12#\n" +
+	"\x1fPRESENCE_VISIBILITY_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dPRESENCE_VISIBILITY_EVERYBODY\x10\x01\x12\x1d\n" +
+	"\x19PRESENCE_VISIBILITY_CHATS\x10\x02\x12\x1e\n" +
+	"\x1aPRESENCE_VISIBILITY_NOBODY\x10\x032\xa8\r\n" +
 	"\x0fDeliveryService\x12`\n" +
 	"\vCreateGroup\x12&.kantra.delivery.v1.CreateGroupRequest\x1a'.kantra.delivery.v1.CreateGroupResponse\"\x00\x12]\n" +
 	"\n" +
@@ -1635,7 +2221,12 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\fGetGroupInfo\x12'.kantra.delivery.v1.GetGroupInfoRequest\x1a(.kantra.delivery.v1.GetGroupInfoResponse\"\x00\x12c\n" +
 	"\fExternalJoin\x12'.kantra.delivery.v1.ExternalJoinRequest\x1a(.kantra.delivery.v1.ExternalJoinResponse\"\x00\x12`\n" +
 	"\vRequestJoin\x12&.kantra.delivery.v1.RequestJoinRequest\x1a'.kantra.delivery.v1.RequestJoinResponse\"\x00\x12Q\n" +
-	"\x06Typing\x12!.kantra.delivery.v1.TypingRequest\x1a\".kantra.delivery.v1.TypingResponse\"\x00B\xd4\x01\n" +
+	"\x06Typing\x12!.kantra.delivery.v1.TypingRequest\x1a\".kantra.delivery.v1.TypingResponse\"\x00\x12`\n" +
+	"\vGetPresence\x12&.kantra.delivery.v1.GetPresenceRequest\x1a'.kantra.delivery.v1.GetPresenceResponse\"\x00\x12Z\n" +
+	"\tSetActive\x12$.kantra.delivery.v1.SetActiveRequest\x1a%.kantra.delivery.v1.SetActiveResponse\"\x00\x12u\n" +
+	"\x12SetPresencePrivacy\x12-.kantra.delivery.v1.SetPresencePrivacyRequest\x1a..kantra.delivery.v1.SetPresencePrivacyResponse\"\x00\x12u\n" +
+	"\x12GetPresencePrivacy\x12-.kantra.delivery.v1.GetPresencePrivacyRequest\x1a..kantra.delivery.v1.GetPresencePrivacyResponse\"\x00\x12i\n" +
+	"\x0eSetGroupInvite\x12).kantra.delivery.v1.SetGroupInviteRequest\x1a*.kantra.delivery.v1.SetGroupInviteResponse\"\x00B\xd4\x01\n" +
 	"\x16com.kantra.delivery.v1B\rDeliveryProtoP\x01ZAgithub.com/kantracity/kantrae2e/gen/kantra/delivery/v1;deliveryv1\xa2\x02\x03KDX\xaa\x02\x12Kantra.Delivery.V1\xca\x02\x12Kantra\\Delivery\\V1\xe2\x02\x1eKantra\\Delivery\\V1\\GPBMetadata\xea\x02\x14Kantra::Delivery::V1b\x06proto3"
 
 var (
@@ -1650,73 +2241,98 @@ func file_kantra_delivery_v1_delivery_proto_rawDescGZIP() []byte {
 	return file_kantra_delivery_v1_delivery_proto_rawDescData
 }
 
-var file_kantra_delivery_v1_delivery_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_kantra_delivery_v1_delivery_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_kantra_delivery_v1_delivery_proto_goTypes = []any{
-	(MessageType)(0),                // 0: kantra.delivery.v1.MessageType
-	(*Envelope)(nil),                // 1: kantra.delivery.v1.Envelope
-	(*ClientFrame)(nil),             // 2: kantra.delivery.v1.ClientFrame
-	(*Ack)(nil),                     // 3: kantra.delivery.v1.Ack
-	(*CreateGroupRequest)(nil),      // 4: kantra.delivery.v1.CreateGroupRequest
-	(*CreateGroupResponse)(nil),     // 5: kantra.delivery.v1.CreateGroupResponse
-	(*SendCommitRequest)(nil),       // 6: kantra.delivery.v1.SendCommitRequest
-	(*SendCommitResponse)(nil),      // 7: kantra.delivery.v1.SendCommitResponse
-	(*SendApplicationRequest)(nil),  // 8: kantra.delivery.v1.SendApplicationRequest
-	(*SendApplicationResponse)(nil), // 9: kantra.delivery.v1.SendApplicationResponse
-	(*FetchWelcomeRequest)(nil),     // 10: kantra.delivery.v1.FetchWelcomeRequest
-	(*FetchWelcomeResponse)(nil),    // 11: kantra.delivery.v1.FetchWelcomeResponse
-	(*FetchPendingRequest)(nil),     // 12: kantra.delivery.v1.FetchPendingRequest
-	(*FetchPendingResponse)(nil),    // 13: kantra.delivery.v1.FetchPendingResponse
-	(*AckRequest)(nil),              // 14: kantra.delivery.v1.AckRequest
-	(*AckResponse)(nil),             // 15: kantra.delivery.v1.AckResponse
-	(*GetGroupRequest)(nil),         // 16: kantra.delivery.v1.GetGroupRequest
-	(*GetGroupResponse)(nil),        // 17: kantra.delivery.v1.GetGroupResponse
-	(*ListMyGroupsRequest)(nil),     // 18: kantra.delivery.v1.ListMyGroupsRequest
-	(*MyGroup)(nil),                 // 19: kantra.delivery.v1.MyGroup
-	(*ListMyGroupsResponse)(nil),    // 20: kantra.delivery.v1.ListMyGroupsResponse
-	(*GetGroupInfoRequest)(nil),     // 21: kantra.delivery.v1.GetGroupInfoRequest
-	(*GetGroupInfoResponse)(nil),    // 22: kantra.delivery.v1.GetGroupInfoResponse
-	(*ExternalJoinRequest)(nil),     // 23: kantra.delivery.v1.ExternalJoinRequest
-	(*ExternalJoinResponse)(nil),    // 24: kantra.delivery.v1.ExternalJoinResponse
-	(*RequestJoinRequest)(nil),      // 25: kantra.delivery.v1.RequestJoinRequest
-	(*RequestJoinResponse)(nil),     // 26: kantra.delivery.v1.RequestJoinResponse
-	(*TypingRequest)(nil),           // 27: kantra.delivery.v1.TypingRequest
-	(*TypingResponse)(nil),          // 28: kantra.delivery.v1.TypingResponse
+	(MessageType)(0),                   // 0: kantra.delivery.v1.MessageType
+	(PresenceVisibility)(0),            // 1: kantra.delivery.v1.PresenceVisibility
+	(*Envelope)(nil),                   // 2: kantra.delivery.v1.Envelope
+	(*ClientFrame)(nil),                // 3: kantra.delivery.v1.ClientFrame
+	(*Ack)(nil),                        // 4: kantra.delivery.v1.Ack
+	(*CreateGroupRequest)(nil),         // 5: kantra.delivery.v1.CreateGroupRequest
+	(*CreateGroupResponse)(nil),        // 6: kantra.delivery.v1.CreateGroupResponse
+	(*SendCommitRequest)(nil),          // 7: kantra.delivery.v1.SendCommitRequest
+	(*SendCommitResponse)(nil),         // 8: kantra.delivery.v1.SendCommitResponse
+	(*SendApplicationRequest)(nil),     // 9: kantra.delivery.v1.SendApplicationRequest
+	(*SendApplicationResponse)(nil),    // 10: kantra.delivery.v1.SendApplicationResponse
+	(*FetchWelcomeRequest)(nil),        // 11: kantra.delivery.v1.FetchWelcomeRequest
+	(*FetchWelcomeResponse)(nil),       // 12: kantra.delivery.v1.FetchWelcomeResponse
+	(*FetchPendingRequest)(nil),        // 13: kantra.delivery.v1.FetchPendingRequest
+	(*FetchPendingResponse)(nil),       // 14: kantra.delivery.v1.FetchPendingResponse
+	(*AckRequest)(nil),                 // 15: kantra.delivery.v1.AckRequest
+	(*AckResponse)(nil),                // 16: kantra.delivery.v1.AckResponse
+	(*GetGroupRequest)(nil),            // 17: kantra.delivery.v1.GetGroupRequest
+	(*GetGroupResponse)(nil),           // 18: kantra.delivery.v1.GetGroupResponse
+	(*ListMyGroupsRequest)(nil),        // 19: kantra.delivery.v1.ListMyGroupsRequest
+	(*MyGroup)(nil),                    // 20: kantra.delivery.v1.MyGroup
+	(*ListMyGroupsResponse)(nil),       // 21: kantra.delivery.v1.ListMyGroupsResponse
+	(*GetGroupInfoRequest)(nil),        // 22: kantra.delivery.v1.GetGroupInfoRequest
+	(*GetGroupInfoResponse)(nil),       // 23: kantra.delivery.v1.GetGroupInfoResponse
+	(*ExternalJoinRequest)(nil),        // 24: kantra.delivery.v1.ExternalJoinRequest
+	(*ExternalJoinResponse)(nil),       // 25: kantra.delivery.v1.ExternalJoinResponse
+	(*RequestJoinRequest)(nil),         // 26: kantra.delivery.v1.RequestJoinRequest
+	(*RequestJoinResponse)(nil),        // 27: kantra.delivery.v1.RequestJoinResponse
+	(*TypingRequest)(nil),              // 28: kantra.delivery.v1.TypingRequest
+	(*TypingResponse)(nil),             // 29: kantra.delivery.v1.TypingResponse
+	(*GetPresenceRequest)(nil),         // 30: kantra.delivery.v1.GetPresenceRequest
+	(*Presence)(nil),                   // 31: kantra.delivery.v1.Presence
+	(*GetPresenceResponse)(nil),        // 32: kantra.delivery.v1.GetPresenceResponse
+	(*SetPresencePrivacyRequest)(nil),  // 33: kantra.delivery.v1.SetPresencePrivacyRequest
+	(*SetPresencePrivacyResponse)(nil), // 34: kantra.delivery.v1.SetPresencePrivacyResponse
+	(*GetPresencePrivacyRequest)(nil),  // 35: kantra.delivery.v1.GetPresencePrivacyRequest
+	(*GetPresencePrivacyResponse)(nil), // 36: kantra.delivery.v1.GetPresencePrivacyResponse
+	(*SetGroupInviteRequest)(nil),      // 37: kantra.delivery.v1.SetGroupInviteRequest
+	(*SetGroupInviteResponse)(nil),     // 38: kantra.delivery.v1.SetGroupInviteResponse
+	(*SetActiveRequest)(nil),           // 39: kantra.delivery.v1.SetActiveRequest
+	(*SetActiveResponse)(nil),          // 40: kantra.delivery.v1.SetActiveResponse
 }
 var file_kantra_delivery_v1_delivery_proto_depIdxs = []int32{
 	0,  // 0: kantra.delivery.v1.Envelope.type:type_name -> kantra.delivery.v1.MessageType
-	3,  // 1: kantra.delivery.v1.ClientFrame.ack:type_name -> kantra.delivery.v1.Ack
-	1,  // 2: kantra.delivery.v1.FetchPendingResponse.envelopes:type_name -> kantra.delivery.v1.Envelope
-	19, // 3: kantra.delivery.v1.ListMyGroupsResponse.groups:type_name -> kantra.delivery.v1.MyGroup
-	4,  // 4: kantra.delivery.v1.DeliveryService.CreateGroup:input_type -> kantra.delivery.v1.CreateGroupRequest
-	6,  // 5: kantra.delivery.v1.DeliveryService.SendCommit:input_type -> kantra.delivery.v1.SendCommitRequest
-	8,  // 6: kantra.delivery.v1.DeliveryService.SendApplication:input_type -> kantra.delivery.v1.SendApplicationRequest
-	10, // 7: kantra.delivery.v1.DeliveryService.FetchWelcome:input_type -> kantra.delivery.v1.FetchWelcomeRequest
-	12, // 8: kantra.delivery.v1.DeliveryService.FetchPending:input_type -> kantra.delivery.v1.FetchPendingRequest
-	14, // 9: kantra.delivery.v1.DeliveryService.Ack:input_type -> kantra.delivery.v1.AckRequest
-	16, // 10: kantra.delivery.v1.DeliveryService.GetGroup:input_type -> kantra.delivery.v1.GetGroupRequest
-	18, // 11: kantra.delivery.v1.DeliveryService.ListMyGroups:input_type -> kantra.delivery.v1.ListMyGroupsRequest
-	21, // 12: kantra.delivery.v1.DeliveryService.GetGroupInfo:input_type -> kantra.delivery.v1.GetGroupInfoRequest
-	23, // 13: kantra.delivery.v1.DeliveryService.ExternalJoin:input_type -> kantra.delivery.v1.ExternalJoinRequest
-	25, // 14: kantra.delivery.v1.DeliveryService.RequestJoin:input_type -> kantra.delivery.v1.RequestJoinRequest
-	27, // 15: kantra.delivery.v1.DeliveryService.Typing:input_type -> kantra.delivery.v1.TypingRequest
-	5,  // 16: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
-	7,  // 17: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
-	9,  // 18: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
-	11, // 19: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
-	13, // 20: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
-	15, // 21: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
-	17, // 22: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
-	20, // 23: kantra.delivery.v1.DeliveryService.ListMyGroups:output_type -> kantra.delivery.v1.ListMyGroupsResponse
-	22, // 24: kantra.delivery.v1.DeliveryService.GetGroupInfo:output_type -> kantra.delivery.v1.GetGroupInfoResponse
-	24, // 25: kantra.delivery.v1.DeliveryService.ExternalJoin:output_type -> kantra.delivery.v1.ExternalJoinResponse
-	26, // 26: kantra.delivery.v1.DeliveryService.RequestJoin:output_type -> kantra.delivery.v1.RequestJoinResponse
-	28, // 27: kantra.delivery.v1.DeliveryService.Typing:output_type -> kantra.delivery.v1.TypingResponse
-	16, // [16:28] is the sub-list for method output_type
-	4,  // [4:16] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	4,  // 1: kantra.delivery.v1.ClientFrame.ack:type_name -> kantra.delivery.v1.Ack
+	2,  // 2: kantra.delivery.v1.FetchPendingResponse.envelopes:type_name -> kantra.delivery.v1.Envelope
+	20, // 3: kantra.delivery.v1.ListMyGroupsResponse.groups:type_name -> kantra.delivery.v1.MyGroup
+	31, // 4: kantra.delivery.v1.GetPresenceResponse.presence:type_name -> kantra.delivery.v1.Presence
+	1,  // 5: kantra.delivery.v1.SetPresencePrivacyRequest.visibility:type_name -> kantra.delivery.v1.PresenceVisibility
+	1,  // 6: kantra.delivery.v1.GetPresencePrivacyResponse.visibility:type_name -> kantra.delivery.v1.PresenceVisibility
+	5,  // 7: kantra.delivery.v1.DeliveryService.CreateGroup:input_type -> kantra.delivery.v1.CreateGroupRequest
+	7,  // 8: kantra.delivery.v1.DeliveryService.SendCommit:input_type -> kantra.delivery.v1.SendCommitRequest
+	9,  // 9: kantra.delivery.v1.DeliveryService.SendApplication:input_type -> kantra.delivery.v1.SendApplicationRequest
+	11, // 10: kantra.delivery.v1.DeliveryService.FetchWelcome:input_type -> kantra.delivery.v1.FetchWelcomeRequest
+	13, // 11: kantra.delivery.v1.DeliveryService.FetchPending:input_type -> kantra.delivery.v1.FetchPendingRequest
+	15, // 12: kantra.delivery.v1.DeliveryService.Ack:input_type -> kantra.delivery.v1.AckRequest
+	17, // 13: kantra.delivery.v1.DeliveryService.GetGroup:input_type -> kantra.delivery.v1.GetGroupRequest
+	19, // 14: kantra.delivery.v1.DeliveryService.ListMyGroups:input_type -> kantra.delivery.v1.ListMyGroupsRequest
+	22, // 15: kantra.delivery.v1.DeliveryService.GetGroupInfo:input_type -> kantra.delivery.v1.GetGroupInfoRequest
+	24, // 16: kantra.delivery.v1.DeliveryService.ExternalJoin:input_type -> kantra.delivery.v1.ExternalJoinRequest
+	26, // 17: kantra.delivery.v1.DeliveryService.RequestJoin:input_type -> kantra.delivery.v1.RequestJoinRequest
+	28, // 18: kantra.delivery.v1.DeliveryService.Typing:input_type -> kantra.delivery.v1.TypingRequest
+	30, // 19: kantra.delivery.v1.DeliveryService.GetPresence:input_type -> kantra.delivery.v1.GetPresenceRequest
+	39, // 20: kantra.delivery.v1.DeliveryService.SetActive:input_type -> kantra.delivery.v1.SetActiveRequest
+	33, // 21: kantra.delivery.v1.DeliveryService.SetPresencePrivacy:input_type -> kantra.delivery.v1.SetPresencePrivacyRequest
+	35, // 22: kantra.delivery.v1.DeliveryService.GetPresencePrivacy:input_type -> kantra.delivery.v1.GetPresencePrivacyRequest
+	37, // 23: kantra.delivery.v1.DeliveryService.SetGroupInvite:input_type -> kantra.delivery.v1.SetGroupInviteRequest
+	6,  // 24: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
+	8,  // 25: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
+	10, // 26: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
+	12, // 27: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
+	14, // 28: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
+	16, // 29: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
+	18, // 30: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
+	21, // 31: kantra.delivery.v1.DeliveryService.ListMyGroups:output_type -> kantra.delivery.v1.ListMyGroupsResponse
+	23, // 32: kantra.delivery.v1.DeliveryService.GetGroupInfo:output_type -> kantra.delivery.v1.GetGroupInfoResponse
+	25, // 33: kantra.delivery.v1.DeliveryService.ExternalJoin:output_type -> kantra.delivery.v1.ExternalJoinResponse
+	27, // 34: kantra.delivery.v1.DeliveryService.RequestJoin:output_type -> kantra.delivery.v1.RequestJoinResponse
+	29, // 35: kantra.delivery.v1.DeliveryService.Typing:output_type -> kantra.delivery.v1.TypingResponse
+	32, // 36: kantra.delivery.v1.DeliveryService.GetPresence:output_type -> kantra.delivery.v1.GetPresenceResponse
+	40, // 37: kantra.delivery.v1.DeliveryService.SetActive:output_type -> kantra.delivery.v1.SetActiveResponse
+	34, // 38: kantra.delivery.v1.DeliveryService.SetPresencePrivacy:output_type -> kantra.delivery.v1.SetPresencePrivacyResponse
+	36, // 39: kantra.delivery.v1.DeliveryService.GetPresencePrivacy:output_type -> kantra.delivery.v1.GetPresencePrivacyResponse
+	38, // 40: kantra.delivery.v1.DeliveryService.SetGroupInvite:output_type -> kantra.delivery.v1.SetGroupInviteResponse
+	24, // [24:41] is the sub-list for method output_type
+	7,  // [7:24] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_kantra_delivery_v1_delivery_proto_init() }
@@ -1732,8 +2348,8 @@ func file_kantra_delivery_v1_delivery_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_delivery_v1_delivery_proto_rawDesc), len(file_kantra_delivery_v1_delivery_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   28,
+			NumEnums:      2,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

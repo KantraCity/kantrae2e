@@ -20,6 +20,7 @@ package core
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -246,6 +247,10 @@ func (c *Client) handleJoinRequestLocked(e *deliveryv1.Envelope) {
 	}
 	if GroupKind(e.GroupId) == KindSelf {
 		c.handleSelfJoinRequestLocked(e.GroupId, uid, did, e.Payload) // needs the user's approval
+		return
+	}
+	if secret, kp, ok := inviteJoinPayload(e.Payload); ok {
+		c.handleInviteJoinLocked(e.GroupId, uid, did, secret, kp)
 		return
 	}
 	want := identity(uid, did)
@@ -490,4 +495,50 @@ func (c *Client) RevokeDevice(ctx context.Context, deviceID string) (int, error)
 		removed++
 	}
 	return removed, nil
+}
+
+// handleInviteJoinLocked: someone opened the group's invite link. Members
+// add them if the secret matches the link they know (first one wins).
+func (c *Client) handleInviteJoinLocked(groupID, uid, did, secret string, kp []byte) {
+	g, err := c.st.Group(context.Background(), groupID)
+	if err != nil || g.Invite == "" || subtle.ConstantTimeCompare([]byte(g.Invite), []byte(secret)) != 1 || g.LeftAt > 0 {
+		c.logf("join by invite into %s: link not valid here", groupID)
+		return
+	}
+	want := identity(uid, did)
+	kpID, _, err := mls.KeyPackageInfo(kp)
+	if err != nil || string(kpID) != string(want) {
+		c.logf("invite join request with mismatching key package in %s ignored", groupID)
+		return
+	}
+	_, members, err := c.m.GroupInfo([]byte(groupID))
+	if err != nil || hasIdentity(members, want) {
+		return
+	}
+	c.deferLocked(func(ctx context.Context) {
+		if !sleepCtx(ctx, jitter(false)) {
+			return
+		}
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if err := c.syncLocked(ctx); err != nil {
+			return
+		}
+		still := func() (bool, error) {
+			_, members, err := c.m.GroupInfo([]byte(groupID))
+			if err != nil {
+				return false, nil
+			}
+			return !hasIdentity(members, want), nil
+		}
+		if err := c.commitLocked(ctx, groupID, commitSpec{adds: [][]byte{kp}, addedDevices: []string{did},
+			addedUsers: []string{uid}, still: still}); err != nil {
+			c.logf("add by invite into %s: %v", groupID, err)
+			return
+		}
+		// Tell the newcomer the group's info.
+		if g, err := c.st.Group(ctx, groupID); err == nil {
+			_, _ = c.sendLocked(ctx, groupID, payload{Type: "meta", Meta: fullMeta(g)})
+		}
+	})
 }

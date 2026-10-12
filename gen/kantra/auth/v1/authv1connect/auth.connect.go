@@ -76,6 +76,12 @@ const (
 	// AuthServiceGetIceServersProcedure is the fully-qualified name of the AuthService's GetIceServers
 	// RPC.
 	AuthServiceGetIceServersProcedure = "/kantra.auth.v1.AuthService/GetIceServers"
+	// AuthServiceBlockUserProcedure is the fully-qualified name of the AuthService's BlockUser RPC.
+	AuthServiceBlockUserProcedure = "/kantra.auth.v1.AuthService/BlockUser"
+	// AuthServiceUnblockUserProcedure is the fully-qualified name of the AuthService's UnblockUser RPC.
+	AuthServiceUnblockUserProcedure = "/kantra.auth.v1.AuthService/UnblockUser"
+	// AuthServiceListBlockedProcedure is the fully-qualified name of the AuthService's ListBlocked RPC.
+	AuthServiceListBlockedProcedure = "/kantra.auth.v1.AuthService/ListBlocked"
 )
 
 // AuthServiceClient is a client for the kantra.auth.v1.AuthService service.
@@ -116,6 +122,11 @@ type AuthServiceClient interface {
 	// Calls: STUN/TURN servers for WebRTC with short-lived TURN credentials
 	// (the server relays encrypted media only; it never has the keys).
 	GetIceServers(context.Context, *v1.GetIceServersRequest) (*v1.GetIceServersResponse, error)
+	// Block list: a blocked user cannot start a direct chat with you or write
+	// or call you in one (enforced by directory and delivery).
+	BlockUser(context.Context, *v1.BlockUserRequest) (*v1.BlockUserResponse, error)
+	UnblockUser(context.Context, *v1.UnblockUserRequest) (*v1.UnblockUserResponse, error)
+	ListBlocked(context.Context, *v1.ListBlockedRequest) (*v1.ListBlockedResponse, error)
 }
 
 // NewAuthServiceClient constructs a client for the kantra.auth.v1.AuthService service. By default,
@@ -237,6 +248,24 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("GetIceServers")),
 			connect.WithClientOptions(opts...),
 		),
+		blockUser: connect.NewClient[v1.BlockUserRequest, v1.BlockUserResponse](
+			httpClient,
+			baseURL+AuthServiceBlockUserProcedure,
+			connect.WithSchema(authServiceMethods.ByName("BlockUser")),
+			connect.WithClientOptions(opts...),
+		),
+		unblockUser: connect.NewClient[v1.UnblockUserRequest, v1.UnblockUserResponse](
+			httpClient,
+			baseURL+AuthServiceUnblockUserProcedure,
+			connect.WithSchema(authServiceMethods.ByName("UnblockUser")),
+			connect.WithClientOptions(opts...),
+		),
+		listBlocked: connect.NewClient[v1.ListBlockedRequest, v1.ListBlockedResponse](
+			httpClient,
+			baseURL+AuthServiceListBlockedProcedure,
+			connect.WithSchema(authServiceMethods.ByName("ListBlocked")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -260,6 +289,9 @@ type authServiceClient struct {
 	setAvatar        *connect.Client[v1.SetAvatarRequest, v1.SetAvatarResponse]
 	getAvatar        *connect.Client[v1.GetAvatarRequest, v1.GetAvatarResponse]
 	getIceServers    *connect.Client[v1.GetIceServersRequest, v1.GetIceServersResponse]
+	blockUser        *connect.Client[v1.BlockUserRequest, v1.BlockUserResponse]
+	unblockUser      *connect.Client[v1.UnblockUserRequest, v1.UnblockUserResponse]
+	listBlocked      *connect.Client[v1.ListBlockedRequest, v1.ListBlockedResponse]
 }
 
 // Register calls kantra.auth.v1.AuthService.Register.
@@ -424,6 +456,33 @@ func (c *authServiceClient) GetIceServers(ctx context.Context, req *v1.GetIceSer
 	return nil, err
 }
 
+// BlockUser calls kantra.auth.v1.AuthService.BlockUser.
+func (c *authServiceClient) BlockUser(ctx context.Context, req *v1.BlockUserRequest) (*v1.BlockUserResponse, error) {
+	response, err := c.blockUser.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// UnblockUser calls kantra.auth.v1.AuthService.UnblockUser.
+func (c *authServiceClient) UnblockUser(ctx context.Context, req *v1.UnblockUserRequest) (*v1.UnblockUserResponse, error) {
+	response, err := c.unblockUser.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ListBlocked calls kantra.auth.v1.AuthService.ListBlocked.
+func (c *authServiceClient) ListBlocked(ctx context.Context, req *v1.ListBlockedRequest) (*v1.ListBlockedResponse, error) {
+	response, err := c.listBlocked.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // AuthServiceHandler is an implementation of the kantra.auth.v1.AuthService service.
 type AuthServiceHandler interface {
 	Register(context.Context, *v1.RegisterRequest) (*v1.RegisterResponse, error)
@@ -462,6 +521,11 @@ type AuthServiceHandler interface {
 	// Calls: STUN/TURN servers for WebRTC with short-lived TURN credentials
 	// (the server relays encrypted media only; it never has the keys).
 	GetIceServers(context.Context, *v1.GetIceServersRequest) (*v1.GetIceServersResponse, error)
+	// Block list: a blocked user cannot start a direct chat with you or write
+	// or call you in one (enforced by directory and delivery).
+	BlockUser(context.Context, *v1.BlockUserRequest) (*v1.BlockUserResponse, error)
+	UnblockUser(context.Context, *v1.UnblockUserRequest) (*v1.UnblockUserResponse, error)
+	ListBlocked(context.Context, *v1.ListBlockedRequest) (*v1.ListBlockedResponse, error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -579,6 +643,24 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("GetIceServers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceBlockUserHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceBlockUserProcedure,
+		svc.BlockUser,
+		connect.WithSchema(authServiceMethods.ByName("BlockUser")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceUnblockUserHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceUnblockUserProcedure,
+		svc.UnblockUser,
+		connect.WithSchema(authServiceMethods.ByName("UnblockUser")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceListBlockedHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceListBlockedProcedure,
+		svc.ListBlocked,
+		connect.WithSchema(authServiceMethods.ByName("ListBlocked")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.auth.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceRegisterProcedure:
@@ -617,6 +699,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceGetAvatarHandler.ServeHTTP(w, r)
 		case AuthServiceGetIceServersProcedure:
 			authServiceGetIceServersHandler.ServeHTTP(w, r)
+		case AuthServiceBlockUserProcedure:
+			authServiceBlockUserHandler.ServeHTTP(w, r)
+		case AuthServiceUnblockUserProcedure:
+			authServiceUnblockUserHandler.ServeHTTP(w, r)
+		case AuthServiceListBlockedProcedure:
+			authServiceListBlockedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -696,4 +784,16 @@ func (UnimplementedAuthServiceHandler) GetAvatar(context.Context, *v1.GetAvatarR
 
 func (UnimplementedAuthServiceHandler) GetIceServers(context.Context, *v1.GetIceServersRequest) (*v1.GetIceServersResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.GetIceServers is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) BlockUser(context.Context, *v1.BlockUserRequest) (*v1.BlockUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.BlockUser is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) UnblockUser(context.Context, *v1.UnblockUserRequest) (*v1.UnblockUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.UnblockUser is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) ListBlocked(context.Context, *v1.ListBlockedRequest) (*v1.ListBlockedResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.ListBlocked is not implemented"))
 }

@@ -37,6 +37,21 @@ service DeliveryService {
   // "Typing…": pushed to the other members' connected devices only, never
   // stored (an ephemeral Envelope of type TYPING without payload).
   rpc Typing(TypingRequest) returns (TypingResponse) {}
+
+  // --- Presence ("online" / "last seen", like Telegram) ---
+  // Online state and last seen time of users, as their privacy allows.
+  rpc GetPresence(GetPresenceRequest) returns (GetPresenceResponse) {}
+  // The app is open on this device (send every minute while it is) or was
+  // closed. "Online" means an open app, not a background connection.
+  rpc SetActive(SetActiveRequest) returns (SetActiveResponse) {}
+  // Who sees the caller's last seen time.
+  rpc SetPresencePrivacy(SetPresencePrivacyRequest) returns (SetPresencePrivacyResponse) {}
+  rpc GetPresencePrivacy(GetPresencePrivacyRequest) returns (GetPresencePrivacyResponse) {}
+
+  // --- Invite links ---
+  // Sets (or with an empty hash revokes) the group's invite link. The
+  // server keeps only SHA-256 of the link's secret; any member may set it.
+  rpc SetGroupInvite(SetGroupInviteRequest) returns (SetGroupInviteResponse) {}
 }
 
 enum MessageType {
@@ -183,6 +198,10 @@ message ExternalJoinResponse {
 message RequestJoinRequest {
   string group_id = 1;
   bytes key_package = 2;
+  // Joining by an invite link: the link's secret (hex). The server checks
+  // it against the stored hash; the members check it again (they know the
+  // secret through MLS) before adding the user.
+  string invite_secret = 3;
 }
 
 message RequestJoinResponse {}
@@ -192,3 +211,56 @@ message TypingRequest {
 }
 
 message TypingResponse {}
+
+// Who sees one's last seen time.
+enum PresenceVisibility {
+  // Not set: everybody (the default).
+  PRESENCE_VISIBILITY_UNSPECIFIED = 0;
+  PRESENCE_VISIBILITY_EVERYBODY = 1;
+  // Only people one shares a chat with.
+  PRESENCE_VISIBILITY_CHATS = 2;
+  PRESENCE_VISIBILITY_NOBODY = 3;
+}
+
+message GetPresenceRequest {
+  repeated string user_ids = 1;
+}
+
+message Presence {
+  string user_id = 1;
+  bool online = 2;
+  // Unix seconds; 0 if hidden (then "recently" is shown, like Telegram).
+  int64 last_seen = 3;
+  // Hidden by the user's privacy, or because the caller hides their own.
+  bool hidden = 4;
+}
+
+message GetPresenceResponse {
+  repeated Presence presence = 1;
+}
+
+message SetPresencePrivacyRequest {
+  PresenceVisibility visibility = 1;
+}
+
+message SetPresencePrivacyResponse {}
+
+message GetPresencePrivacyRequest {}
+
+message GetPresencePrivacyResponse {
+  PresenceVisibility visibility = 1;
+}
+
+message SetGroupInviteRequest {
+  string group_id = 1;
+  // SHA-256 of the invite secret; empty revokes the link.
+  bytes secret_hash = 2;
+}
+
+message SetGroupInviteResponse {}
+
+message SetActiveRequest {
+  bool active = 1;
+}
+
+message SetActiveResponse {}

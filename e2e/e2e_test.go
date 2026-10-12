@@ -94,6 +94,14 @@ func newCluster(t *testing.T) *cluster {
 
 type lateChecker struct{ devicestatus.Checker }
 
+// Blocked forwards to the real client once it is set (block list).
+func (l *lateChecker) Blocked(ctx context.Context, a, b string) (bool, error) {
+	if bc, ok := l.Checker.(devicestatus.BlockChecker); ok {
+		return bc.Blocked(ctx, a, b)
+	}
+	return false, nil
+}
+
 type user struct {
 	*core.Client
 	name, db string

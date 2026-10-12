@@ -8,6 +8,17 @@ service AuthInternalService {
   // Which of the given devices exist and are not revoked, and which of
   // those are approved.
   rpc DeviceStatus(DeviceStatusRequest) returns (DeviceStatusResponse) {}
+  // Whether either of two users has blocked the other.
+  rpc Blocked(BlockedRequest) returns (BlockedResponse) {}
+}
+
+message BlockedRequest {
+  string user_a = 1;
+  string user_b = 2;
+}
+
+message BlockedResponse {
+  bool blocked = 1;
 }
 
 message DeviceStatusRequest {

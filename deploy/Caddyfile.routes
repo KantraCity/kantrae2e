@@ -114,6 +114,13 @@ handle /kantra.media.v1.MediaService/* {
 }
 
 # --- everything else is a 404, never proxied somewhere by accident ---
+# Invite links (https://<domain>/join/<group>#<secret>) opened in a browser:
+# the secret after "#" never reaches the server; the page says what to do.
+handle /join/* {
+	header Content-Type "text/html; charset=utf-8"
+	respond `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Приглашение в Kantra</title><body style="font-family:system-ui,sans-serif;background:#17212b;color:#f5f5f5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center"><div style="max-width:360px;padding:24px"><h2>Приглашение в группу Kantra</h2><p style="color:#9fb1c3">Скопируйте эту ссылку и вставьте её в поиск в приложении Kantra — вас добавят в группу.</p></div>` 200
+}
+
 handle {
 	respond "Not found" 404
 }

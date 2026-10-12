@@ -21,6 +21,102 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type BlockedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserA         string                 `protobuf:"bytes,1,opt,name=user_a,json=userA,proto3" json:"user_a,omitempty"`
+	UserB         string                 `protobuf:"bytes,2,opt,name=user_b,json=userB,proto3" json:"user_b,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockedRequest) Reset() {
+	*x = BlockedRequest{}
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockedRequest) ProtoMessage() {}
+
+func (x *BlockedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockedRequest.ProtoReflect.Descriptor instead.
+func (*BlockedRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_internal_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *BlockedRequest) GetUserA() string {
+	if x != nil {
+		return x.UserA
+	}
+	return ""
+}
+
+func (x *BlockedRequest) GetUserB() string {
+	if x != nil {
+		return x.UserB
+	}
+	return ""
+}
+
+type BlockedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Blocked       bool                   `protobuf:"varint,1,opt,name=blocked,proto3" json:"blocked,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockedResponse) Reset() {
+	*x = BlockedResponse{}
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockedResponse) ProtoMessage() {}
+
+func (x *BlockedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockedResponse.ProtoReflect.Descriptor instead.
+func (*BlockedResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_internal_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BlockedResponse) GetBlocked() bool {
+	if x != nil {
+		return x.Blocked
+	}
+	return false
+}
+
 type DeviceStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DeviceIds     []string               `protobuf:"bytes,1,rep,name=device_ids,json=deviceIds,proto3" json:"device_ids,omitempty"`
@@ -30,7 +126,7 @@ type DeviceStatusRequest struct {
 
 func (x *DeviceStatusRequest) Reset() {
 	*x = DeviceStatusRequest{}
-	mi := &file_kantra_auth_v1_internal_proto_msgTypes[0]
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +138,7 @@ func (x *DeviceStatusRequest) String() string {
 func (*DeviceStatusRequest) ProtoMessage() {}
 
 func (x *DeviceStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_auth_v1_internal_proto_msgTypes[0]
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,7 +151,7 @@ func (x *DeviceStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceStatusRequest.ProtoReflect.Descriptor instead.
 func (*DeviceStatusRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_auth_v1_internal_proto_rawDescGZIP(), []int{0}
+	return file_kantra_auth_v1_internal_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DeviceStatusRequest) GetDeviceIds() []string {
@@ -76,7 +172,7 @@ type DeviceStatusResponse struct {
 
 func (x *DeviceStatusResponse) Reset() {
 	*x = DeviceStatusResponse{}
-	mi := &file_kantra_auth_v1_internal_proto_msgTypes[1]
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -88,7 +184,7 @@ func (x *DeviceStatusResponse) String() string {
 func (*DeviceStatusResponse) ProtoMessage() {}
 
 func (x *DeviceStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_auth_v1_internal_proto_msgTypes[1]
+	mi := &file_kantra_auth_v1_internal_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -101,7 +197,7 @@ func (x *DeviceStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceStatusResponse.ProtoReflect.Descriptor instead.
 func (*DeviceStatusResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_auth_v1_internal_proto_rawDescGZIP(), []int{1}
+	return file_kantra_auth_v1_internal_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DeviceStatusResponse) GetActiveDeviceIds() []string {
@@ -122,15 +218,21 @@ var File_kantra_auth_v1_internal_proto protoreflect.FileDescriptor
 
 const file_kantra_auth_v1_internal_proto_rawDesc = "" +
 	"\n" +
-	"\x1dkantra/auth/v1/internal.proto\x12\x0ekantra.auth.v1\"4\n" +
+	"\x1dkantra/auth/v1/internal.proto\x12\x0ekantra.auth.v1\">\n" +
+	"\x0eBlockedRequest\x12\x15\n" +
+	"\x06user_a\x18\x01 \x01(\tR\x05userA\x12\x15\n" +
+	"\x06user_b\x18\x02 \x01(\tR\x05userB\"+\n" +
+	"\x0fBlockedResponse\x12\x18\n" +
+	"\ablocked\x18\x01 \x01(\bR\ablocked\"4\n" +
 	"\x13DeviceStatusRequest\x12\x1d\n" +
 	"\n" +
 	"device_ids\x18\x01 \x03(\tR\tdeviceIds\"r\n" +
 	"\x14DeviceStatusResponse\x12*\n" +
 	"\x11active_device_ids\x18\x01 \x03(\tR\x0factiveDeviceIds\x12.\n" +
-	"\x13approved_device_ids\x18\x02 \x03(\tR\x11approvedDeviceIds2r\n" +
+	"\x13approved_device_ids\x18\x02 \x03(\tR\x11approvedDeviceIds2\xc0\x01\n" +
 	"\x13AuthInternalService\x12[\n" +
-	"\fDeviceStatus\x12#.kantra.auth.v1.DeviceStatusRequest\x1a$.kantra.auth.v1.DeviceStatusResponse\"\x00B\xb8\x01\n" +
+	"\fDeviceStatus\x12#.kantra.auth.v1.DeviceStatusRequest\x1a$.kantra.auth.v1.DeviceStatusResponse\"\x00\x12L\n" +
+	"\aBlocked\x12\x1e.kantra.auth.v1.BlockedRequest\x1a\x1f.kantra.auth.v1.BlockedResponse\"\x00B\xb8\x01\n" +
 	"\x12com.kantra.auth.v1B\rInternalProtoP\x01Z9github.com/kantracity/kantrae2e/gen/kantra/auth/v1;authv1\xa2\x02\x03KAX\xaa\x02\x0eKantra.Auth.V1\xca\x02\x0eKantra\\Auth\\V1\xe2\x02\x1aKantra\\Auth\\V1\\GPBMetadata\xea\x02\x10Kantra::Auth::V1b\x06proto3"
 
 var (
@@ -145,16 +247,20 @@ func file_kantra_auth_v1_internal_proto_rawDescGZIP() []byte {
 	return file_kantra_auth_v1_internal_proto_rawDescData
 }
 
-var file_kantra_auth_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_kantra_auth_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_kantra_auth_v1_internal_proto_goTypes = []any{
-	(*DeviceStatusRequest)(nil),  // 0: kantra.auth.v1.DeviceStatusRequest
-	(*DeviceStatusResponse)(nil), // 1: kantra.auth.v1.DeviceStatusResponse
+	(*BlockedRequest)(nil),       // 0: kantra.auth.v1.BlockedRequest
+	(*BlockedResponse)(nil),      // 1: kantra.auth.v1.BlockedResponse
+	(*DeviceStatusRequest)(nil),  // 2: kantra.auth.v1.DeviceStatusRequest
+	(*DeviceStatusResponse)(nil), // 3: kantra.auth.v1.DeviceStatusResponse
 }
 var file_kantra_auth_v1_internal_proto_depIdxs = []int32{
-	0, // 0: kantra.auth.v1.AuthInternalService.DeviceStatus:input_type -> kantra.auth.v1.DeviceStatusRequest
-	1, // 1: kantra.auth.v1.AuthInternalService.DeviceStatus:output_type -> kantra.auth.v1.DeviceStatusResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 0: kantra.auth.v1.AuthInternalService.DeviceStatus:input_type -> kantra.auth.v1.DeviceStatusRequest
+	0, // 1: kantra.auth.v1.AuthInternalService.Blocked:input_type -> kantra.auth.v1.BlockedRequest
+	3, // 2: kantra.auth.v1.AuthInternalService.DeviceStatus:output_type -> kantra.auth.v1.DeviceStatusResponse
+	1, // 3: kantra.auth.v1.AuthInternalService.Blocked:output_type -> kantra.auth.v1.BlockedResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -171,7 +277,7 @@ func file_kantra_auth_v1_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_auth_v1_internal_proto_rawDesc), len(file_kantra_auth_v1_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

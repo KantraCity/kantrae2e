@@ -36,6 +36,9 @@ const (
 	// AuthInternalServiceDeviceStatusProcedure is the fully-qualified name of the AuthInternalService's
 	// DeviceStatus RPC.
 	AuthInternalServiceDeviceStatusProcedure = "/kantra.auth.v1.AuthInternalService/DeviceStatus"
+	// AuthInternalServiceBlockedProcedure is the fully-qualified name of the AuthInternalService's
+	// Blocked RPC.
+	AuthInternalServiceBlockedProcedure = "/kantra.auth.v1.AuthInternalService/Blocked"
 )
 
 // AuthInternalServiceClient is a client for the kantra.auth.v1.AuthInternalService service.
@@ -43,6 +46,8 @@ type AuthInternalServiceClient interface {
 	// Which of the given devices exist and are not revoked, and which of
 	// those are approved.
 	DeviceStatus(context.Context, *v1.DeviceStatusRequest) (*v1.DeviceStatusResponse, error)
+	// Whether either of two users has blocked the other.
+	Blocked(context.Context, *v1.BlockedRequest) (*v1.BlockedResponse, error)
 }
 
 // NewAuthInternalServiceClient constructs a client for the kantra.auth.v1.AuthInternalService
@@ -62,17 +67,33 @@ func NewAuthInternalServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(authInternalServiceMethods.ByName("DeviceStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		blocked: connect.NewClient[v1.BlockedRequest, v1.BlockedResponse](
+			httpClient,
+			baseURL+AuthInternalServiceBlockedProcedure,
+			connect.WithSchema(authInternalServiceMethods.ByName("Blocked")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // authInternalServiceClient implements AuthInternalServiceClient.
 type authInternalServiceClient struct {
 	deviceStatus *connect.Client[v1.DeviceStatusRequest, v1.DeviceStatusResponse]
+	blocked      *connect.Client[v1.BlockedRequest, v1.BlockedResponse]
 }
 
 // DeviceStatus calls kantra.auth.v1.AuthInternalService.DeviceStatus.
 func (c *authInternalServiceClient) DeviceStatus(ctx context.Context, req *v1.DeviceStatusRequest) (*v1.DeviceStatusResponse, error) {
 	response, err := c.deviceStatus.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Blocked calls kantra.auth.v1.AuthInternalService.Blocked.
+func (c *authInternalServiceClient) Blocked(ctx context.Context, req *v1.BlockedRequest) (*v1.BlockedResponse, error) {
+	response, err := c.blocked.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -85,6 +106,8 @@ type AuthInternalServiceHandler interface {
 	// Which of the given devices exist and are not revoked, and which of
 	// those are approved.
 	DeviceStatus(context.Context, *v1.DeviceStatusRequest) (*v1.DeviceStatusResponse, error)
+	// Whether either of two users has blocked the other.
+	Blocked(context.Context, *v1.BlockedRequest) (*v1.BlockedResponse, error)
 }
 
 // NewAuthInternalServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -100,10 +123,18 @@ func NewAuthInternalServiceHandler(svc AuthInternalServiceHandler, opts ...conne
 		connect.WithSchema(authInternalServiceMethods.ByName("DeviceStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authInternalServiceBlockedHandler := connect.NewUnaryHandlerSimple(
+		AuthInternalServiceBlockedProcedure,
+		svc.Blocked,
+		connect.WithSchema(authInternalServiceMethods.ByName("Blocked")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.auth.v1.AuthInternalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthInternalServiceDeviceStatusProcedure:
 			authInternalServiceDeviceStatusHandler.ServeHTTP(w, r)
+		case AuthInternalServiceBlockedProcedure:
+			authInternalServiceBlockedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -115,4 +146,8 @@ type UnimplementedAuthInternalServiceHandler struct{}
 
 func (UnimplementedAuthInternalServiceHandler) DeviceStatus(context.Context, *v1.DeviceStatusRequest) (*v1.DeviceStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthInternalService.DeviceStatus is not implemented"))
+}
+
+func (UnimplementedAuthInternalServiceHandler) Blocked(context.Context, *v1.BlockedRequest) (*v1.BlockedResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthInternalService.Blocked is not implemented"))
 }

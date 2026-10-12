@@ -64,6 +64,20 @@ func (c *Client) SendFile(ctx context.Context, groupID, name string, data []byte
 
 // SendMedia sends a photo, video, voice/video message or file.
 func (c *Client) SendMedia(ctx context.Context, groupID string, in MediaInput, opt SendOptions) (*store.Message, error) {
+	ref, err := c.uploadMedia(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.requireLogin(); err != nil {
+		return nil, err
+	}
+	return c.sendLocked(ctx, groupID, payload{Type: "media", ReplyTo: opt.ReplyTo, Media: ref})
+}
+
+// uploadMedia encrypts a file with a fresh key and stores the ciphertext.
+func (c *Client) uploadMedia(ctx context.Context, in MediaInput) (*MediaRef, error) {
 	data := in.Data
 	if len(in.Thumb) > MaxThumb {
 		in.Thumb = nil
@@ -86,14 +100,8 @@ func (c *Client) SendMedia(ctx context.Context, groupID string, in MediaInput, o
 	if _, err := c.media.PutMedia(ctx, &mediav1.PutMediaRequest{Hash: hash, Data: ct}); err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.requireLogin(); err != nil {
-		return nil, err
-	}
-	return c.sendLocked(ctx, groupID, payload{Type: "media", ReplyTo: opt.ReplyTo, Media: &MediaRef{Hash: hash, Key: key,
-		Name: in.Name, Size: len(data), Mime: in.Mime, Kind: in.Kind, Width: in.Width, Height: in.Height,
-		Duration: in.Duration, Thumb: in.Thumb, Waveform: in.Waveform, Caption: in.Caption, Album: in.Album}})
+	return &MediaRef{Hash: hash, Key: key, Name: in.Name, Size: len(data), Mime: in.Mime, Kind: in.Kind, Width: in.Width,
+		Height: in.Height, Duration: in.Duration, Thumb: in.Thumb, Waveform: in.Waveform, Caption: in.Caption, Album: in.Album}, nil
 }
 
 // ParseMedia extracts the MediaRef of a media message.

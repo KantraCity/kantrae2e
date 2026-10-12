@@ -43,6 +43,11 @@ service AuthService {
   // Calls: STUN/TURN servers for WebRTC with short-lived TURN credentials
   // (the server relays encrypted media only; it never has the keys).
   rpc GetIceServers(GetIceServersRequest) returns (GetIceServersResponse) {}
+  // Block list: a blocked user cannot start a direct chat with you or write
+  // or call you in one (enforced by directory and delivery).
+  rpc BlockUser(BlockUserRequest) returns (BlockUserResponse) {}
+  rpc UnblockUser(UnblockUserRequest) returns (UnblockUserResponse) {}
+  rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse) {}
 }
 
 message RegisterRequest {
@@ -218,4 +223,17 @@ message IceServer {
 }
 message GetIceServersResponse {
   repeated IceServer servers = 1;
+}
+
+message BlockUserRequest {
+  string user_id = 1;
+}
+message BlockUserResponse {}
+message UnblockUserRequest {
+  string user_id = 1;
+}
+message UnblockUserResponse {}
+message ListBlockedRequest {}
+message ListBlockedResponse {
+  repeated string user_ids = 1;
 }

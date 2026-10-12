@@ -67,6 +67,21 @@ const (
 	DeliveryServiceRequestJoinProcedure = "/kantra.delivery.v1.DeliveryService/RequestJoin"
 	// DeliveryServiceTypingProcedure is the fully-qualified name of the DeliveryService's Typing RPC.
 	DeliveryServiceTypingProcedure = "/kantra.delivery.v1.DeliveryService/Typing"
+	// DeliveryServiceGetPresenceProcedure is the fully-qualified name of the DeliveryService's
+	// GetPresence RPC.
+	DeliveryServiceGetPresenceProcedure = "/kantra.delivery.v1.DeliveryService/GetPresence"
+	// DeliveryServiceSetActiveProcedure is the fully-qualified name of the DeliveryService's SetActive
+	// RPC.
+	DeliveryServiceSetActiveProcedure = "/kantra.delivery.v1.DeliveryService/SetActive"
+	// DeliveryServiceSetPresencePrivacyProcedure is the fully-qualified name of the DeliveryService's
+	// SetPresencePrivacy RPC.
+	DeliveryServiceSetPresencePrivacyProcedure = "/kantra.delivery.v1.DeliveryService/SetPresencePrivacy"
+	// DeliveryServiceGetPresencePrivacyProcedure is the fully-qualified name of the DeliveryService's
+	// GetPresencePrivacy RPC.
+	DeliveryServiceGetPresencePrivacyProcedure = "/kantra.delivery.v1.DeliveryService/GetPresencePrivacy"
+	// DeliveryServiceSetGroupInviteProcedure is the fully-qualified name of the DeliveryService's
+	// SetGroupInvite RPC.
+	DeliveryServiceSetGroupInviteProcedure = "/kantra.delivery.v1.DeliveryService/SetGroupInvite"
 )
 
 // DeliveryServiceClient is a client for the kantra.delivery.v1.DeliveryService service.
@@ -100,6 +115,19 @@ type DeliveryServiceClient interface {
 	// "Typing…": pushed to the other members' connected devices only, never
 	// stored (an ephemeral Envelope of type TYPING without payload).
 	Typing(context.Context, *v1.TypingRequest) (*v1.TypingResponse, error)
+	// --- Presence ("online" / "last seen", like Telegram) ---
+	// Online state and last seen time of users, as their privacy allows.
+	GetPresence(context.Context, *v1.GetPresenceRequest) (*v1.GetPresenceResponse, error)
+	// The app is open on this device (send every minute while it is) or was
+	// closed. "Online" means an open app, not a background connection.
+	SetActive(context.Context, *v1.SetActiveRequest) (*v1.SetActiveResponse, error)
+	// Who sees the caller's last seen time.
+	SetPresencePrivacy(context.Context, *v1.SetPresencePrivacyRequest) (*v1.SetPresencePrivacyResponse, error)
+	GetPresencePrivacy(context.Context, *v1.GetPresencePrivacyRequest) (*v1.GetPresencePrivacyResponse, error)
+	// --- Invite links ---
+	// Sets (or with an empty hash revokes) the group's invite link. The
+	// server keeps only SHA-256 of the link's secret; any member may set it.
+	SetGroupInvite(context.Context, *v1.SetGroupInviteRequest) (*v1.SetGroupInviteResponse, error)
 }
 
 // NewDeliveryServiceClient constructs a client for the kantra.delivery.v1.DeliveryService service.
@@ -185,23 +213,58 @@ func NewDeliveryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(deliveryServiceMethods.ByName("Typing")),
 			connect.WithClientOptions(opts...),
 		),
+		getPresence: connect.NewClient[v1.GetPresenceRequest, v1.GetPresenceResponse](
+			httpClient,
+			baseURL+DeliveryServiceGetPresenceProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("GetPresence")),
+			connect.WithClientOptions(opts...),
+		),
+		setActive: connect.NewClient[v1.SetActiveRequest, v1.SetActiveResponse](
+			httpClient,
+			baseURL+DeliveryServiceSetActiveProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("SetActive")),
+			connect.WithClientOptions(opts...),
+		),
+		setPresencePrivacy: connect.NewClient[v1.SetPresencePrivacyRequest, v1.SetPresencePrivacyResponse](
+			httpClient,
+			baseURL+DeliveryServiceSetPresencePrivacyProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("SetPresencePrivacy")),
+			connect.WithClientOptions(opts...),
+		),
+		getPresencePrivacy: connect.NewClient[v1.GetPresencePrivacyRequest, v1.GetPresencePrivacyResponse](
+			httpClient,
+			baseURL+DeliveryServiceGetPresencePrivacyProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("GetPresencePrivacy")),
+			connect.WithClientOptions(opts...),
+		),
+		setGroupInvite: connect.NewClient[v1.SetGroupInviteRequest, v1.SetGroupInviteResponse](
+			httpClient,
+			baseURL+DeliveryServiceSetGroupInviteProcedure,
+			connect.WithSchema(deliveryServiceMethods.ByName("SetGroupInvite")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // deliveryServiceClient implements DeliveryServiceClient.
 type deliveryServiceClient struct {
-	createGroup     *connect.Client[v1.CreateGroupRequest, v1.CreateGroupResponse]
-	sendCommit      *connect.Client[v1.SendCommitRequest, v1.SendCommitResponse]
-	sendApplication *connect.Client[v1.SendApplicationRequest, v1.SendApplicationResponse]
-	fetchWelcome    *connect.Client[v1.FetchWelcomeRequest, v1.FetchWelcomeResponse]
-	fetchPending    *connect.Client[v1.FetchPendingRequest, v1.FetchPendingResponse]
-	ack             *connect.Client[v1.AckRequest, v1.AckResponse]
-	getGroup        *connect.Client[v1.GetGroupRequest, v1.GetGroupResponse]
-	listMyGroups    *connect.Client[v1.ListMyGroupsRequest, v1.ListMyGroupsResponse]
-	getGroupInfo    *connect.Client[v1.GetGroupInfoRequest, v1.GetGroupInfoResponse]
-	externalJoin    *connect.Client[v1.ExternalJoinRequest, v1.ExternalJoinResponse]
-	requestJoin     *connect.Client[v1.RequestJoinRequest, v1.RequestJoinResponse]
-	typing          *connect.Client[v1.TypingRequest, v1.TypingResponse]
+	createGroup        *connect.Client[v1.CreateGroupRequest, v1.CreateGroupResponse]
+	sendCommit         *connect.Client[v1.SendCommitRequest, v1.SendCommitResponse]
+	sendApplication    *connect.Client[v1.SendApplicationRequest, v1.SendApplicationResponse]
+	fetchWelcome       *connect.Client[v1.FetchWelcomeRequest, v1.FetchWelcomeResponse]
+	fetchPending       *connect.Client[v1.FetchPendingRequest, v1.FetchPendingResponse]
+	ack                *connect.Client[v1.AckRequest, v1.AckResponse]
+	getGroup           *connect.Client[v1.GetGroupRequest, v1.GetGroupResponse]
+	listMyGroups       *connect.Client[v1.ListMyGroupsRequest, v1.ListMyGroupsResponse]
+	getGroupInfo       *connect.Client[v1.GetGroupInfoRequest, v1.GetGroupInfoResponse]
+	externalJoin       *connect.Client[v1.ExternalJoinRequest, v1.ExternalJoinResponse]
+	requestJoin        *connect.Client[v1.RequestJoinRequest, v1.RequestJoinResponse]
+	typing             *connect.Client[v1.TypingRequest, v1.TypingResponse]
+	getPresence        *connect.Client[v1.GetPresenceRequest, v1.GetPresenceResponse]
+	setActive          *connect.Client[v1.SetActiveRequest, v1.SetActiveResponse]
+	setPresencePrivacy *connect.Client[v1.SetPresencePrivacyRequest, v1.SetPresencePrivacyResponse]
+	getPresencePrivacy *connect.Client[v1.GetPresencePrivacyRequest, v1.GetPresencePrivacyResponse]
+	setGroupInvite     *connect.Client[v1.SetGroupInviteRequest, v1.SetGroupInviteResponse]
 }
 
 // CreateGroup calls kantra.delivery.v1.DeliveryService.CreateGroup.
@@ -312,6 +375,51 @@ func (c *deliveryServiceClient) Typing(ctx context.Context, req *v1.TypingReques
 	return nil, err
 }
 
+// GetPresence calls kantra.delivery.v1.DeliveryService.GetPresence.
+func (c *deliveryServiceClient) GetPresence(ctx context.Context, req *v1.GetPresenceRequest) (*v1.GetPresenceResponse, error) {
+	response, err := c.getPresence.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SetActive calls kantra.delivery.v1.DeliveryService.SetActive.
+func (c *deliveryServiceClient) SetActive(ctx context.Context, req *v1.SetActiveRequest) (*v1.SetActiveResponse, error) {
+	response, err := c.setActive.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SetPresencePrivacy calls kantra.delivery.v1.DeliveryService.SetPresencePrivacy.
+func (c *deliveryServiceClient) SetPresencePrivacy(ctx context.Context, req *v1.SetPresencePrivacyRequest) (*v1.SetPresencePrivacyResponse, error) {
+	response, err := c.setPresencePrivacy.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// GetPresencePrivacy calls kantra.delivery.v1.DeliveryService.GetPresencePrivacy.
+func (c *deliveryServiceClient) GetPresencePrivacy(ctx context.Context, req *v1.GetPresencePrivacyRequest) (*v1.GetPresencePrivacyResponse, error) {
+	response, err := c.getPresencePrivacy.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SetGroupInvite calls kantra.delivery.v1.DeliveryService.SetGroupInvite.
+func (c *deliveryServiceClient) SetGroupInvite(ctx context.Context, req *v1.SetGroupInviteRequest) (*v1.SetGroupInviteResponse, error) {
+	response, err := c.setGroupInvite.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // DeliveryServiceHandler is an implementation of the kantra.delivery.v1.DeliveryService service.
 type DeliveryServiceHandler interface {
 	// Registers a new group at epoch 0 with the caller's device as only member.
@@ -343,6 +451,19 @@ type DeliveryServiceHandler interface {
 	// "Typing…": pushed to the other members' connected devices only, never
 	// stored (an ephemeral Envelope of type TYPING without payload).
 	Typing(context.Context, *v1.TypingRequest) (*v1.TypingResponse, error)
+	// --- Presence ("online" / "last seen", like Telegram) ---
+	// Online state and last seen time of users, as their privacy allows.
+	GetPresence(context.Context, *v1.GetPresenceRequest) (*v1.GetPresenceResponse, error)
+	// The app is open on this device (send every minute while it is) or was
+	// closed. "Online" means an open app, not a background connection.
+	SetActive(context.Context, *v1.SetActiveRequest) (*v1.SetActiveResponse, error)
+	// Who sees the caller's last seen time.
+	SetPresencePrivacy(context.Context, *v1.SetPresencePrivacyRequest) (*v1.SetPresencePrivacyResponse, error)
+	GetPresencePrivacy(context.Context, *v1.GetPresencePrivacyRequest) (*v1.GetPresencePrivacyResponse, error)
+	// --- Invite links ---
+	// Sets (or with an empty hash revokes) the group's invite link. The
+	// server keeps only SHA-256 of the link's secret; any member may set it.
+	SetGroupInvite(context.Context, *v1.SetGroupInviteRequest) (*v1.SetGroupInviteResponse, error)
 }
 
 // NewDeliveryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -424,6 +545,36 @@ func NewDeliveryServiceHandler(svc DeliveryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(deliveryServiceMethods.ByName("Typing")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deliveryServiceGetPresenceHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceGetPresenceProcedure,
+		svc.GetPresence,
+		connect.WithSchema(deliveryServiceMethods.ByName("GetPresence")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deliveryServiceSetActiveHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceSetActiveProcedure,
+		svc.SetActive,
+		connect.WithSchema(deliveryServiceMethods.ByName("SetActive")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deliveryServiceSetPresencePrivacyHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceSetPresencePrivacyProcedure,
+		svc.SetPresencePrivacy,
+		connect.WithSchema(deliveryServiceMethods.ByName("SetPresencePrivacy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deliveryServiceGetPresencePrivacyHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceGetPresencePrivacyProcedure,
+		svc.GetPresencePrivacy,
+		connect.WithSchema(deliveryServiceMethods.ByName("GetPresencePrivacy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deliveryServiceSetGroupInviteHandler := connect.NewUnaryHandlerSimple(
+		DeliveryServiceSetGroupInviteProcedure,
+		svc.SetGroupInvite,
+		connect.WithSchema(deliveryServiceMethods.ByName("SetGroupInvite")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.delivery.v1.DeliveryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeliveryServiceCreateGroupProcedure:
@@ -450,6 +601,16 @@ func NewDeliveryServiceHandler(svc DeliveryServiceHandler, opts ...connect.Handl
 			deliveryServiceRequestJoinHandler.ServeHTTP(w, r)
 		case DeliveryServiceTypingProcedure:
 			deliveryServiceTypingHandler.ServeHTTP(w, r)
+		case DeliveryServiceGetPresenceProcedure:
+			deliveryServiceGetPresenceHandler.ServeHTTP(w, r)
+		case DeliveryServiceSetActiveProcedure:
+			deliveryServiceSetActiveHandler.ServeHTTP(w, r)
+		case DeliveryServiceSetPresencePrivacyProcedure:
+			deliveryServiceSetPresencePrivacyHandler.ServeHTTP(w, r)
+		case DeliveryServiceGetPresencePrivacyProcedure:
+			deliveryServiceGetPresencePrivacyHandler.ServeHTTP(w, r)
+		case DeliveryServiceSetGroupInviteProcedure:
+			deliveryServiceSetGroupInviteHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -505,4 +666,24 @@ func (UnimplementedDeliveryServiceHandler) RequestJoin(context.Context, *v1.Requ
 
 func (UnimplementedDeliveryServiceHandler) Typing(context.Context, *v1.TypingRequest) (*v1.TypingResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.Typing is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) GetPresence(context.Context, *v1.GetPresenceRequest) (*v1.GetPresenceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.GetPresence is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) SetActive(context.Context, *v1.SetActiveRequest) (*v1.SetActiveResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.SetActive is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) SetPresencePrivacy(context.Context, *v1.SetPresencePrivacyRequest) (*v1.SetPresencePrivacyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.SetPresencePrivacy is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) GetPresencePrivacy(context.Context, *v1.GetPresencePrivacyRequest) (*v1.GetPresencePrivacyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.GetPresencePrivacy is not implemented"))
+}
+
+func (UnimplementedDeliveryServiceHandler) SetGroupInvite(context.Context, *v1.SetGroupInviteRequest) (*v1.SetGroupInviteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.delivery.v1.DeliveryService.SetGroupInvite is not implemented"))
 }

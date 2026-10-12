@@ -4,6 +4,8 @@ package delivery
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"embed"
 	"errors"
 	"fmt"
@@ -39,6 +41,50 @@ const Schema = "delivery"
 // SelfGroupPrefix marks a user's own-devices group (see client/core).
 const SelfGroupPrefix = "self-"
 
+// DirectGroupPrefix marks a direct (1:1) chat (see client/core).
+const DirectGroupPrefix = "dm-"
+
+// inviteMagic prefixes a JOIN_REQUEST that came through an invite link:
+// "KINV1" + secret + "\n" + KeyPackage (the members check the secret).
+const inviteMagic = "KINV1"
+
+func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
+
+// checkDirect refuses traffic in a direct chat between users of whom one
+// has blocked the other (also adding a blocked user to a direct chat).
+func (s *Service) checkDirect(ctx context.Context, tx pgx.Tx, groupID, uid string, added []string) error {
+	if s.blocks == nil || !strings.HasPrefix(groupID, DirectGroupPrefix) {
+		return nil
+	}
+	others := append([]string{}, added...)
+	rows, err := tx.Query(ctx, `SELECT DISTINCT user_id::text FROM group_members WHERE group_id=$1 AND user_id IS NOT NULL AND user_id <> $2`, groupID, uid)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			rows.Close()
+			return err
+		}
+		others = append(others, u)
+	}
+	rows.Close()
+	for _, u := range others {
+		if u == uid {
+			continue
+		}
+		blocked, err := devicestatus.IsBlocked(ctx, s.blocks, uid, u)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return errf(connect.CodePermissionDenied, "blocked")
+		}
+	}
+	return nil
+}
+
 const (
 	MaxPayload    = 1 << 20
 	MaxGroupIDLen = 64
@@ -48,11 +94,13 @@ const (
 )
 
 type Service struct {
-	pool    *pgxpool.Pool
-	secret  []byte
-	hub     *Hub
-	log     zerolog.Logger
-	devices devicestatus.Checker
+	pool     *pgxpool.Pool
+	secret   []byte
+	hub      *Hub
+	log      zerolog.Logger
+	devices  devicestatus.Checker
+	blocks   devicestatus.BlockChecker // block list (auth), see checkDirect
+	presence presenceTracker           // presence.go
 }
 
 func New(pool *pgxpool.Pool, secret []byte, log zerolog.Logger) *Service {
@@ -62,6 +110,9 @@ func New(pool *pgxpool.Pool, secret []byte, log zerolog.Logger) *Service {
 // WithDevices makes the service reject revoked devices (nil disables it).
 func (s *Service) WithDevices(ch devicestatus.Checker) *Service {
 	s.devices = ch
+	if bc, ok := ch.(devicestatus.BlockChecker); ok {
+		s.blocks = bc
+	}
 	return s
 }
 
@@ -243,6 +294,9 @@ func (s *Service) SendCommit(ctx context.Context, req *deliveryv1.SendCommitRequ
 		if err := requireMember(ctx, tx, req.GroupId, did); err != nil {
 			return err
 		}
+		if err := s.checkDirect(ctx, tx, req.GroupId, uid, req.AddedUserIds); err != nil {
+			return err
+		}
 		// Optimistic lock: only the first Commit for this epoch wins.
 		if err := casEpoch(ctx, tx, req.GroupId, req.Epoch); err != nil {
 			return err
@@ -326,6 +380,9 @@ func (s *Service) SendApplication(ctx context.Context, req *deliveryv1.SendAppli
 	var recipients []string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := requireMember(ctx, tx, req.GroupId, did); err != nil {
+			return err
+		}
+		if err := s.checkDirect(ctx, tx, req.GroupId, uid, nil); err != nil {
 			return err
 		}
 		// Share-lock the group row so a concurrent commit cannot change
@@ -630,16 +687,38 @@ func (s *Service) RequestJoin(ctx context.Context, req *deliveryv1.RequestJoinRe
 	} else if !approved && !strings.HasPrefix(req.GroupId, SelfGroupPrefix) {
 		return nil, errf(connect.CodePermissionDenied, "device not approved yet")
 	}
+	payload := req.KeyPackage
+	invite := req.InviteSecret != ""
+	if invite {
+		if len(req.InviteSecret) > 128 || strings.HasPrefix(req.GroupId, SelfGroupPrefix) || strings.HasPrefix(req.GroupId, DirectGroupPrefix) {
+			return nil, errf(connect.CodeInvalidArgument, "bad invite")
+		}
+		payload = append([]byte(inviteMagic+req.InviteSecret+"\n"), req.KeyPackage...)
+	}
 	var recipients []string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if err := requireUserInGroup(ctx, tx, req.GroupId, uid, did); err != nil {
+		if invite {
+			// Anyone with the link may knock; the members add them.
+			var hash []byte
+			err := tx.QueryRow(ctx, `SELECT invite_hash FROM groups WHERE id=$1`, req.GroupId).Scan(&hash)
+			if isNoRows(err) {
+				return errf(connect.CodeNotFound, "invite link is not valid")
+			}
+			if err != nil {
+				return err
+			}
+			sum := sha256.Sum256([]byte(req.InviteSecret))
+			if len(hash) == 0 || subtle.ConstantTimeCompare(hash, sum[:]) != 1 {
+				return errf(connect.CodeNotFound, "invite link is not valid")
+			}
+		} else if err := requireUserInGroup(ctx, tx, req.GroupId, uid, did); err != nil {
 			return err
 		}
 		var cur int64
 		if err := tx.QueryRow(ctx, `SELECT current_epoch FROM groups WHERE id=$1 FOR SHARE`, req.GroupId).Scan(&cur); err != nil {
 			return err
 		}
-		msgID, err := insertMessage(ctx, tx, req.GroupId, uint64(cur), deliveryv1.MessageType_MESSAGE_TYPE_JOIN_REQUEST, req.KeyPackage, uid, did)
+		msgID, err := insertMessage(ctx, tx, req.GroupId, uint64(cur), deliveryv1.MessageType_MESSAGE_TYPE_JOIN_REQUEST, payload, uid, did)
 		if err != nil {
 			return err
 		}
@@ -651,4 +730,36 @@ func (s *Service) RequestJoin(ctx context.Context, req *deliveryv1.RequestJoinRe
 	}
 	s.hub.Notify(recipients...)
 	return &deliveryv1.RequestJoinResponse{}, nil
+}
+
+// SetGroupInvite sets or revokes the group's invite link (hash of its secret).
+func (s *Service) SetGroupInvite(ctx context.Context, req *deliveryv1.SetGroupInviteRequest) (*deliveryv1.SetGroupInviteResponse, error) {
+	_, did, err := authmiddleware.RequireDevice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := validGroupID(req.GroupId); err != nil {
+		return nil, err
+	}
+	if strings.HasPrefix(req.GroupId, SelfGroupPrefix) || strings.HasPrefix(req.GroupId, DirectGroupPrefix) {
+		return nil, errf(connect.CodeInvalidArgument, "only groups have invite links")
+	}
+	if len(req.SecretHash) != 0 && len(req.SecretHash) != sha256.Size {
+		return nil, errf(connect.CodeInvalidArgument, "bad hash")
+	}
+	var hash any
+	if len(req.SecretHash) > 0 {
+		hash = req.SecretHash
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := requireMember(ctx, tx, req.GroupId, did); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE groups SET invite_hash=$2 WHERE id=$1`, req.GroupId, hash)
+		return err
+	})
+	if err != nil {
+		return nil, asConnect(err)
+	}
+	return &deliveryv1.SetGroupInviteResponse{}, nil
 }

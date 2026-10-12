@@ -22,6 +22,10 @@ type fakeAuth struct {
 	down    atomic.Bool
 }
 
+func (f *fakeAuth) Blocked(context.Context, *authv1.BlockedRequest) (*authv1.BlockedResponse, error) {
+	return &authv1.BlockedResponse{}, nil
+}
+
 func (f *fakeAuth) DeviceStatus(_ context.Context, r *authv1.DeviceStatusRequest) (*authv1.DeviceStatusResponse, error) {
 	f.calls.Add(1)
 	if f.down.Load() {

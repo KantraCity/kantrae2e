@@ -41,11 +41,12 @@ type entry struct {
 // Client queries auth-service with caching.
 type Client struct {
 	// TTL of cached "approved" answers (default ActiveTTL; 0 disables).
-	TTL   time.Duration
-	c     authv1connect.AuthInternalServiceClient
-	now   func() time.Time
-	mu    sync.Mutex
-	cache map[string]entry
+	TTL    time.Duration
+	c      authv1connect.AuthInternalServiceClient
+	now    func() time.Time
+	mu     sync.Mutex
+	cache  map[string]entry
+	blocks map[string]blockEntry // see blocks.go
 }
 
 // New creates a client for the auth internal API at baseURL.

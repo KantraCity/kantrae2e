@@ -1898,6 +1898,246 @@ func (x *GetIceServersResponse) GetServers() []*IceServer {
 	return nil
 }
 
+type BlockUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockUserRequest) Reset() {
+	*x = BlockUserRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockUserRequest) ProtoMessage() {}
+
+func (x *BlockUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockUserRequest.ProtoReflect.Descriptor instead.
+func (*BlockUserRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *BlockUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type BlockUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockUserResponse) Reset() {
+	*x = BlockUserResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockUserResponse) ProtoMessage() {}
+
+func (x *BlockUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockUserResponse.ProtoReflect.Descriptor instead.
+func (*BlockUserResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{40}
+}
+
+type UnblockUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnblockUserRequest) Reset() {
+	*x = UnblockUserRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnblockUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnblockUserRequest) ProtoMessage() {}
+
+func (x *UnblockUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnblockUserRequest.ProtoReflect.Descriptor instead.
+func (*UnblockUserRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *UnblockUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type UnblockUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnblockUserResponse) Reset() {
+	*x = UnblockUserResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnblockUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnblockUserResponse) ProtoMessage() {}
+
+func (x *UnblockUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnblockUserResponse.ProtoReflect.Descriptor instead.
+func (*UnblockUserResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{42}
+}
+
+type ListBlockedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBlockedRequest) Reset() {
+	*x = ListBlockedRequest{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBlockedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBlockedRequest) ProtoMessage() {}
+
+func (x *ListBlockedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBlockedRequest.ProtoReflect.Descriptor instead.
+func (*ListBlockedRequest) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{43}
+}
+
+type ListBlockedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBlockedResponse) Reset() {
+	*x = ListBlockedResponse{}
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBlockedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBlockedResponse) ProtoMessage() {}
+
+func (x *ListBlockedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_auth_v1_auth_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBlockedResponse.ProtoReflect.Descriptor instead.
+func (*ListBlockedResponse) Descriptor() ([]byte, []int) {
+	return file_kantra_auth_v1_auth_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *ListBlockedResponse) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
 var File_kantra_auth_v1_auth_proto protoreflect.FileDescriptor
 
 const file_kantra_auth_v1_auth_proto_rawDesc = "" +
@@ -2007,7 +2247,16 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"credential\x18\x03 \x01(\tR\n" +
 	"credential\"L\n" +
 	"\x15GetIceServersResponse\x123\n" +
-	"\aservers\x18\x01 \x03(\v2\x19.kantra.auth.v1.IceServerR\aservers2\xdb\f\n" +
+	"\aservers\x18\x01 \x03(\v2\x19.kantra.auth.v1.IceServerR\aservers\"+\n" +
+	"\x10BlockUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x13\n" +
+	"\x11BlockUserResponse\"-\n" +
+	"\x12UnblockUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x15\n" +
+	"\x13UnblockUserResponse\"\x14\n" +
+	"\x12ListBlockedRequest\"0\n" +
+	"\x13ListBlockedResponse\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds2\xe3\x0e\n" +
 	"\vAuthService\x12O\n" +
 	"\bRegister\x12\x1f.kantra.auth.v1.RegisterRequest\x1a .kantra.auth.v1.RegisterResponse\"\x00\x12F\n" +
 	"\x05Login\x12\x1c.kantra.auth.v1.LoginRequest\x1a\x1d.kantra.auth.v1.LoginResponse\"\x00\x12a\n" +
@@ -2027,7 +2276,10 @@ const file_kantra_auth_v1_auth_proto_rawDesc = "" +
 	"\vSetUsername\x12\".kantra.auth.v1.SetUsernameRequest\x1a#.kantra.auth.v1.SetUsernameResponse\"\x00\x12R\n" +
 	"\tSetAvatar\x12 .kantra.auth.v1.SetAvatarRequest\x1a!.kantra.auth.v1.SetAvatarResponse\"\x00\x12R\n" +
 	"\tGetAvatar\x12 .kantra.auth.v1.GetAvatarRequest\x1a!.kantra.auth.v1.GetAvatarResponse\"\x00\x12^\n" +
-	"\rGetIceServers\x12$.kantra.auth.v1.GetIceServersRequest\x1a%.kantra.auth.v1.GetIceServersResponse\"\x00B\xb4\x01\n" +
+	"\rGetIceServers\x12$.kantra.auth.v1.GetIceServersRequest\x1a%.kantra.auth.v1.GetIceServersResponse\"\x00\x12R\n" +
+	"\tBlockUser\x12 .kantra.auth.v1.BlockUserRequest\x1a!.kantra.auth.v1.BlockUserResponse\"\x00\x12X\n" +
+	"\vUnblockUser\x12\".kantra.auth.v1.UnblockUserRequest\x1a#.kantra.auth.v1.UnblockUserResponse\"\x00\x12X\n" +
+	"\vListBlocked\x12\".kantra.auth.v1.ListBlockedRequest\x1a#.kantra.auth.v1.ListBlockedResponse\"\x00B\xb4\x01\n" +
 	"\x12com.kantra.auth.v1B\tAuthProtoP\x01Z9github.com/kantracity/kantrae2e/gen/kantra/auth/v1;authv1\xa2\x02\x03KAX\xaa\x02\x0eKantra.Auth.V1\xca\x02\x0eKantra\\Auth\\V1\xe2\x02\x1aKantra\\Auth\\V1\\GPBMetadata\xea\x02\x10Kantra::Auth::V1b\x06proto3"
 
 var (
@@ -2042,7 +2294,7 @@ func file_kantra_auth_v1_auth_proto_rawDescGZIP() []byte {
 	return file_kantra_auth_v1_auth_proto_rawDescData
 }
 
-var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_kantra_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_kantra_auth_v1_auth_proto_goTypes = []any{
 	(*RegisterRequest)(nil),          // 0: kantra.auth.v1.RegisterRequest
 	(*RegisterResponse)(nil),         // 1: kantra.auth.v1.RegisterResponse
@@ -2083,6 +2335,12 @@ var file_kantra_auth_v1_auth_proto_goTypes = []any{
 	(*GetIceServersRequest)(nil),     // 36: kantra.auth.v1.GetIceServersRequest
 	(*IceServer)(nil),                // 37: kantra.auth.v1.IceServer
 	(*GetIceServersResponse)(nil),    // 38: kantra.auth.v1.GetIceServersResponse
+	(*BlockUserRequest)(nil),         // 39: kantra.auth.v1.BlockUserRequest
+	(*BlockUserResponse)(nil),        // 40: kantra.auth.v1.BlockUserResponse
+	(*UnblockUserRequest)(nil),       // 41: kantra.auth.v1.UnblockUserRequest
+	(*UnblockUserResponse)(nil),      // 42: kantra.auth.v1.UnblockUserResponse
+	(*ListBlockedRequest)(nil),       // 43: kantra.auth.v1.ListBlockedRequest
+	(*ListBlockedResponse)(nil),      // 44: kantra.auth.v1.ListBlockedResponse
 }
 var file_kantra_auth_v1_auth_proto_depIdxs = []int32{
 	6,  // 0: kantra.auth.v1.ListDevicesResponse.devices:type_name -> kantra.auth.v1.Device
@@ -2110,26 +2368,32 @@ var file_kantra_auth_v1_auth_proto_depIdxs = []int32{
 	32, // 22: kantra.auth.v1.AuthService.SetAvatar:input_type -> kantra.auth.v1.SetAvatarRequest
 	34, // 23: kantra.auth.v1.AuthService.GetAvatar:input_type -> kantra.auth.v1.GetAvatarRequest
 	36, // 24: kantra.auth.v1.AuthService.GetIceServers:input_type -> kantra.auth.v1.GetIceServersRequest
-	1,  // 25: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
-	3,  // 26: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
-	5,  // 27: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
-	8,  // 28: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
-	10, // 29: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
-	12, // 30: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
-	14, // 31: kantra.auth.v1.AuthService.RefreshToken:output_type -> kantra.auth.v1.RefreshTokenResponse
-	16, // 32: kantra.auth.v1.AuthService.GetAccountStatus:output_type -> kantra.auth.v1.GetAccountStatusResponse
-	18, // 33: kantra.auth.v1.AuthService.ApproveDevice:output_type -> kantra.auth.v1.ApproveDeviceResponse
-	20, // 34: kantra.auth.v1.AuthService.SetRecovery:output_type -> kantra.auth.v1.SetRecoveryResponse
-	22, // 35: kantra.auth.v1.AuthService.Recover:output_type -> kantra.auth.v1.RecoverResponse
-	25, // 36: kantra.auth.v1.AuthService.SearchUsers:output_type -> kantra.auth.v1.SearchUsersResponse
-	27, // 37: kantra.auth.v1.AuthService.GetProfiles:output_type -> kantra.auth.v1.GetProfilesResponse
-	29, // 38: kantra.auth.v1.AuthService.UpdateProfile:output_type -> kantra.auth.v1.UpdateProfileResponse
-	31, // 39: kantra.auth.v1.AuthService.SetUsername:output_type -> kantra.auth.v1.SetUsernameResponse
-	33, // 40: kantra.auth.v1.AuthService.SetAvatar:output_type -> kantra.auth.v1.SetAvatarResponse
-	35, // 41: kantra.auth.v1.AuthService.GetAvatar:output_type -> kantra.auth.v1.GetAvatarResponse
-	38, // 42: kantra.auth.v1.AuthService.GetIceServers:output_type -> kantra.auth.v1.GetIceServersResponse
-	25, // [25:43] is the sub-list for method output_type
-	7,  // [7:25] is the sub-list for method input_type
+	39, // 25: kantra.auth.v1.AuthService.BlockUser:input_type -> kantra.auth.v1.BlockUserRequest
+	41, // 26: kantra.auth.v1.AuthService.UnblockUser:input_type -> kantra.auth.v1.UnblockUserRequest
+	43, // 27: kantra.auth.v1.AuthService.ListBlocked:input_type -> kantra.auth.v1.ListBlockedRequest
+	1,  // 28: kantra.auth.v1.AuthService.Register:output_type -> kantra.auth.v1.RegisterResponse
+	3,  // 29: kantra.auth.v1.AuthService.Login:output_type -> kantra.auth.v1.LoginResponse
+	5,  // 30: kantra.auth.v1.AuthService.RegisterDevice:output_type -> kantra.auth.v1.RegisterDeviceResponse
+	8,  // 31: kantra.auth.v1.AuthService.ListDevices:output_type -> kantra.auth.v1.ListDevicesResponse
+	10, // 32: kantra.auth.v1.AuthService.RevokeDevice:output_type -> kantra.auth.v1.RevokeDeviceResponse
+	12, // 33: kantra.auth.v1.AuthService.LookupUser:output_type -> kantra.auth.v1.LookupUserResponse
+	14, // 34: kantra.auth.v1.AuthService.RefreshToken:output_type -> kantra.auth.v1.RefreshTokenResponse
+	16, // 35: kantra.auth.v1.AuthService.GetAccountStatus:output_type -> kantra.auth.v1.GetAccountStatusResponse
+	18, // 36: kantra.auth.v1.AuthService.ApproveDevice:output_type -> kantra.auth.v1.ApproveDeviceResponse
+	20, // 37: kantra.auth.v1.AuthService.SetRecovery:output_type -> kantra.auth.v1.SetRecoveryResponse
+	22, // 38: kantra.auth.v1.AuthService.Recover:output_type -> kantra.auth.v1.RecoverResponse
+	25, // 39: kantra.auth.v1.AuthService.SearchUsers:output_type -> kantra.auth.v1.SearchUsersResponse
+	27, // 40: kantra.auth.v1.AuthService.GetProfiles:output_type -> kantra.auth.v1.GetProfilesResponse
+	29, // 41: kantra.auth.v1.AuthService.UpdateProfile:output_type -> kantra.auth.v1.UpdateProfileResponse
+	31, // 42: kantra.auth.v1.AuthService.SetUsername:output_type -> kantra.auth.v1.SetUsernameResponse
+	33, // 43: kantra.auth.v1.AuthService.SetAvatar:output_type -> kantra.auth.v1.SetAvatarResponse
+	35, // 44: kantra.auth.v1.AuthService.GetAvatar:output_type -> kantra.auth.v1.GetAvatarResponse
+	38, // 45: kantra.auth.v1.AuthService.GetIceServers:output_type -> kantra.auth.v1.GetIceServersResponse
+	40, // 46: kantra.auth.v1.AuthService.BlockUser:output_type -> kantra.auth.v1.BlockUserResponse
+	42, // 47: kantra.auth.v1.AuthService.UnblockUser:output_type -> kantra.auth.v1.UnblockUserResponse
+	44, // 48: kantra.auth.v1.AuthService.ListBlocked:output_type -> kantra.auth.v1.ListBlockedResponse
+	28, // [28:49] is the sub-list for method output_type
+	7,  // [7:28] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -2146,7 +2410,7 @@ func file_kantra_auth_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_auth_v1_auth_proto_rawDesc), len(file_kantra_auth_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   39,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

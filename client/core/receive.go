@@ -254,8 +254,16 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 			}
 			if pl.Type == "meta" {
 				if pl.Meta != nil {
+					meta, epoch, gid := pl.Meta, p.Epoch, e.GroupId
 					writes = func(tx *store.Tx) error {
-						return tx.UpsertGroup(store.Group{ID: e.GroupId, Name: pl.Meta.Name, Epoch: p.Epoch, Active: true})
+						name := meta.Name
+						if meta.KeepName {
+							name = ""
+						}
+						if err := tx.UpsertGroup(store.Group{ID: gid, Name: name, Epoch: epoch, Active: true}); err != nil {
+							return err
+						}
+						return tx.SetGroupInfo(gid, metaUpdate(meta))
 					}
 					events = append(events, Event{Type: EventGroupUpdated, GroupID: e.GroupId})
 				}

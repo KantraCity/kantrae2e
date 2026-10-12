@@ -40,6 +40,7 @@ type Service struct {
 	pool    *pgxpool.Pool
 	secret  []byte
 	devices devicestatus.Checker
+	blocks  devicestatus.BlockChecker
 }
 
 func New(pool *pgxpool.Pool, secret []byte) *Service {
@@ -50,6 +51,9 @@ func New(pool *pgxpool.Pool, secret []byte) *Service {
 // from revoked devices (nil disables it).
 func (s *Service) WithDevices(ch devicestatus.Checker) *Service {
 	s.devices = ch
+	if bc, ok := ch.(devicestatus.BlockChecker); ok {
+		s.blocks = bc
+	}
 	return s
 }
 
@@ -167,7 +171,11 @@ func claim(ctx context.Context, q querier, userID, deviceID string) ([]byte, err
 }
 
 func (s *Service) FetchKeyPackage(ctx context.Context, req *directoryv1.FetchKeyPackageRequest) (*directoryv1.FetchKeyPackageResponse, error) {
-	if _, err := authmiddleware.RequireUser(ctx); err != nil {
+	uid, err := authmiddleware.RequireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.notBlocked(ctx, uid, req.UserId); err != nil {
 		return nil, err
 	}
 	active, err := s.activeDevices(ctx, []string{req.DeviceId})
@@ -187,8 +195,25 @@ func (s *Service) FetchKeyPackage(ctx context.Context, req *directoryv1.FetchKey
 	return &directoryv1.FetchKeyPackageResponse{KeyPackage: kp}, nil
 }
 
+// notBlocked: a user who blocked you (or whom you blocked) cannot be added
+// to chats by you — no KeyPackages are handed out.
+func (s *Service) notBlocked(ctx context.Context, uid, target string) error {
+	blocked, err := devicestatus.IsBlocked(ctx, s.blocks, uid, target)
+	if err != nil {
+		return connect.NewError(connect.CodeUnavailable, err)
+	}
+	if blocked {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("blocked"))
+	}
+	return nil
+}
+
 func (s *Service) FetchUserKeyPackages(ctx context.Context, req *directoryv1.FetchUserKeyPackagesRequest) (*directoryv1.FetchUserKeyPackagesResponse, error) {
-	if _, err := authmiddleware.RequireUser(ctx); err != nil {
+	uid, err := authmiddleware.RequireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.notBlocked(ctx, uid, req.UserId); err != nil {
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx,
