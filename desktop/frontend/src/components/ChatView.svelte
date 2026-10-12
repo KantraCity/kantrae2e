@@ -2,7 +2,7 @@
   import { tick } from 'svelte'
   import { app } from '../lib/app.svelte'
   import { Messenger } from '../lib/api'
-  import { plural } from '../lib/util'
+  import { lastSeenText, plural } from '../lib/util'
   import { loadDraft, saveDraft } from '../lib/persist'
   import Avatar from './Avatar.svelte'
   import MessageList from './MessageList.svelte'
@@ -67,8 +67,16 @@
     const id = chat?.id
     const active = chat?.active
     memberCount = null
+    // Presence of the person, refreshed every 30 s while the chat is open.
+    let presenceTimer: ReturnType<typeof setInterval> | undefined
+    const peer = chat?.kind === 'direct' ? chat.peerId : ''
+    if (peer) {
+      app.refreshPresence([peer])
+      presenceTimer = setInterval(() => app.refreshPresence([peer]), 30_000)
+    }
     if (id && active && chat?.kind === 'group') Messenger.Members(id).then((ms) => (memberCount = new Set((ms ?? []).map((x) => x.userId)).size)).catch(() => {})
     input?.focus()
+    return () => clearInterval(presenceTimer)
   })
 
   async function send() {
@@ -271,14 +279,14 @@
     <header>
       <button class="icon-btn back" aria-label="Назад" onclick={() => app.openChat(null)}><Icon name="back" /></button>
       <button class="title" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}>
-        <Avatar name={chat.name} id={chat.peerId || chat.id} user={chat.peerId} photo={chat.peerAvatar} size={42} />
+        <Avatar name={chat.name} id={chat.peerId || chat.id} user={chat.peerId} photo={chat.peerAvatar} src={chat.photo} size={42} />
         <div class="title-text">
           <div class="name">{chat.name}</div>
           <div class="status muted">
             {#if !chat.active}{chat.kind === 'direct' ? 'чат недоступен' : 'вы не участник этой группы'}
             {:else if !app.online}соединение…
             {:else if app.typingIn(chat.id)}<span class="typing">{chat.kind === 'direct' ? 'печатает' : `${app.typingIn(chat.id)} печатает`}<span class="dots"></span></span>
-            {:else if chat.kind === 'direct'}@{chat.peer}
+            {:else if chat.kind === 'direct'}<span class:online={app.presence[chat.peerId ?? '']?.online}>{lastSeenText(app.presence[chat.peerId ?? '']) || '@' + chat.peer}</span>
             {:else if memberCount !== null}{memberCount} {plural(memberCount, 'участник', 'участника', 'участников')}
             {:else}&nbsp;{/if}
           </div>
@@ -312,7 +320,11 @@
         <button class="icon-btn" aria-label="Отмена" onclick={cancelCompose}><Icon name="close" size={20} /></button>
       </div>
     {/if}
-    {#if chat.active}
+    {#if chat.kind === 'direct' && chat.peerId && app.blocked.includes(chat.peerId)}
+      <footer class="readonly">
+        <button class="unblock" onclick={() => app.setBlocked(chat.peerId!, false)}>Разблокировать</button>
+      </footer>
+    {:else if chat.active}
       <footer>
         {#if attachOpen}<AttachSheet onclose={() => (attachOpen = false)} />{/if}
         {#if panelOpen}
@@ -398,6 +410,8 @@
   .status { font-size: 13px; }
   footer { position: relative; display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px 14px; max-width: 792px; width: 100%; margin: 0 auto; }
   .emoji-btn.on { color: var(--accent-light); }
+  .unblock { color: #e17076; font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .3px; padding: 6px 16px; border-radius: 10px; }
+  .unblock:hover { background: var(--bg-hover); }
   .panel-backdrop { position: fixed; inset: 0; z-index: 25; }
   .emoji-pop { position: absolute; right: 16px; bottom: calc(100% + 6px); z-index: 26; width: 380px; height: 430px; max-height: 60vh;
     border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
@@ -427,6 +441,7 @@
   .cb-title { color: var(--accent-light); font-weight: 500; font-size: 14px; }
   .cb-body { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
   .typing { color: var(--accent-light); }
+  .status .online { color: var(--accent-light); }
   .dots::after { content: '…'; animation: dots 1.2s steps(3) infinite; display: inline-block; width: 1em; overflow: hidden; vertical-align: bottom; }
   @keyframes dots { from { width: 0; } to { width: 1em; } }
   .send.mic { background: var(--bg-sidebar); color: var(--text-muted); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;

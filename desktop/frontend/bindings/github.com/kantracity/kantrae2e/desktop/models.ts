@@ -66,6 +66,13 @@ export interface Chat {
      * unix ms
      */
     "updatedAt": number;
+
+    /**
+     * Groups: description, photo URL (served decrypted), invite link on.
+     */
+    "about"?: string;
+    "photo"?: string;
+    "hasInvite"?: boolean;
 }
 
 export interface Device {
@@ -237,6 +244,16 @@ export interface Message {
      * Read: an outgoing message someone else has read (✓✓).
      */
     "read"?: boolean;
+}
+
+/**
+ * PresenceView: Online, or LastSeen (unix ms); Hidden = "last seen recently".
+ */
+export interface PresenceView {
+    "userId": string;
+    "online": boolean;
+    "lastSeen": number;
+    "hidden": boolean;
 }
 
 /**

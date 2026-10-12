@@ -79,3 +79,19 @@ export function downloadBase64(name: string, mime: string, b64: string) {
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
+
+/** Telegram's status line of a person: "в сети" / "был(а) в 14:20" … */
+export function lastSeenText(p: { online: boolean; lastSeen: number; hidden: boolean } | undefined): string {
+  if (!p) return ''
+  if (p.online) return 'в сети'
+  if (p.hidden || !p.lastSeen) return 'был(а) недавно'
+  const d = new Date(p.lastSeen), now = new Date()
+  const mins = Math.floor((now.getTime() - p.lastSeen) / 60000)
+  if (mins < 1) return 'был(а) только что'
+  if (mins < 60) return `был(а) ${mins} ${plural(mins, 'минуту', 'минуты', 'минут')} назад`
+  const hm = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  if (d.toDateString() === now.toDateString()) return `был(а) в ${hm}`
+  const y = new Date(now); y.setDate(now.getDate() - 1)
+  if (d.toDateString() === y.toDateString()) return `был(а) вчера в ${hm}`
+  return `был(а) ${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`
+}

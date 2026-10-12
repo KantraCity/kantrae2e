@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"container/list"
 	"context"
+	"encoding/json"
 	"mime"
 	"net/http"
 	"path"
@@ -21,6 +22,9 @@ import (
 // webview, the local web server of web mode, or the Android app itself.
 
 const mediaPrefix = "/media/"
+
+// groupPhotoDir: /media/groupphoto/<group id>.jpg serves a group's photo.
+const groupPhotoDir = "groupphoto"
 
 // mediaCache keeps recently viewed decrypted files in memory (LRU by size).
 type mediaCache struct {
@@ -101,19 +105,29 @@ func (m *Messenger) serveMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	msg, err := c.Message(ctx, chatID, uid)
-	if err != nil || msg.Deleted {
-		http.NotFound(w, r)
-		return
-	}
-	ref, err := core.ParseMedia(msg)
-	if err != nil {
-		http.NotFound(w, r)
-		return
+	var ref *core.MediaRef
+	if chatID == groupPhotoDir {
+		// /media/groupphoto/<group>.jpg: the group's photo (group info).
+		g, err := c.ResolveGroup(ctx, uid)
+		if err != nil || g.Avatar == "" || json.Unmarshal([]byte(g.Avatar), &ref) != nil {
+			http.NotFound(w, r)
+			return
+		}
+	} else {
+		msg, err := c.Message(ctx, chatID, uid)
+		if err != nil || msg.Deleted {
+			http.NotFound(w, r)
+			return
+		}
+		if ref, err = core.ParseMedia(msg); err != nil {
+			http.NotFound(w, r)
+			return
+		}
 	}
 	e, ok := decrypted.get(ref.Hash)
 	if !ok {
-		name, data, err := c.DownloadMedia(ctx, msg)
+		data, err := c.DownloadRef(ctx, ref)
+		name := ref.Name
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

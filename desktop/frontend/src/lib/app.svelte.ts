@@ -101,6 +101,9 @@ class AppState {
     })
     await this.loadAccount()
     this.loaded = true
+    // Web mode: an open, visible tab is "online" (the desktop window and the
+    // Android activity report focus themselves).
+    if (this.state?.webMode) Messenger.SetForeground(!document.hidden).catch(() => {})
   }
 
   /** (Re)loads everything for the active account (start, account switch). */
@@ -130,6 +133,7 @@ class AppState {
           if (id && this.chats.some((c) => c.id === id)) await this.openChat(id)
         }
         this.loadMe()
+        this.loadBlocked()
       }
     } catch (e) {
       this.toast(errorText(e), 'error')
@@ -575,6 +579,27 @@ class AppState {
     })
     this.sendQueue = run
     return run
+  }
+
+  // ---- block list (ids), for the "Разблокировать" bar of a direct chat ----
+  blocked = $state<string[]>([])
+  async loadBlocked() {
+    this.blocked = ((await Messenger.Blocked().catch(() => null)) ?? []).map((u) => u.userId)
+  }
+  async setBlocked(userId: string, on: boolean) {
+    const ok = await this.try(() => (on ? Messenger.Block(userId) : Messenger.Unblock(userId)))
+    if (ok === undefined) return false
+    this.blocked = on ? [...new Set([...this.blocked, userId])] : this.blocked.filter((x) => x !== userId)
+    return true
+  }
+
+  // ---- presence ("в сети / был(а)") of people, refreshed while visible ----
+  presence = $state<Record<string, { online: boolean; lastSeen: number; hidden: boolean }>>({})
+  async refreshPresence(userIds: string[]) {
+    const ids = userIds.filter(Boolean)
+    if (!ids.length) return
+    const list = await Messenger.Presence(ids).catch(() => null)
+    for (const p of list ?? []) this.presence[p.userId] = { online: p.online, lastSeen: p.lastSeen, hidden: p.hidden }
   }
 
   // ---- saved GIFs and stickers (no packs: what you liked, you keep) ----

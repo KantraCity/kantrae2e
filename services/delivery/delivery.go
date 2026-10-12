@@ -441,6 +441,9 @@ func (s *Service) Typing(ctx context.Context, req *deliveryv1.TypingRequest) (*d
 	if !member {
 		return nil, errf(connect.CodePermissionDenied, "not a member of the group")
 	}
+	if err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error { return s.checkDirect(ctx, tx, req.GroupId, uid, nil) }); err != nil {
+		return nil, asConnect(err)
+	}
 	s.hub.Push(&deliveryv1.Envelope{GroupId: req.GroupId, Type: deliveryv1.MessageType_MESSAGE_TYPE_TYPING,
 		SenderUserId: uid, SenderDeviceId: did, CreatedAt: time.Now().Unix(), Ephemeral: true}, devices...)
 	return &deliveryv1.TypingResponse{}, nil

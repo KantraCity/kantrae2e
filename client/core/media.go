@@ -122,16 +122,21 @@ func (c *Client) DownloadMedia(ctx context.Context, m *store.Message) (name stri
 	if err != nil {
 		return "", nil, err
 	}
+	data, err = c.DownloadRef(ctx, ref)
+	return ref.Name, data, err
+}
+
+// DownloadRef fetches and decrypts the file of a media reference.
+func (c *Client) DownloadRef(ctx context.Context, ref *MediaRef) (data []byte, err error) {
 	if err := c.refreshToken(ctx); err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	r, err := c.media.GetMedia(ctx, &mediav1.GetMediaRequest{Hash: ref.Hash})
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	if blobstore.Hash(r.Data) != ref.Hash {
-		return "", nil, errors.New("media hash mismatch")
+		return nil, errors.New("media hash mismatch")
 	}
-	data, err = crypto.Open(ref.Key, r.Data, []byte("kantra/media/v1"))
-	return ref.Name, data, err
+	return crypto.Open(ref.Key, r.Data, []byte("kantra/media/v1"))
 }

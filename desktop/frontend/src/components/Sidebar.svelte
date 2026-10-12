@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte'
-  import type { Chat } from '../lib/api'
+  import { Messenger, type Chat } from '../lib/api'
   import { chatListTime } from '../lib/util'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
@@ -8,6 +8,15 @@
   const q = $derived(app.search.trim().replace(/^@/, '').toLowerCase())
   const filtered = $derived(q ? app.chats.filter((c) => c.name.toLowerCase().includes(q)) : app.chats)
   // People found globally that are not already a private chat in the list.
+  // An invite link pasted into the search joins its group.
+  const inviteLink = $derived(/\/join\/[^#\s]+#\S+/.test(app.search.trim()))
+  async function joinLink() {
+    const id = await app.try(() => Messenger.JoinByLink(app.search.trim()))
+    if (id === undefined) return
+    app.search = ''
+    if (app.chats.some((c) => c.id === id)) app.openChat(id)
+    else app.toast('Запрос отправлен — вас добавят, как только кто-то из участников будет в сети', 'info', 6000)
+  }
   const people = $derived(app.userHits.filter((u) => !filtered.some((c) => c.kind === 'direct' && c.peerId === u.userId)))
   let menu = $state(false)
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -67,12 +76,18 @@
   {/if}
 
   <div class="list">
+    {#if inviteLink}
+      <button class="chat-item" onclick={joinLink}>
+        <span class="join-ic"><Icon name="link" size={24} /></span>
+        <div class="meta"><span class="name">Вступить в группу</span><span class="preview">по ссылке-приглашению</span></div>
+      </button>
+    {/if}
     {#if q && filtered.length}<div class="section-title">Чаты</div>{/if}
     {#each filtered as c (c.id)}
       <button class="chat-item" class:active={c.id === app.currentId} onclick={() => { if (longPressed) longPressed = false; else app.openChat(c.id) }}
         oncontextmenu={(e) => { e.preventDefault(); app.chatMenu = { chat: c, x: e.clientX, y: e.clientY } }}
         ontouchstart={(e) => pressStart(e, c)} ontouchend={pressEnd} ontouchmove={pressEnd}>
-        <Avatar name={c.name} id={c.peerId || c.id} user={c.peerId} photo={c.peerAvatar} size={54} />
+        <Avatar name={c.name} id={c.peerId || c.id} user={c.peerId} photo={c.peerAvatar} src={c.photo} size={54} />
         <div class="meta">
           <div class="row">
             <span class="name">
@@ -166,4 +181,5 @@
   .fab { position: absolute; right: 20px; bottom: 20px; width: 54px; height: 54px; border-radius: 50%; background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); transition: transform .15s, filter .15s; }
   .fab:hover { filter: brightness(1.1); transform: scale(1.04); }
+  .join-ic { width: 54px; height: 54px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 </style>

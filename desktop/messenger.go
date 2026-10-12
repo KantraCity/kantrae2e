@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -156,6 +158,10 @@ type Chat struct {
 	Active     bool     `json:"active"`
 	Last       *Message `json:"last,omitempty"`
 	UpdatedAt  int64    `json:"updatedAt"` // unix ms
+	// Groups: description, photo URL (served decrypted), invite link on.
+	About     string `json:"about,omitempty"`
+	Photo     string `json:"photo,omitempty"`
+	HasInvite bool   `json:"hasInvite,omitempty"`
 }
 
 type Member struct {
@@ -662,6 +668,13 @@ func (m *Messenger) toChat(c *core.Client, g store.Group) Chat {
 	}
 	if ch.Name == "" {
 		ch.Name = "Группа " + g.ID[:4]
+	}
+	if ch.Kind == core.KindGroup {
+		ch.About, ch.HasInvite = g.About, g.Invite != ""
+		var ref core.MediaRef
+		if g.Avatar != "" && json.Unmarshal([]byte(g.Avatar), &ref) == nil && ref.Hash != "" {
+			ch.Photo = mediaPrefix + groupPhotoDir + "/" + url.PathEscape(g.ID) + ".jpg?v=" + ref.Hash[:min(12, len(ref.Hash))]
+		}
 	}
 	return ch
 }

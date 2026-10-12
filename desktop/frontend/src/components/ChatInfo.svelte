@@ -1,7 +1,8 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte'
   import { Messenger, type Member, type UserProfile } from '../lib/api'
-  import { plural } from '../lib/util'
+  import { lastSeenText, plural } from '../lib/util'
+  import { blobToBase64 } from '../lib/media'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
   import Modal from './Modal.svelte'
@@ -20,6 +21,80 @@
   })
   let invite = $state('')
   let busy = $state(false)
+
+  // ---- direct chat: presence and block ----
+  const blocked = $derived(!!chat?.peerId && app.blocked.includes(chat.peerId))
+  $effect(() => {
+    if (chat?.kind === 'direct' && chat.peerId) app.refreshPresence([chat.peerId])
+  })
+  async function toggleBlock() {
+    if (!chat?.peerId) return
+    if (!blocked && !confirm(`Заблокировать ${chat.name}? Он(а) не сможет писать и звонить вам.`)) return
+    if (await app.setBlocked(chat.peerId, !blocked)) app.toast(blocked ? 'Пользователь заблокирован' : 'Пользователь разблокирован')
+  }
+
+  // ---- group: name, description, photo, invite link ----
+  let editing = $state(false)
+  let editName = $state('')
+  let editAbout = $state('')
+  function startEdit() {
+    editName = chat?.name ?? ''
+    editAbout = chat?.about ?? ''
+    editing = true
+  }
+  async function saveInfo(e: SubmitEvent) {
+    e.preventDefault()
+    if (!editName.trim()) return
+    const ok = await app.try(() => Messenger.SetGroupInfo(chatId, editName.trim(), editAbout.trim()))
+    if (ok !== undefined) {
+      editing = false
+      await app.refreshChats()
+    }
+  }
+  let photoInput: HTMLInputElement | undefined = $state()
+  async function setPhoto(files: FileList | null) {
+    const f = files?.[0]
+    if (photoInput) photoInput.value = ''
+    if (!f) return
+    try {
+      // Square, 640 px, JPEG — like Telegram's group photos.
+      const bmp = await createImageBitmap(f)
+      const side = Math.min(bmp.width, bmp.height)
+      const c = document.createElement('canvas')
+      c.width = c.height = Math.min(640, side)
+      c.getContext('2d')!.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, c.width, c.height)
+      const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/jpeg', 0.88))
+      const b64 = await blobToBase64(blob)
+      const ok = await app.try(() => Messenger.SetGroupPhoto(chatId, b64))
+      if (ok !== undefined) await app.refreshChats()
+    } catch {
+      app.toast('Не удалось открыть картинку', 'error')
+    }
+  }
+  let link = $state('')
+  async function showLink(reset = false) {
+    if (reset && !confirm('Старая ссылка перестанет работать. Создать новую?')) return
+    const l = await app.try(() => Messenger.InviteLink(chatId, reset))
+    if (l) {
+      link = l
+      await app.refreshChats()
+    }
+  }
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(link)
+      app.toast('Ссылка скопирована')
+    } catch { app.toast('Не удалось скопировать', 'error') }
+  }
+  async function revokeLink() {
+    if (!confirm('Отключить ссылку-приглашение?')) return
+    const ok = await app.try(() => Messenger.RevokeInviteLink(chatId))
+    if (ok !== undefined) {
+      link = ''
+      await app.refreshChats()
+    }
+  }
+  $effect(() => { if (chat?.hasInvite && !link) Messenger.InviteLink(chatId, false).then((l) => (link = l)).catch(() => {}) })
 
   // One row per user: worst status of its devices wins.
   const rank: Record<string, number> = { conflict: 0, seen: 1, verified: 2, self: 3 }
@@ -68,7 +143,7 @@
       <Avatar name={chat.name} id={chat.peerId || chat.id} user={chat.peerId} photo={profile?.avatarId ?? chat.peerAvatar} size={96} />
       <div>
         <div class="name">{profile?.name ?? chat.name}</div>
-        <div class="muted">личный чат · сквозное шифрование</div>
+        <div class="muted" class:online={app.presence[chat.peerId ?? '']?.online}>{lastSeenText(app.presence[chat.peerId ?? '']) || 'личный чат'}</div>
       </div>
     </div>
     <div class="info-rows">
@@ -81,14 +156,52 @@
       {#if peer}<StatusBadge status={peer.status} />{/if}
     </button>
     <p class="muted small hint">Сверьте отпечатки с собеседником лично или по звонку, чтобы исключить подмену ключей.</p>
+    <button class="row-btn" class:red={!blocked} onclick={toggleBlock}>
+      <Icon name="block" size={20} /><span>{blocked ? 'Разблокировать' : 'Заблокировать'}</span>
+    </button>
   {:else if chat}
     <div class="head">
-      <Avatar name={chat.name} id={chat.id} size={72} />
-      <div>
+      <button class="photo-btn" disabled={!chat.active} title="Изменить фото группы" onclick={() => photoInput?.click()}>
+        <Avatar name={chat.name} id={chat.id} src={chat.photo} size={72} />
+        {#if chat.active}<span class="photo-cam"><Icon name="camera" size={16} /></span>{/if}
+      </button>
+      <input type="file" hidden accept="image/*" bind:this={photoInput} onchange={(e) => setPhoto((e.currentTarget as HTMLInputElement).files)} />
+      <div class="grow-head">
         <div class="name">{chat.name}</div>
         <div class="muted">{chat.active ? `${users.length} ${plural(users.length, 'участник', 'участника', 'участников')}` : 'вы не участник'}</div>
       </div>
+      {#if chat.active && !editing}<button class="icon-btn" title="Изменить" aria-label="Изменить" onclick={startEdit}><Icon name="pencil" size={20} /></button>{/if}
     </div>
+    {#if editing}
+      <form class="edit" onsubmit={saveInfo}>
+        <input class="field" placeholder="Название группы" bind:value={editName} maxlength="128" />
+        <textarea class="field" placeholder="Описание (необязательно)" bind:value={editAbout} maxlength="255" rows="2"></textarea>
+        <div class="edit-actions">
+          <button type="button" class="btn flat" onclick={() => (editing = false)}>Отмена</button>
+          <button class="btn" disabled={!editName.trim()}>Сохранить</button>
+        </div>
+      </form>
+    {:else if chat.about}
+      <div class="info-rows"><div class="info-row"><div class="bio">{chat.about}</div><div class="muted small">Описание</div></div></div>
+    {/if}
+
+    {#if chat.active}
+      <div class="link-box">
+        <div class="section muted">Ссылка-приглашение</div>
+        {#if link}
+          <div class="link-row">
+            <code class="link">{link}</code>
+            <button class="icon-btn" title="Копировать" aria-label="Копировать" onclick={copyLink}><Icon name="copy" size={18} /></button>
+          </div>
+          <div class="link-actions">
+            <button class="btn flat" onclick={() => showLink(true)}>Новая ссылка</button>
+            <button class="btn flat danger-text" onclick={revokeLink}>Отключить</button>
+          </div>
+        {:else}
+          <button class="row-btn" onclick={() => showLink()}><Icon name="link" size={20} /><span class="grow">Создать ссылку-приглашение</span></button>
+        {/if}
+      </div>
+    {/if}
 
     {#if chat.active}
       <form class="invite" onsubmit={add}>
@@ -159,4 +272,19 @@
   .info-row { padding: 8px 10px; border-radius: 10px; }
   .info-row:hover { background: var(--bg-hover); }
   .bio { white-space: pre-wrap; word-break: break-word; }
+  .photo-btn { position: relative; border-radius: 50%; }
+  .photo-cam { position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+    color: #fff; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg-modal); }
+  .grow-head { flex: 1; min-width: 0; }
+  .edit { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .edit textarea { resize: none; }
+  .edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .link-box { margin-bottom: 14px; }
+  .link-row { display: flex; align-items: center; gap: 6px; background: var(--bg-input); border-radius: 10px; padding: 6px 6px 6px 12px; }
+  .link { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--accent-light); }
+  .link-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .danger-text { color: #e17076; }
+  .row-btn.red { color: #e17076; }
+  .row-btn.red span { color: #e17076; }
+  .online { color: var(--accent-light) !important; }
 </style>

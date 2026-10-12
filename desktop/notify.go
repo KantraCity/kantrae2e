@@ -133,6 +133,7 @@ func (m *Messenger) SetActiveChat(chatID string) {
 // SetForeground tells whether the user is looking at the app (window
 // focused / activity resumed / browser tab visible).
 func (m *Messenger) SetForeground(fg bool) {
+	m.setActive(fg)
 	m.mu.Lock()
 	m.foreground = fg
 	key := ""

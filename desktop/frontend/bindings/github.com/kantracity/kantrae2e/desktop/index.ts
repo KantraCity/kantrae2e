@@ -22,6 +22,7 @@ export type {
     MediaUpload,
     Member,
     Message,
+    PresenceView,
     ReactionInfo,
     ReplyInfo,
     Settings,

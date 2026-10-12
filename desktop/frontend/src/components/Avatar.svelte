@@ -2,8 +2,9 @@
   import { photos } from '../lib/photos.svelte'
   import { avatarColor, initials } from '../lib/util'
   // user + photo: the profile photo (avatarId) of that user, if any.
-  let { name, id = name, size = 48, user, photo }: { name: string; id?: string; size?: number; user?: string; photo?: string } = $props()
-  const src = $derived(photos.url(user, photo))
+  // src: a ready image URL (group photos).
+  let { name, id = name, size = 48, user, photo, src: direct }: { name: string; id?: string; size?: number; user?: string; photo?: string; src?: string } = $props()
+  const src = $derived(direct || photos.url(user, photo))
 </script>
 
 <div class="avatar" style="width:{size}px;height:{size}px;font-size:{Math.round(size * 0.38)}px;background:{avatarColor(id)}">

@@ -64,6 +64,17 @@ export function Backup(): $CancellablePromise<number> {
 }
 
 /**
+ * Block / Unblock a user; Blocked lists them (with profiles).
+ */
+export function Block(userID: string): $CancellablePromise<void> {
+    return $Call.ByID(794900090, userID);
+}
+
+export function Blocked(): $CancellablePromise<$models.UserHit[] | null> {
+    return $Call.ByID(2766651403);
+}
+
+/**
  * CancelAddAccount returns to the previous account.
  */
 export function CancelAddAccount(): $CancellablePromise<void> {
@@ -184,8 +195,38 @@ export function Invite(chatID: string, usernames: string[] | null): $Cancellable
     return $Call.ByID(1649811096, chatID, usernames);
 }
 
+/**
+ * InviteLink returns the group's invite link (reset: a new one, the old one
+ * stops working).
+ */
+export function InviteLink(chatID: string, reset: boolean): $CancellablePromise<string> {
+    return $Call.ByID(986917960, chatID, reset);
+}
+
+/**
+ * IsInviteLink reports whether text is a Kantra invite link.
+ */
+export function IsInviteLink(text: string): $CancellablePromise<boolean> {
+    return $Call.ByID(593376840, text);
+}
+
+/**
+ * JoinByLink asks to join a group by its invite link. The group appears
+ * when a member adds this device (usually within seconds).
+ */
+export function JoinByLink(link: string): $CancellablePromise<string> {
+    return $Call.ByID(3097403904, link);
+}
+
 export function Keys(username: string): $CancellablePromise<$models.DeviceKey[] | null> {
     return $Call.ByID(3504242277, username);
+}
+
+/**
+ * LastSeenPrivacy: "everybody", "chats" or "nobody".
+ */
+export function LastSeenPrivacy(): $CancellablePromise<string> {
+    return $Call.ByID(289480166);
 }
 
 /**
@@ -270,6 +311,10 @@ export function PendingLinks(): $CancellablePromise<$models.LinkRequest[] | null
     return $Call.ByID(3055171637);
 }
 
+export function Presence(userIDs: string[] | null): $CancellablePromise<$models.PresenceView[] | null> {
+    return $Call.ByID(2601793612, userIDs);
+}
+
 /**
  * React sets (or with "" removes) this user's reaction.
  */
@@ -330,6 +375,10 @@ export function RequestLink(): $CancellablePromise<void> {
 
 export function RevokeDevice(deviceID: string): $CancellablePromise<number> {
     return $Call.ByID(2532478977, deviceID);
+}
+
+export function RevokeInviteLink(chatID: string): $CancellablePromise<void> {
+    return $Call.ByID(337469870, chatID);
 }
 
 /**
@@ -429,6 +478,24 @@ export function SetForeground(fg: boolean): $CancellablePromise<void> {
 }
 
 /**
+ * SetGroupInfo sets a group's name and description.
+ */
+export function SetGroupInfo(chatID: string, name: string, about: string): $CancellablePromise<void> {
+    return $Call.ByID(1329759226, chatID, name, about);
+}
+
+/**
+ * SetGroupPhoto sets the group photo from an image (base64); "" removes it.
+ */
+export function SetGroupPhoto(chatID: string, imageBase64: string): $CancellablePromise<void> {
+    return $Call.ByID(3499515914, chatID, imageBase64);
+}
+
+export function SetLastSeenPrivacy(who: string): $CancellablePromise<void> {
+    return $Call.ByID(3095324216, who);
+}
+
+/**
  * SetSettings stores the notification settings.
  */
 export function SetSettings(s: $models.Settings): $CancellablePromise<void> {
@@ -479,6 +546,10 @@ export function Trust(username: string, deviceID: string): $CancellablePromise<n
  */
 export function Typing(chatID: string): $CancellablePromise<void> {
     return $Call.ByID(1049831854, chatID);
+}
+
+export function Unblock(userID: string): $CancellablePromise<void> {
+    return $Call.ByID(3684031559, userID);
 }
 
 /**

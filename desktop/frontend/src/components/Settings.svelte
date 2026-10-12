@@ -1,11 +1,28 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte'
-  import { Messenger, type Device, type Settings as Prefs } from '../lib/api'
+  import { Messenger, type Device, type Settings as Prefs, type UserHit } from '../lib/api'
   import { plural } from '../lib/util'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
   import Modal from './Modal.svelte'
   import { checkCalls, type CallCheck } from '../lib/call.svelte'
+
+  // ---- privacy: last seen, block list ----
+  let seen = $state('')
+  let blocked = $state<UserHit[]>([])
+  $effect(() => {
+    Messenger.LastSeenPrivacy().then((v) => (seen = v)).catch(() => {})
+    Messenger.Blocked().then((l) => (blocked = l ?? [])).catch(() => {})
+  })
+  async function setSeen(v: string) {
+    const prev = seen
+    seen = v
+    const ok = await app.try(() => Messenger.SetLastSeenPrivacy(v))
+    if (ok === undefined) seen = prev
+  }
+  async function unblock(u: UserHit) {
+    if (await app.setBlocked(u.userId, false)) blocked = blocked.filter((x) => x.userId !== u.userId)
+  }
 
   let checking = $state(false)
   let check = $state<CallCheck | null>(null)
@@ -151,6 +168,29 @@
     {/if}
 
     <div class="section">
+      <div class="label"><Icon name="lock" size={18} /> Конфиденциальность</div>
+      <div class="select-row">
+        <span>Кто видит время захода</span>
+        <select class="field small-select" value={seen} onchange={(e) => setSeen(e.currentTarget.value)} disabled={!seen}>
+          <option value="everybody">Все</option>
+          <option value="chats">Мои чаты</option>
+          <option value="nobody">Никто</option>
+        </select>
+      </div>
+      {#if seen === 'nobody'}<p class="muted small">Тогда и вы не видите, когда заходили другие (как в Telegram).</p>{/if}
+      <div class="sublabel">Чёрный список{blocked.length ? ` · ${blocked.length}` : ''}</div>
+      {#each blocked as u (u.userId)}
+        <div class="device">
+          <div class="who-row"><Avatar name={u.name || u.username} id={u.userId} user={u.userId} photo={u.avatarId} size={34} />
+            <div><div>{u.name || u.username}</div><div class="muted small">@{u.username}</div></div></div>
+          <button class="btn flat" onclick={() => unblock(u)}>Разблокировать</button>
+        </div>
+      {:else}
+        <p class="muted small">Пусто. Заблокировать можно в профиле человека (Информация → Заблокировать).</p>
+      {/each}
+    </div>
+
+    <div class="section">
       <div class="label"><Icon name="key" size={18} /> Ключ восстановления</div>
       <p class="muted small">
         {#if hasRecovery === null}…
@@ -226,4 +266,8 @@
   .check-res { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
   .check-res .ok { color: var(--success); }
   .check-res .bad { color: #ff8a80; }
+  .select-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  .small-select { width: auto; padding: 6px 10px; background: var(--bg-input); }
+  .sublabel { margin: 12px 0 4px; font-size: 13px; color: var(--text-muted); }
+  .who-row { display: flex; align-items: center; gap: 10px; }
 </style>
