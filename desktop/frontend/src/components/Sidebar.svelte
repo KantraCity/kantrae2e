@@ -69,6 +69,7 @@
         onkeydown={(e) => e.key === 'Escape' && clearSearch()} />
       {#if app.search}<button class="clear" aria-label="Очистить" onclick={clearSearch}><Icon name="close" size={16} /></button>{/if}
     </div>
+    {#if app.passcode.enabled}<button class="icon-btn" aria-label="Заблокировать" title="Заблокировать (код-пароль)" onclick={() => app.lock()}><Icon name="lock" size={20} /></button>{/if}
   </header>
 
   {#if app.links.length}
@@ -159,28 +160,28 @@
     transition: background .15s, transform .1s; }
   .chat-item:active { transform: scale(.985); }
   .chat-item:hover { background: var(--bg-hover); }
-  .chat-item.active { background: var(--bg-active); }
+  .chat-item.active { background: var(--bg-active); color: var(--active-text); }
   .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
   .inactive { color: var(--text-muted); display: inline-flex; }
   .time { color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
-  .chat-item.active .time, .chat-item.active .preview { color: #cfe2f6; }
+  .chat-item.active .time, .chat-item.active .preview { color: var(--active-sub); }
   .preview { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
   .typing { color: var(--accent-light); }
   .badge { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
   .chat-item.active .badge { background: #fff; color: var(--bg-active); }
-  .badge.quiet { background: #5b6b7b; }
+  .badge.quiet { background: var(--quiet); }
   .nm { overflow: hidden; text-overflow: ellipsis; }
   .muted-ic, .pin-ic { color: var(--text-muted); display: inline-flex; flex-shrink: 0; }
-  .chat-item.active .muted-ic, .chat-item.active .pin-ic { color: #cfe2f6; }
+  .chat-item.active .muted-ic, .chat-item.active .pin-ic { color: var(--active-sub); }
   .empty { text-align: center; padding: 40px 20px; line-height: 1.5; }
   .empty.small { padding: 16px; font-size: 14px; }
   .clear { color: var(--text-muted); display: inline-flex; }
   .section-title { font-size: 14px; font-weight: 500; color: var(--text-muted); padding: 10px 12px 6px; background: var(--bg-sidebar); }
   .link-banner { display: flex; align-items: center; gap: 10px; margin: 0 12px 6px; padding: 10px 14px; border-radius: 10px; background: var(--bg-active); color: #fff; text-align: left; font-size: 14px; }
   .menu-backdrop { position: absolute; inset: 0; z-index: 2; }
-  .fab-menu { position: absolute; right: 20px; bottom: 84px; z-index: 3; background: var(--bg-menu, #212d3b); border-radius: 12px; padding: 6px 0; box-shadow: var(--shadow);
+  .fab-menu { position: absolute; right: 20px; bottom: 84px; z-index: 3; background: var(--bg-menu); border-radius: 12px; padding: 6px 0; box-shadow: var(--shadow);
     display: flex; flex-direction: column; min-width: 200px; animation: pop .12s ease-out; transform-origin: bottom right; }
   .fab-menu button { display: flex; align-items: center; gap: 14px; padding: 10px 18px; font-size: 15px; text-align: left; }
   .fab-menu button:hover { background: var(--bg-hover); }

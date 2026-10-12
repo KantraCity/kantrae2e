@@ -22,7 +22,7 @@
     flex-shrink: 0;
     user-select: none;
     overflow: hidden;
-    background-image: linear-gradient(rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.05));
+    background-image: linear-gradient(var(--tint-2), rgba(0, 0, 0, 0.05));
   }
   img { width: 100%; height: 100%; object-fit: cover; }
 </style>

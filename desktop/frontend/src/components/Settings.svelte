@@ -6,6 +6,7 @@
   import Icon from './Icon.svelte'
   import Modal from './Modal.svelte'
   import { checkCalls, type CallCheck } from '../lib/call.svelte'
+  import { setThemePref, themePref, type ThemePref } from '../lib/theme'
 
   // ---- privacy: last seen, block list ----
   let seen = $state('')
@@ -22,6 +23,16 @@
   }
   async function unblock(u: UserHit) {
     if (await app.setBlocked(u.userId, false)) blocked = blocked.filter((x) => x.userId !== u.userId)
+  }
+
+  // ---- appearance, passcode ----
+  let theme = $state<ThemePref>(themePref())
+  function pickTheme(v: ThemePref) {
+    theme = v
+    setThemePref(v)
+  }
+  async function setAutoLock(min: number) {
+    if ((await app.try(() => Messenger.SetAutoLock(min))) !== undefined) app.passcode.autoLock = min
   }
 
   let checking = $state(false)
@@ -191,6 +202,41 @@
     </div>
 
     <div class="section">
+      <div class="label"><Icon name="lock" size={18} /> Код-пароль</div>
+      {#if app.passcode.enabled}
+        <div class="select-row">
+          <span>Автоблокировка</span>
+          <select class="field small-select" value={String(app.passcode.autoLock)} onchange={(e) => setAutoLock(Number(e.currentTarget.value))}>
+            <option value="0">Только при запуске</option>
+            <option value="1">Через 1 минуту</option>
+            <option value="5">Через 5 минут</option>
+            <option value="60">Через 1 час</option>
+          </select>
+        </div>
+        <p class="muted small">Пока приложение заблокировано, уведомления приходят без текста.</p>
+        <div class="row-actions">
+          <button class="btn flat" onclick={() => { app.modal = null; app.lock() }}>Заблокировать сейчас</button>
+          <button class="btn flat" onclick={() => (app.modal = { kind: 'passcode', mode: 'change' })}>Изменить</button>
+          <button class="btn danger" onclick={() => (app.modal = { kind: 'passcode', mode: 'off' })}>Отключить</button>
+        </div>
+      {:else}
+        <p class="muted small">Четыре цифры для входа в приложение на этом устройстве; приложение блокируется само, когда вы его не используете.</p>
+        <button class="btn flat" onclick={() => (app.modal = { kind: 'passcode', mode: 'set' })}>Включить код-пароль</button>
+      {/if}
+    </div>
+
+    <div class="section">
+      <div class="label"><Icon name="palette" size={18} /> Оформление</div>
+      <div class="theme-pick">
+        {#each [['dark', 'Тёмная'], ['light', 'Светлая'], ['system', 'Как в системе']] as [v, label]}
+          <button class="theme" class:on={theme === v} onclick={() => pickTheme(v as ThemePref)}>
+            <span class="swatch {v}"><span class="b1"></span><span class="b2"></span></span>{label}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="section">
       <div class="label"><Icon name="key" size={18} /> Ключ восстановления</div>
       <p class="muted small">
         {#if hasRecovery === null}…
@@ -250,14 +296,14 @@
   .name { font-size: 18px; font-weight: 600; }
   .grow { flex: 1; min-width: 0; }
   .small { font-size: 13px; }
-  .section { border-top: 1px solid #243140; padding: 14px 0 6px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .section { border-top: 1px solid var(--border); padding: 14px 0 6px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
   .label { display: flex; gap: 8px; align-items: center; font-weight: 500; color: var(--accent-light); }
   .fp { font-size: 17px; word-spacing: 6px; }
   .device { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; }
   .device.revoked { opacity: .5; }
   p { margin: 0; }
   .switch-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; cursor: pointer; }
-  .switch { appearance: none; width: 36px; height: 20px; border-radius: 10px; background: #3a4a5c; position: relative; flex-shrink: 0; cursor: pointer; transition: background .15s; }
+  .switch { appearance: none; width: 36px; height: 20px; border-radius: 10px; background: var(--quiet); position: relative; flex-shrink: 0; cursor: pointer; transition: background .15s; }
   .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
   .switch:checked { background: var(--accent); }
   .switch:checked::after { transform: translateX(16px); }
@@ -266,6 +312,21 @@
   .check-res { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
   .check-res .ok { color: var(--success); }
   .check-res .bad { color: #ff8a80; }
+  .row-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+  .theme-pick { display: flex; gap: 10px; flex-wrap: wrap; }
+  .theme { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 12px; font-size: 13px; border: 2px solid transparent; }
+  .theme.on { border-color: var(--accent); }
+  .swatch { width: 84px; height: 56px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 8px; }
+  .swatch.dark { background: #0e1621; }
+  .swatch.light { background: #d9e3ea; }
+  .swatch.system { background: linear-gradient(135deg, #0e1621 50%, #d9e3ea 50%); }
+  .b1, .b2 { height: 10px; border-radius: 5px; width: 60%; }
+  .b1 { background: #182533; }
+  .b2 { align-self: flex-end; background: #2b5278; }
+  .light .b1 { background: #fff; }
+  .light .b2 { background: #e1f9cf; }
+  .system .b1 { background: #182533; }
+  .system .b2 { background: #e1f9cf; }
   .select-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
   .small-select { width: auto; padding: 6px 10px; background: var(--bg-input); }
   .sublabel { margin: 12px 0 4px; font-size: 13px; color: var(--text-muted); }

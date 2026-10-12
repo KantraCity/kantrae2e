@@ -31,10 +31,10 @@
     margin: 4px 0; white-space: pre-wrap; overflow-x: auto; border-left: 3px solid var(--accent-light); }
   a { color: var(--accent-light); text-decoration: none; word-break: break-word; }
   a:hover { text-decoration: underline; }
-  :global(.out) a { color: #fff; text-decoration: underline; }
+  :global(.out) a { color: var(--out-accent); text-decoration: underline; }
   .mention { color: var(--accent-light); font: inherit; padding: 0; display: inline; }
-  :global(.out) .mention { color: #fff; font-weight: 500; }
-  .spoiler { background: rgba(255,255,255,.18); color: transparent; border-radius: 4px; cursor: pointer; filter: blur(2px);
+  :global(.out) .mention { color: var(--out-accent); font-weight: 500; }
+  .spoiler { background: var(--tint-3); color: transparent; border-radius: 4px; cursor: pointer; filter: blur(2px);
     transition: filter .25s, color .25s, background .25s; user-select: none; }
   .spoiler :global(*) { color: transparent !important; }
   .spoiler.shown { background: transparent; color: inherit; filter: none; user-select: text; cursor: text; }

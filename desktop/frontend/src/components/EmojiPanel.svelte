@@ -155,7 +155,7 @@
 {/if}
 
 <style>
-  .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg-menu, #212d3b); }
+  .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg-menu); }
   .search { display: flex; align-items: center; gap: 8px; margin: 8px 10px 4px; padding: 0 10px; height: 34px; border-radius: 17px;
     background: var(--bg-input); color: var(--text-muted); flex-shrink: 0; }
   .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; }
@@ -163,7 +163,7 @@
   .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 6px; }
   section { content-visibility: auto; contain-intrinsic-size: auto 300px; }
   .cat { position: sticky; top: 0; z-index: 1; padding: 8px 6px 4px; font-size: 13px; font-weight: 600; color: var(--text-muted);
-    background: var(--bg-menu, #212d3b); }
+    background: var(--bg-menu); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); }
   .em { height: 40px; font-size: 26px; line-height: 1; border-radius: 10px; display: flex; align-items: center; justify-content: center;
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif;
@@ -180,7 +180,7 @@
   .switch button.on { background: var(--bg-hover); color: var(--accent-light); }
   .skin-backdrop { position: fixed; inset: 0; z-index: 300; }
   .skins { position: fixed; z-index: 301; transform: translate(-50%, calc(-100% - 6px)); display: flex; gap: 2px; padding: 4px;
-    background: var(--bg-menu, #212d3b); border-radius: 14px; box-shadow: var(--shadow); }
+    background: var(--bg-menu); border-radius: 14px; box-shadow: var(--shadow); }
   .skins .em { width: 42px; }
   .skins .em.cur { background: var(--bg-active); }
 </style>

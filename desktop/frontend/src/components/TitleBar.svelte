@@ -63,8 +63,8 @@
   .buttons { --wails-draggable: no-drag; display: flex; height: 100%; margin-left: auto; }
   .buttons button { width: 46px; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text);
     transition: background .12s, color .12s; }
-  .buttons button:hover { background: rgba(255, 255, 255, .08); }
-  .buttons button:active { background: rgba(255, 255, 255, .14); }
+  .buttons button:hover { background: var(--tint-1); }
+  .buttons button:active { background: var(--tint-2); }
   .buttons .close:hover { background: #e81123; color: #fff; }
   .buttons .close:active { background: #f1707a; }
   svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }

@@ -151,15 +151,15 @@
   .backdrop.native { background: rgba(0,0,0,.45); }
   .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; height: min(72vh, 620px); display: flex; flex-direction: column;
     background: var(--bg-sidebar); border-radius: 16px 16px 0 0; box-shadow: var(--shadow); padding-bottom: env(safe-area-inset-bottom); }
-  .handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); margin: 8px auto 2px; }
+  .handle { width: 40px; height: 4px; border-radius: 2px; background: var(--tint-3); margin: 8px auto 2px; }
   .head { display: flex; align-items: center; justify-content: space-between; padding: 2px 8px 6px 16px; }
   .title { font-weight: 600; font-size: 16px; }
   .grid { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(3, 1fr);
     gap: 2px; align-content: start; }
-  .tile { position: relative; aspect-ratio: 1; background: rgba(255,255,255,.05); overflow: hidden; }
+  .tile { position: relative; aspect-ratio: 1; background: var(--tint-1); overflow: hidden; }
   .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .15s; }
   .tile.sel img { transform: scale(.88); border-radius: 8px; }
-  .camera { display: flex; align-items: center; justify-content: center; color: var(--text-muted); background: #0b121a; }
+  .camera { display: flex; align-items: center; justify-content: center; color: var(--text-muted); background: var(--bg-input); }
   .check { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff;
     background: rgba(0,0,0,.25); color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center;
     transition: background .15s, transform .15s; }
@@ -183,7 +183,7 @@
     color: var(--accent); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
   .spin { width: 20px; height: 20px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: sp .8s linear infinite; }
   @keyframes sp { to { transform: rotate(360deg) } }
-  .menu { position: absolute; left: 12px; bottom: calc(100% + 6px); z-index: 41; width: 220px; padding: 6px 0; background: var(--bg-menu, #212d3b);
+  .menu { position: absolute; left: 12px; bottom: calc(100% + 6px); z-index: 41; width: 220px; padding: 6px 0; background: var(--bg-menu);
     border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
   .menu button { display: flex; align-items: center; gap: 14px; padding: 10px 16px; font-size: 15px; text-align: left; }
   .menu button:hover { background: var(--bg-hover); }

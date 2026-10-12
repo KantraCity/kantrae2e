@@ -26,6 +26,7 @@ export type Modal =
   | { kind: 'scheduled'; chatId: string }
   | { kind: 'poll'; chatId: string }
   | { kind: 'pinMsg'; m: Message }
+  | { kind: 'passcode'; mode: 'set' | 'change' | 'off' }
 
 // Unread counters per account (localStorage, this device only).
 const unreadKey = (userId?: string) => 'kantra.unread' + (userId ? '.' + userId : '')
@@ -81,6 +82,13 @@ class AppState {
   async init() {
     this.unsubscribe?.()
     this.unsubscribe = onEvent((e) => this.handleEvent(e))
+    await this.loadPasscode()
+    // A fresh page (browser reload, Android activity recreated) is a new
+    // start: ask for the passcode like on launch.
+    if (this.passcode.enabled && !this.locked) {
+      this.locked = true
+      Messenger.Lock().catch(() => {})
+    }
     window.addEventListener('popstate', () => {
       if (this.modal && this.modal.kind !== 'approveLink') this.modal = null
       if (!history.state?.chat) this.setCurrent(null)
@@ -647,6 +655,19 @@ class AppState {
     this.jump = { chatId, id, n: ++this.jumpSeq }
   }
 
+  // ---- local passcode (desktop/passcode.go) ----
+  locked = $state(false)
+  passcode = $state<{ enabled: boolean; autoLock: number }>({ enabled: false, autoLock: 0 })
+  async loadPasscode() {
+    const st = await Messenger.GetPasscode().catch(() => null)
+    if (!st) return
+    this.passcode = { enabled: st.enabled, autoLock: st.autoLock }
+    this.locked = st.locked
+  }
+  lock() {
+    Messenger.Lock().catch(() => {})
+  }
+
   // ---- pinned / muted chats (synced across the account's devices) ----
   async pinChat(chat: Chat, pin: boolean) {
     if ((await this.try(() => Messenger.PinChat(chat.id, pin))) === undefined) return
@@ -843,6 +864,11 @@ class AppState {
       case 'message_updated':
         if (e.chatId && e.detail) await this.refreshMessage(e.chatId, e.detail)
         if (e.chatId && this.pinned[e.chatId]) await this.loadPinned(e.chatId)
+        break
+      case 'locked':
+        this.locked = true
+        this.menu = null
+        this.chatMenu = null
         break
       case 'chatprefs':
         await this.refreshChats()

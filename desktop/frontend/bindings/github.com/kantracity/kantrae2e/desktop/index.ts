@@ -23,6 +23,7 @@ export type {
     MediaUpload,
     Member,
     Message,
+    PasscodeState,
     PollOption,
     PollView,
     PresenceView,

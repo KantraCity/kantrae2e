@@ -583,9 +583,7 @@
   .chat-view {
     position: relative; display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; overflow: hidden;
     background-color: var(--bg-chat);
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(82, 136, 193, 0.08), transparent 45%),
-      radial-gradient(circle at 80% 70%, rgba(106, 90, 205, 0.07), transparent 50%);
+    background-image: var(--wallpaper);
   }
   header { display: flex; align-items: center; gap: 6px; height: 56px; padding: 0 8px 0 12px; background: var(--bg-header); border-bottom: 1px solid var(--border); }
   .back { display: none; }
@@ -600,17 +598,17 @@
   .lp-bar + .compose-bar { border-radius: 0; margin-top: 0; }
   .lp-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
   .mentions { position: absolute; left: 16px; right: 84px; bottom: calc(100% + 4px); z-index: 27; max-height: 260px; overflow-y: auto;
-    background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow); padding: 4px 0; }
+    background: var(--bg-menu); border-radius: 12px; box-shadow: var(--shadow); padding: 4px 0; }
   .mentions button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; text-align: left; }
   .mentions button:hover, .mentions button.cur { background: var(--bg-hover); }
   .mn { font-weight: 500; }
   .mu { font-size: 13px; }
   .fmt { position: absolute; left: 60px; bottom: calc(100% + 4px); z-index: 27; display: flex; gap: 2px; padding: 4px;
-    background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow); }
+    background: var(--bg-menu); border-radius: 12px; box-shadow: var(--shadow); }
   .fmt button { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text); }
   .fmt button:hover { background: var(--bg-hover); }
   .send-menu { position: absolute; right: 16px; bottom: calc(100% + 4px); z-index: 27; min-width: 240px; padding: 6px 0;
-    background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+    background: var(--bg-menu); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
   .send-menu button { display: flex; align-items: center; gap: 14px; padding: 10px 16px; font-size: 15px; text-align: left; }
   .send-menu button:hover { background: var(--bg-hover); }
   .unblock { color: #e17076; font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .3px; padding: 6px 16px; border-radius: 10px; }
@@ -672,7 +670,7 @@
     border-right-color: transparent; border-radius: 50%; animation: spin-sm .8s linear infinite; }
   @keyframes spin-sm { to { transform: rotate(360deg) } }
   .pill { background: rgba(0, 0, 0, 0.35); padding: 6px 14px; border-radius: 14px; font-size: 14px; color: #d4dde6; }
-  .dropzone { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 16px; background: rgba(14, 22, 33, 0.85);
+  .dropzone { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 16px; background: color-mix(in srgb, var(--bg-chat) 88%, transparent);
     display: flex; align-items: center; justify-content: center; text-align: center; color: var(--accent-light); font-size: 18px; pointer-events: none;
     z-index: 20; opacity: 0; visibility: hidden; transform: scale(.98); transition: opacity .15s, transform .15s, visibility .15s; }
   /* Shown while files are dragged over the chat (DOM drag, or the desktop runtime's hover class). */

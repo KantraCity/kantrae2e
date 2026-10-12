@@ -22,7 +22,7 @@
   }
   .toast {
     display: flex; gap: 10px; align-items: center;
-    background: rgba(35, 46, 60, 0.97); color: var(--text);
+    background: rgba(35, 46, 60, 0.97); color: #f5f5f5;
     border-radius: 10px; padding: 11px 16px;
     box-shadow: var(--shadow); font-size: 14px; line-height: 1.35;
   }

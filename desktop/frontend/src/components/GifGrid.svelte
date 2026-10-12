@@ -83,7 +83,7 @@
   .gif:hover { transform: scale(.97); }
   .gif img, .gif video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .gif img.sticker { object-fit: contain; }
-  .add { aspect-ratio: 1; border-radius: 10px; border: 2px dashed rgba(255,255,255,.18); color: var(--text-muted); display: flex; flex-direction: column;
+  .add { aspect-ratio: 1; border-radius: 10px; border: 2px dashed var(--tint-3); color: var(--text-muted); display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 2px; font-size: 12px; transition: border-color .15s, color .15s; }
   .add:hover { border-color: var(--accent); color: var(--accent-light); }
   .spinner { width: 20px; height: 20px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }

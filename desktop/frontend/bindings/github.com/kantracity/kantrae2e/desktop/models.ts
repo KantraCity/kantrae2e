@@ -271,6 +271,20 @@ export interface Message {
     "poll"?: PollView | null;
 }
 
+/**
+ * PasscodeState for the UI.
+ */
+export interface PasscodeState {
+    "enabled": boolean;
+    "locked": boolean;
+    "autoLock": number;
+
+    /**
+     * Wrong attempts: wait until (unix ms) before the next one.
+     */
+    "retryAt"?: number;
+}
+
 export interface PollOption {
     "text": string;
     "votes": number;

@@ -61,7 +61,7 @@
   .q { font-weight: 600; font-size: 15px; }
   .kind { font-size: 12px; opacity: .7; margin-bottom: 4px; }
   .opt { display: flex; align-items: center; gap: 10px; text-align: left; padding: 6px 4px; border-radius: 8px; font-size: 14px; }
-  .opt:hover { background: rgba(255,255,255,.06); }
+  .opt:hover { background: var(--tint-1); }
   .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid currentColor; opacity: .7; flex-shrink: 0; }
   .radio.square { border-radius: 5px; }
   .radio.on { background: var(--accent-light); border-color: var(--accent-light); opacity: 1; }
@@ -69,14 +69,14 @@
   .pc { width: 38px; text-align: right; font-weight: 600; flex-shrink: 0; }
   .rmain { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .otext { display: inline-flex; align-items: center; gap: 4px; }
-  .bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .bar { height: 4px; border-radius: 2px; background: var(--tint-2); overflow: hidden; }
   .bar span { display: block; height: 100%; background: var(--accent-light); border-radius: 2px; transition: width .4s; }
-  :global(.out) .bar span { background: #fff; }
+  :global(.out) .bar span { background: var(--out-accent); }
   .res.mine .pc { color: var(--accent-light); }
-  :global(.out) .res.mine .pc { color: #fff; }
+  :global(.out) .res.mine .pc { color: var(--out-accent); }
   .voters { font-size: 12px; opacity: .65; }
   .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 12px; opacity: .85; }
   .act { color: var(--accent-light); font-weight: 600; font-size: 13px; padding: 4px 8px; border-radius: 8px; }
-  :global(.out) .act { color: #fff; }
+  :global(.out) .act { color: var(--out-accent); }
   .act:disabled { opacity: .5; }
 </style>

@@ -92,6 +92,7 @@ func (m *Messenger) start() error {
 			m.startErr = err
 			return
 		}
+		m.loadPasscode() // the app starts locked when a passcode is set
 		var af accountsFile
 		if b, err := os.ReadFile(m.accountsPath()); err == nil {
 			_ = json.Unmarshal(b, &af)

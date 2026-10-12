@@ -49,7 +49,7 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; z-index: 60; }
-  .menu { position: fixed; z-index: 61; width: 230px; background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow);
+  .menu { position: fixed; z-index: 61; width: 230px; background: var(--bg-menu); border-radius: 12px; box-shadow: var(--shadow);
     padding: 6px 0; display: flex; flex-direction: column; transform-origin: top left; }
   .menu > button { display: flex; align-items: center; gap: 14px; padding: 9px 16px; text-align: left; font-size: 15px; }
   .menu > button:hover { background: var(--bg-hover); }

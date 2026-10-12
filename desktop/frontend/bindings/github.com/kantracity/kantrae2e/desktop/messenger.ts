@@ -167,6 +167,10 @@ export function GetMessage(chatID: string, id: string): $CancellablePromise<$mod
     return $Call.ByID(2521578046, chatID, id);
 }
 
+export function GetPasscode(): $CancellablePromise<$models.PasscodeState> {
+    return $Call.ByID(87217135);
+}
+
 /**
  * GetSettings returns the notification settings of this device.
  */
@@ -245,6 +249,13 @@ export function LeaveGroup(chatID: string): $CancellablePromise<void> {
  */
 export function LinkPreview(url: string): $CancellablePromise<$models.LinkView | null> {
     return $Call.ByID(914527835, url);
+}
+
+/**
+ * Lock locks the app now (the lock icon), if a passcode is set.
+ */
+export function Lock(): $CancellablePromise<void> {
+    return $Call.ByID(2680016874);
 }
 
 /**
@@ -538,6 +549,14 @@ export function SetActiveChat(chatID: string): $CancellablePromise<void> {
 }
 
 /**
+ * SetAutoLock: minutes in the background before the app locks (0: only
+ * when it starts or is locked by hand).
+ */
+export function SetAutoLock(minutes: number): $CancellablePromise<void> {
+    return $Call.ByID(270531607, minutes);
+}
+
+/**
  * SetAvatar sets the profile photo (base64 JPEG/PNG/WebP, the UI crops and
  * scales it); empty removes it.
  */
@@ -569,6 +588,14 @@ export function SetGroupPhoto(chatID: string, imageBase64: string): $Cancellable
 
 export function SetLastSeenPrivacy(who: string): $CancellablePromise<void> {
     return $Call.ByID(3095324216, who);
+}
+
+/**
+ * SetPasscode sets or changes the code (4 digits; "" turns it off). The
+ * current code is needed when one is set.
+ */
+export function SetPasscode(current: string, code: string): $CancellablePromise<void> {
+    return $Call.ByID(2155627187, current, code);
 }
 
 /**
@@ -626,6 +653,13 @@ export function Typing(chatID: string): $CancellablePromise<void> {
 
 export function Unblock(userID: string): $CancellablePromise<void> {
     return $Call.ByID(3684031559, userID);
+}
+
+/**
+ * Unlock checks the code; after 5 wrong attempts the next ones wait.
+ */
+export function Unlock(code: string): $CancellablePromise<boolean> {
+    return $Call.ByID(3022144173, code);
 }
 
 /**

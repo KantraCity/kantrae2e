@@ -215,24 +215,24 @@
     background: linear-gradient(135deg, var(--accent-light), var(--accent)); box-shadow: 0 2px 8px rgba(82,136,193,.35); transition: transform .15s; }
   .vbtn:hover { transform: scale(1.06); }
   .vbtn:active { transform: scale(.95); }
-  :global(.out) .vbtn { background: #fff; color: var(--bubble-out); box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  :global(.out) .vbtn { background: var(--out-accent); color: var(--out-on-accent); box-shadow: 0 2px 8px rgba(0,0,0,.2); }
   .vmain { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .wave { display: flex; align-items: center; gap: 2px; height: 26px; cursor: pointer; }
-  .bar { width: 3px; border-radius: 3px; background: rgba(255,255,255,.28); flex-shrink: 0; transition: background .15s; }
+  .bar { width: 3px; border-radius: 3px; background: var(--wave); flex-shrink: 0; transition: background .15s; }
   .bar.done { background: var(--accent-light); }
-  :global(.out) .bar { background: rgba(255,255,255,.35); }
-  :global(.out) .bar.done { background: #fff; }
+  :global(.out) .bar { background: var(--out-wave); }
+  :global(.out) .bar.done { background: var(--out-accent); }
   .vmeta { display: flex; align-items: center; gap: 6px; height: 16px; }
   .vtime { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   :global(.out) .vtime { color: var(--text-bubble-muted); }
   .unplayed { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-light); }
-  .speed { font-size: 11px; font-weight: 700; padding: 0 6px; height: 16px; border-radius: 8px; background: rgba(255,255,255,.12); color: var(--text); }
+  .speed { font-size: 11px; font-weight: 700; padding: 0 6px; height: 16px; border-radius: 8px; background: var(--tint-2); color: var(--text); }
 
   /* ---- files ---- */
   .file { display: flex; align-items: center; gap: 12px; text-align: left; padding: 4px 2px; color: inherit; text-decoration: none; }
   .file-icon { position: relative; width: 48px; height: 48px; border-radius: 12px; color: #fff; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, var(--accent-light), var(--accent)); overflow: hidden; }
-  :global(.out) .file-icon { background: #fff; color: var(--bubble-out); }
+  :global(.out) .file-icon { background: var(--out-accent); color: var(--out-on-accent); }
   .ext { font-size: 12px; font-weight: 700; letter-spacing: .3px; transition: opacity .15s, transform .15s; }
   .dl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transform: translateY(6px); transition: opacity .15s, transform .15s; }
   .file:hover .ext { opacity: 0; transform: translateY(-6px); }

@@ -136,7 +136,7 @@
     word-wrap: break-word; overflow-wrap: anywhere;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   }
-  .out .bubble { background: var(--bubble-out); }
+  .out .bubble { background: var(--bubble-out); color: var(--out-text); }
   /* Telegram groups consecutive messages: tighter inner corners. */
   .bubble.joined-top { border-top-left-radius: 6px; }
   .bubble.joined-bottom { border-bottom-left-radius: 6px; }
@@ -155,18 +155,18 @@
   .bubble.visual { padding: 4px 4px 6px; }
   .bubble.visual .time { margin-right: 6px; }
   .fwd { font-size: 14px; color: var(--accent-light); margin-bottom: 2px; }
-  .out .fwd { color: #b2d7ff; }
-  .quote { display: flex; flex-direction: column; width: 100%; text-align: left; border-left: 3px solid var(--accent-light); background: rgba(255,255,255,.06);
+  .out .fwd { color: var(--out-fwd); }
+  .quote { display: flex; flex-direction: column; width: 100%; text-align: left; border-left: 3px solid var(--accent-light); background: var(--tint-1);
     border-radius: 4px; padding: 3px 8px; margin: 2px 0 4px; font-size: 14px; line-height: 1.3; }
-  .out .quote { border-left-color: #fff; background: rgba(255,255,255,.1); }
+  .out .quote { border-left-color: var(--out-accent); background: var(--tint-2); }
   .q-name { font-weight: 600; color: var(--accent-light); }
-  .out .q-name { color: #fff; }
+  .out .q-name { color: var(--out-accent); }
   .q-text { color: var(--text); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
   .reacts { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
   .react { background: rgba(82, 136, 193, .25); border-radius: 14px; padding: 2px 8px; font-size: 14px; line-height: 1.4; }
   .react.mine { background: var(--accent); color: #fff; }
-  .out .react { background: rgba(255,255,255,.15); }
-  .out .react.mine { background: #fff; color: var(--bubble-out); }
+  .out .react { background: var(--tint-2); }
+  .out .react.mine { background: var(--out-accent); color: var(--out-on-accent); }
   .edited { font-style: italic; }
   .pending { opacity: .7; }
   .failed { width: 18px; height: 18px; border-radius: 50%; background: var(--danger); color: #fff; font-weight: 700; font-size: 12px; line-height: 18px; }
@@ -195,9 +195,9 @@
   .album-caption { white-space: pre-wrap; margin-top: 6px; padding: 0 4px; }
   .lp { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; padding: 4px 0 4px 10px; border-left: 3px solid var(--accent-light);
     border-radius: 3px; text-decoration: none; color: inherit; max-width: 360px; }
-  :global(.out) .lp { border-left-color: #fff; }
+  :global(.out) .lp { border-left-color: var(--out-accent); }
   .lp-site { font-weight: 600; font-size: 13px; color: var(--accent-light); }
-  :global(.out) .lp-site { color: #fff; }
+  :global(.out) .lp-site { color: var(--out-accent); }
   .lp-title { font-weight: 600; font-size: 14px; }
   .lp-desc { font-size: 13px; opacity: .85; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .lp-img { margin-top: 6px; border-radius: 8px; max-width: 100%; max-height: 200px; object-fit: cover; }
@@ -205,6 +205,6 @@
   .line.selecting { cursor: pointer; padding-left: 34px; position: relative; border-radius: 10px; transition: background .15s; }
   .line.selected { background: rgba(82, 136, 193, .18); }
   .sel-check { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%;
-    border: 2px solid rgba(255,255,255,.5); display: flex; align-items: center; justify-content: center; color: #fff; transition: background .15s; }
+    border: 2px solid var(--text-muted); display: flex; align-items: center; justify-content: center; color: #fff; transition: background .15s; }
   .sel-check.on { background: var(--accent); border-color: var(--accent); }
 </style>

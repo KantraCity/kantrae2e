@@ -19,6 +19,24 @@
   --danger: #ec3942;
   --warning: #e0a73a;
   --success: #4dcd5e;
+  --bg-menu: #212d3b;
+  --out-text: var(--text);
+  --out-accent: #fff;          /* links, bars, quote lines on outgoing bubbles */
+  --out-fwd: #b2d7ff;
+  --out-on-accent: var(--bubble-out); /* icon on an --out-accent circle */
+  --wave: rgba(255, 255, 255, .28);
+  --out-wave: rgba(255, 255, 255, .35);
+  --tint-1: rgba(255, 255, 255, .06);
+  --tint-2: rgba(255, 255, 255, .12);
+  --tint-3: rgba(255, 255, 255, .2);
+  --field-border: #2f3b49;
+  --active-text: #fff;
+  --active-sub: #cfe2f6;
+  --quiet: #5b6b7b;
+  --wallpaper:
+    radial-gradient(circle at 20% 20%, rgba(82, 136, 193, 0.08), transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(106, 90, 205, 0.07), transparent 50%);
+  color-scheme: dark;
   --radius-bubble: 15px;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Open Sans", "Helvetica Neue", sans-serif;
@@ -26,6 +44,45 @@
   color: var(--text);
   background: var(--bg-chat);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Light theme (Settings → Оформление), close to Telegram's day theme. */
+:root[data-theme="light"] {
+  --bg-sidebar: #ffffff;
+  --bg-chat: #d9e3ea;
+  --bg-header: #ffffff;
+  --bg-titlebar: #eef2f5;
+  --bg-hover: #f0f2f5;
+  --bg-active: #3a8edb;
+  --bg-input: #f0f2f5;
+  --bg-modal: #ffffff;
+  --bg-menu: #ffffff;
+  --bubble-in: #ffffff;
+  --bubble-out: #e1f9cf;
+  --accent: #3390ec;
+  --accent-light: #2481cc;
+  --text: #0f1419;
+  --text-muted: #707b86;
+  --text-bubble-muted: #5ea85a;
+  --border: #e3e7eb;
+  --out-text: #0f1419;
+  --out-accent: #3f9a3a;
+  --out-fwd: #3f9a3a;
+  --out-on-accent: #fff;
+  --wave: rgba(0, 0, 0, .18);
+  --out-wave: rgba(63, 154, 58, .35);
+  --tint-1: rgba(0, 0, 0, .04);
+  --tint-2: rgba(0, 0, 0, .07);
+  --tint-3: rgba(0, 0, 0, .12);
+  --field-border: #d5dbe1;
+  --active-text: #fff;
+  --active-sub: #e3f0fc;
+  --quiet: #b3bcc5;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  --wallpaper:
+    radial-gradient(circle at 15% 20%, rgba(150, 200, 140, 0.35), transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(120, 170, 220, 0.35), transparent 50%);
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -39,15 +96,15 @@ input, textarea { font: inherit; color: var(--text); }
 a { color: var(--accent-light); }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.32); }
-* { scrollbar-color: rgba(255, 255, 255, 0.2) transparent; scrollbar-width: thin; }
+::-webkit-scrollbar-thumb { background: var(--tint-3); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
+* { scrollbar-color: var(--tint-3) transparent; scrollbar-width: thin; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 .field {
   width: 100%;
   background: transparent;
-  border: 1px solid #2f3b49;
+  border: 1px solid var(--field-border);
   border-radius: 10px;
   padding: 12px 14px;
   outline: none;

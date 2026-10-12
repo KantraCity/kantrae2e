@@ -27,6 +27,8 @@
   import ScheduleMessage from './components/ScheduleMessage.svelte'
   import ScheduledList from './components/ScheduledList.svelte'
   import PollCreate from './components/PollCreate.svelte'
+  import PasscodeSetup from './components/PasscodeSetup.svelte'
+  import LockScreen from './components/LockScreen.svelte'
   import PinMessage from './components/PinMessage.svelte'
   import DeleteChat from './components/DeleteChat.svelte'
   import CallView from './components/CallView.svelte'
@@ -70,6 +72,7 @@
     <ChatView />
   </div>
 {/if}
+{#if app.locked && app.loaded}<LockScreen />{/if}
 </div>
 </div>
 
@@ -94,6 +97,7 @@
 {:else if app.modal?.kind === 'scheduled'}<ScheduledList chatId={app.modal.chatId} />
 {:else if app.modal?.kind === 'poll'}<PollCreate chatId={app.modal.chatId} />
 {:else if app.modal?.kind === 'pinMsg'}<PinMessage m={app.modal.m} />
+{:else if app.modal?.kind === 'passcode'}<PasscodeSetup mode={app.modal.mode} />
 {/if}
 
 {#if app.menu}<MessageMenu />{/if}

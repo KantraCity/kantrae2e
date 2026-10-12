@@ -272,7 +272,7 @@
   .row-btn.plain { color: var(--text-muted); }
   .notif { cursor: pointer; }
   .notif .grow { flex: 1; }
-  .switch { appearance: none; width: 36px; height: 20px; border-radius: 10px; background: #46525e; position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+  .switch { appearance: none; width: 36px; height: 20px; border-radius: 10px; background: var(--quiet); position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; }
   .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
   .switch:checked { background: var(--accent); }
   .switch:checked::after { transform: translateX(16px); }

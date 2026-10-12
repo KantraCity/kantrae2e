@@ -136,6 +136,7 @@ func (m *Messenger) SetActiveChat(chatID string) {
 func (m *Messenger) SetForeground(fg bool) {
 	m.setActive(fg)
 	m.mu.Lock()
+	lockedNow := m.onForegroundLocked(fg)
 	m.foreground = fg
 	key := ""
 	if fg && m.activeChat != "" && m.active != nil {
@@ -145,6 +146,9 @@ func (m *Messenger) SetForeground(fg bool) {
 	m.mu.Unlock()
 	if key != "" {
 		m.notif.Clear(key)
+	}
+	if lockedNow {
+		m.emit(UIEvent{Type: "locked"})
 	}
 }
 
@@ -198,7 +202,10 @@ func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 	if !clientPref(c, prefNotify) || silent {
 		return
 	}
-	preview := clientPref(c, prefPreview)
+	m.mu.Lock()
+	locked := m.lockedLocked()
+	m.mu.Unlock()
+	preview := clientPref(c, prefPreview) && !locked // no text while locked by the passcode
 	n := Notice{Key: noticeKey(s.file, msg.ChatID), ChatID: msg.ChatID, Title: "Kantra", Body: "Новое сообщение", Count: count}
 	if g, err := c.ResolveGroup(context.Background(), msg.ChatID); err == nil {
 		ch := m.toChat(c, *g)
