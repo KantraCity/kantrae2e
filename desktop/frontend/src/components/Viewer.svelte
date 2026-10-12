@@ -7,7 +7,7 @@
   let { m: start }: { m: Message } = $props()
   // svelte-ignore state_referenced_locally
   let m = $state(start)
-  const items = $derived((app.messages[m.chatId] ?? []).filter((x) => x.file && (x.file.kind === 'photo' || x.file.kind === 'video' || x.file.kind === 'gif')))
+  const items = $derived((app.messages[m.chatId] ?? []).filter((x) => x.file && (x.file.kind === 'photo' || x.file.kind === 'video' || x.file.kind === 'gif' || x.file.kind === 'sticker')))
   const idx = $derived(items.findIndex((x) => x.id === m.id))
   const url = $derived(app.mediaUrl(m))
 
@@ -32,7 +32,7 @@
     <button class="icon-btn" aria-label="Закрыть" onclick={() => (app.modal = null)}><Icon name="close" /></button>
   </header>
   {#key m.id}
-    {#if m.file?.kind === 'video'}
+    {#if m.file?.kind === 'video' || m.file?.mime?.startsWith('video/')}
       <!-- svelte-ignore a11y_media_has_caption -->
       <video src={url} controls autoplay playsinline poster={m.file.thumb || undefined}></video>
     {:else}

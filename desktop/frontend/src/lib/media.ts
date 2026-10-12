@@ -242,3 +242,20 @@ export async function requestRecordPermission(kind: 'voice' | 'round'): Promise<
   s.getTracks().forEach((t) => t.stop())
   rememberRecordPermission(kind)
 }
+
+/** A sticker: the image scaled to fit 512×512, transparency kept (WebP or PNG). */
+export async function prepareSticker(file: File): Promise<MediaUpload> {
+  if (!file.type.startsWith('image/')) throw new Error('Стикером может быть только картинка')
+  const bmp = await createImageBitmap(file)
+  const s = Math.min(1, 512 / Math.max(bmp.width, bmp.height))
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(bmp.width * s))
+  c.height = Math.max(1, Math.round(bmp.height * s))
+  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height)
+  let blob = await canvasBlob(c, 'image/webp', 0.9)
+  if (blob.type !== 'image/webp') blob = await canvasBlob(c, 'image/png', 1)
+  return {
+    name: 'sticker.' + (blob.type === 'image/webp' ? 'webp' : 'png'), base64: await blobToBase64(blob), mime: blob.type,
+    kind: 'sticker', w: c.width, h: c.height, dur: 0, thumb: '', wave: [], caption: '',
+  }
+}

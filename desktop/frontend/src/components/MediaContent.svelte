@@ -91,7 +91,18 @@
   const ext = $derived((f.name.split('.').pop() ?? '').slice(0, 4).toUpperCase())
 </script>
 
-{#if f.kind === 'photo' || f.kind === 'gif'}
+{#if f.kind === 'sticker'}
+  <button class="sticker" onclick={() => (app.modal = { kind: 'viewer', m })} aria-label="Стикер">
+    {#if url}<img src={url} alt="Стикер" class:show={loaded} onload={() => (loaded = true)} />{/if}
+    {#if sending}<span class="center glass"><span class="spinner"></span></span>{/if}
+  </button>
+{:else if f.kind === 'gif' && f.mime?.startsWith('video/')}
+  <button class="visual" style="width:{box.w}px;height:{box.h}px" onclick={() => (app.modal = { kind: 'viewer', m })} aria-label="GIF">
+    {#if f.thumb && !loaded}<img class="thumb sharp" src={f.thumb} alt="" />{/if}
+    {#if url}<video class="full" class:show={loaded} src={url} autoplay loop muted playsinline onloadeddata={() => (loaded = true)}></video>{/if}
+    <span class="badge">GIF</span>
+  </button>
+{:else if f.kind === 'photo' || f.kind === 'gif'}
   <button class="visual" style="width:{box.w}px;height:{box.h}px" onclick={() => (app.modal = { kind: 'viewer', m })}
     aria-label={f.kind === 'gif' ? 'GIF' : 'Открыть фото'}>
     {#if f.thumb && !loaded}<img class="thumb" src={f.thumb} alt="" />{/if}
@@ -177,6 +188,12 @@
   .center.big { width: 54px; height: 54px; }
   .glass { background: rgba(0,0,0,.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 2px 12px rgba(0,0,0,.25); }
   .visual:hover .center.big { transform: translate(-50%, -50%) scale(1.08); }
+
+  /* ---- stickers: no frame, transparent ---- */
+  .sticker { position: relative; display: block; width: 180px; height: 180px; }
+  .sticker img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .2s, transform .15s; }
+  .sticker img.show { opacity: 1; }
+  .sticker:hover img { transform: scale(1.03); }
 
   /* ---- round video messages ---- */
   .round { position: relative; display: block; width: 240px; height: 240px; border-radius: 50%; overflow: hidden;

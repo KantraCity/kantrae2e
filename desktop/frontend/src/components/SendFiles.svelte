@@ -10,6 +10,8 @@
   const visual = (f: File) => f.type.startsWith('image/') || f.type.startsWith('video/')
   const allVisual = $derived(files.every(visual))
   let compress = $state(true)
+  let asSticker = $state(false)
+  const oneImage = $derived(files.length === 1 && files[0].type.startsWith('image/'))
   let caption = $state('')
   let busy = $state(false)
   // svelte-ignore state_referenced_locally
@@ -26,9 +28,9 @@
     e?.preventDefault()
     if (busy) return
     busy = true
-    const list = [...files], cap = caption, comp = compress && allVisual
+    const list = [...files], cap = caption, comp = compress && allVisual, st = asSticker && oneImage
     app.modal = null
-    await app.sendPrepared(list, comp, cap)
+    await app.sendPrepared(list, comp, cap, st)
   }
 </script>
 
@@ -48,8 +50,11 @@
         {/if}
       {/each}
     </div>
-    {#if allVisual}
+    {#if allVisual && !asSticker}
       <label class="check"><input type="checkbox" bind:checked={compress} /> Сжать изображения</label>
+    {/if}
+    {#if oneImage}
+      <label class="check"><input type="checkbox" bind:checked={asSticker} /> Отправить как стикер</label>
     {/if}
     <!-- svelte-ignore a11y_autofocus -->
     <input class="field" placeholder="Подпись" bind:value={caption} autofocus maxlength="1024" />

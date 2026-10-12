@@ -125,7 +125,7 @@ func fileInfo(ref *core.MediaRef) *FileInfo {
 // mediaLabel: how a media message is quoted / previewed, like Telegram.
 func mediaLabel(ref *core.MediaRef) string {
 	label := map[string]string{"photo": "🖼 Фото", "video": "📹 Видео", "voice": "🎤 Голосовое сообщение",
-		"round": "⏺ Видеосообщение", "gif": "GIF"}[ref.Kind]
+		"round": "⏺ Видеосообщение", "gif": "GIF", "sticker": "Стикер"}[ref.Kind]
 	if label == "" {
 		label = "📎 " + ref.Name
 	}
@@ -217,9 +217,21 @@ func (m *Messenger) SendMedia(chatID string, up MediaUpload, replyTo string) (*M
 	if err != nil {
 		return nil, err
 	}
-	data, err := base64.StdEncoding.DecodeString(up.Base64)
+	in, err := mediaInput(up)
 	if err != nil {
 		return nil, err
+	}
+	s, err := c.SendMedia(context.Background(), chatID, in, core.SendOptions{ReplyTo: replyTo})
+	if err != nil {
+		return nil, friendly(err)
+	}
+	return m.lookup(c, chatID, s.UID, s), nil
+}
+
+func mediaInput(up MediaUpload) (core.MediaInput, error) {
+	data, err := base64.StdEncoding.DecodeString(up.Base64)
+	if err != nil {
+		return core.MediaInput{}, err
 	}
 	in := core.MediaInput{Name: filepath.Base(up.Name), Data: data, Mime: up.Mime, Kind: up.Kind, Width: up.Width,
 		Height: up.Height, Duration: up.Duration, Caption: strings.TrimSpace(up.Caption)}
@@ -229,11 +241,7 @@ func (m *Messenger) SendMedia(chatID string, up MediaUpload, replyTo string) (*M
 	for _, w := range up.Waveform {
 		in.Waveform = append(in.Waveform, byte(max(0, min(255, w))))
 	}
-	s, err := c.SendMedia(context.Background(), chatID, in, core.SendOptions{ReplyTo: replyTo})
-	if err != nil {
-		return nil, friendly(err)
-	}
-	return m.lookup(c, chatID, s.UID, s), nil
+	return in, nil
 }
 
 // SendFile sends a file given as base64 (kept for simple callers).

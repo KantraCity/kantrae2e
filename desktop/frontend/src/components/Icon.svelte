@@ -36,6 +36,8 @@
     videooff: 'M3 7h9M15 10l6-3v10l-6-3M3 7v10h12v-3M3 3l18 18',
     screen: 'M3 4h18v12H3zM8 20h8M12 16v4',
     minimize: 'M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7',
+    smile: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8.5 14a4 4 0 0 0 7 0M9 9.5v.01M15 9.5v.01',
+    keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
     info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5v.01',
     broom: 'M14 3l-4 8M6 12h8l2 9H4zM8 16v5M12 16v5',
     leave: 'M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10',

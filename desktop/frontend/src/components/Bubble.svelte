@@ -5,10 +5,13 @@
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
   import MediaContent from './MediaContent.svelte'
+  import { bigEmojiCount } from '../lib/emoji.svelte'
 
   let { m, first, last, group }: { m: Message; first: boolean; last: boolean; group: boolean } = $props()
   // Round video messages have no bubble (as in Telegram); photos/videos a tight one.
-  const bare = $derived(m.file?.kind === 'round' && !m.reply && !m.forwarded)
+  // 1–3 emoji alone are shown big without a bubble, like Telegram.
+  const bigEmoji = $derived(m.kind === 'text' && !m.reply && !m.forwarded ? bigEmojiCount(m.text) : 0)
+  const bare = $derived(((m.file?.kind === 'round' || m.file?.kind === 'sticker') && !m.reply && !m.forwarded) || bigEmoji > 0)
   const isVisual = $derived(m.file?.kind === 'photo' || m.file?.kind === 'video' || m.file?.kind === 'gif')
 
   // Context menu: right click, or a long press on touch screens.
@@ -59,7 +62,7 @@
     {#if m.kind === 'file' && m.file}
       <MediaContent {m} />
     {:else}
-      <span class="text">{m.text}</span>
+      <span class="text" class:big-emoji={bigEmoji > 0} style={bigEmoji ? `--emoji-size:${[0, 64, 50, 40][bigEmoji]}px` : undefined}>{m.text}</span>
     {/if}
     {#if m.reactions?.length}
       <div class="reacts">
@@ -135,4 +138,7 @@
   .time { float: right; margin: 8px 0 -4px 12px; font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; user-select: none; }
   .out .time { color: var(--text-bubble-muted); }
   .check { color: var(--accent-light); display: inline-flex; }
+  .big-emoji { display: block; font-size: var(--emoji-size); line-height: 1.15; padding: 2px 0;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+  .bare:has(.big-emoji) .time { position: static; float: none; display: flex; justify-content: flex-end; margin: 0; width: max-content; margin-left: auto; }
 </style>

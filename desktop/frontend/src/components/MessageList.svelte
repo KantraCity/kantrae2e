@@ -53,6 +53,18 @@
     return out
   })
 
+  // A new message grows in from the bottom: the list above slides up
+  // smoothly instead of jumping (the scroller is anchored at the bottom).
+  function grow(node: HTMLElement) {
+    const h = node.offsetHeight
+    return {
+      duration: 260,
+      easing: cubicOut,
+      css: (t: number) => `height:${t * h}px;opacity:${Math.min(1, t * 1.6)};transform:translateY(${(1 - t) * 12}px) scale(${0.96 + 0.04 * t});` +
+        'overflow:visible;transform-origin:bottom',
+    }
+  }
+
   function onScroll() {
     if (!scroller) return
     // In a column-reverse scroller scrollTop is 0 at the bottom, negative above.
@@ -98,7 +110,7 @@
     {#if r.kind === 'day'}
       <div class="day"><span>{r.label}</span></div>
     {:else if r.animate}
-      <div class="row" in:fly={{ y: 14, duration: 220, easing: cubicOut }}>
+      <div class="row" in:grow>
         <Bubble m={r.m} first={r.first} last={r.last} {group} />
       </div>
     {:else}

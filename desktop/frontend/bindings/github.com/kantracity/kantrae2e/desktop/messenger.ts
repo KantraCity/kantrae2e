@@ -36,6 +36,14 @@ export function AddAccount(): $CancellablePromise<void> {
     return $Call.ByID(433840723);
 }
 
+/**
+ * AddSaved adds a file of one's own to the saved GIFs / stickers
+ * (up.Kind "gif" or "sticker").
+ */
+export function AddSaved(up: $models.MediaUpload): $CancellablePromise<$models.Message | null> {
+    return $Call.ByID(3859539335, up);
+}
+
 export function ApproveLink(deviceID: string): $CancellablePromise<void> {
     return $Call.ByID(3157958442, deviceID);
 }
@@ -325,10 +333,25 @@ export function RevokeDevice(deviceID: string): $CancellablePromise<number> {
 }
 
 /**
- * SaveGIF adds the GIF of a message to the saved GIFs.
+ * SaveAs saves the media of a message as a GIF or sticker (a photo as a
+ * sticker, a short video as a GIF; kind "" keeps its kind).
+ */
+export function SaveAs(chatID: string, id: string, kind: string): $CancellablePromise<void> {
+    return $Call.ByID(65728224, chatID, id, kind);
+}
+
+/**
+ * SaveGIF adds the GIF or sticker of a message to the saved ones.
  */
 export function SaveGIF(chatID: string, id: string): $CancellablePromise<void> {
     return $Call.ByID(1580136454, chatID, id);
+}
+
+/**
+ * Saved returns the saved GIFs ("gif") or stickers ("sticker"), newest first.
+ */
+export function Saved(kind: string): $CancellablePromise<$models.Message[] | null> {
+    return $Call.ByID(3660732652, kind);
 }
 
 /**

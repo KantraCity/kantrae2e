@@ -22,7 +22,7 @@
     app.searchUsers('')
   }
 
-  const MEDIA: Record<string, string> = { photo: '🖼 Фото', video: '📹 Видео', voice: '🎤 Голосовое сообщение', round: '⏺ Видеосообщение', gif: 'GIF' }
+  const MEDIA: Record<string, string> = { photo: '🖼 Фото', video: '📹 Видео', voice: '🎤 Голосовое сообщение', round: '⏺ Видеосообщение', gif: 'GIF', sticker: 'Стикер' }
 
   function preview(c: (typeof app.chats)[number]): string {
     if (!c.last) return c.active ? (c.kind === 'direct' ? 'Личный чат' : 'Нет сообщений') : 'Вы не участник'

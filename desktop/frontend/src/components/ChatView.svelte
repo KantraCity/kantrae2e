@@ -6,17 +6,41 @@
   import { loadDraft, saveDraft } from '../lib/persist'
   import Avatar from './Avatar.svelte'
   import MessageList from './MessageList.svelte'
-  import GifPanel from './GifPanel.svelte'
+  import EmojiPanel from './EmojiPanel.svelte'
   import { calls } from '../lib/call.svelte'
   import Icon from './Icon.svelte'
   import { duration, hasRecordPermission, micError, rememberRecordPermission, requestRecordPermission, RoundRecorder, VoiceRecorder } from '../lib/media'
-  import { fade, scale } from 'svelte/transition'
+  import { fade, fly, scale } from 'svelte/transition'
 
   let text = $state('')
   let input: HTMLTextAreaElement | undefined = $state()
   let fileInput: HTMLInputElement | undefined = $state()
   let dragging = $state(false)
-  let gifsOpen = $state(false)
+  // Emoji / stickers / GIF panel. On phones it takes the place of the
+  // system keyboard (like Telegram): opening it hides the keyboard, tapping
+  // the text field brings the keyboard back.
+  let panelOpen = $state(false)
+  const narrow = () => window.matchMedia('(max-width: 720px)').matches
+  function togglePanel() {
+    if (panelOpen) {
+      panelOpen = false
+      input?.focus()
+      return
+    }
+    if (narrow()) input?.blur()
+    panelOpen = true
+  }
+  function insertEmoji(e: string) {
+    const el = input
+    const start = el?.selectionStart ?? text.length, end = el?.selectionEnd ?? text.length
+    text = text.slice(0, start) + e + text.slice(end)
+    tick().then(() => {
+      if (!el) return
+      const pos = start + e.length
+      if (!narrow()) el.focus()
+      el.setSelectionRange(pos, pos)
+    })
+  }
   let memberCount = $state<number | null>(null)
 
   const chat = $derived(app.current)
@@ -288,7 +312,13 @@
     {/if}
     {#if chat.active}
       <footer>
-        {#if gifsOpen}<GifPanel onclose={() => { gifsOpen = false; input?.focus() }} />{/if}
+        {#if panelOpen}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div class="panel-backdrop" onclick={() => (panelOpen = false)}></div>
+          <div class="emoji-pop" transition:fly={{ y: 12, duration: 180 }}>
+            <EmojiPanel onpick={insertEmoji} onclose={() => (panelOpen = false)} ongif={() => (panelOpen = false)} />
+          </div>
+        {/if}
         <div class="composer">
           {#if rec}
             <div class="recbar">
@@ -304,9 +334,11 @@
           {:else}
             <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => fileInput?.click()}><Icon name="clip" /></button>
             <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} onpaste={paste}
+              onfocus={() => { if (narrow()) panelOpen = false }}
               oninput={() => { resize(); app.typingTick() }}></textarea>
             {#if !app.editing}
-              <button class="icon-btn gif-btn" class:on={gifsOpen} aria-label="GIF" title="Сохранённые GIF" onclick={() => (gifsOpen = !gifsOpen)}><Icon name="gif" /></button>
+              <button class="icon-btn emoji-btn" class:on={panelOpen} aria-label={panelOpen ? 'Клавиатура' : 'Эмодзи, стикеры и GIF'}
+                title="Эмодзи, стикеры и GIF" onclick={togglePanel}><Icon name={panelOpen && narrow() ? 'keyboard' : 'smile'} /></button>
             {/if}
           {/if}
           <input type="file" multiple hidden accept="*/*" bind:this={fileInput} onchange={(e) => pick((e.currentTarget as HTMLInputElement).files)} />
@@ -362,7 +394,17 @@
   .name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status { font-size: 13px; }
   footer { position: relative; display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px 14px; max-width: 792px; width: 100%; margin: 0 auto; }
-  .gif-btn.on { color: var(--accent-light); }
+  .emoji-btn.on { color: var(--accent-light); }
+  .panel-backdrop { position: fixed; inset: 0; z-index: 25; }
+  .emoji-pop { position: absolute; right: 16px; bottom: calc(100% + 6px); z-index: 26; width: 380px; height: 430px; max-height: 60vh;
+    border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
+  @media (max-width: 720px) {
+    footer { flex-wrap: wrap; }
+    /* Phones: docked under the field, where the keyboard was. */
+    .panel-backdrop { display: none; }
+    .emoji-pop { position: static; order: 10; flex-basis: 100%; width: auto; height: 300px; max-height: 45vh; border-radius: 0;
+      box-shadow: none; margin: 6px -8px -10px; }
+  }
   .call-banner { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--bg-header); border-bottom: 1px solid var(--border);
     font-size: 14px; color: var(--text); text-align: left; }
   .call-banner:hover { background: var(--bg-hover); }

@@ -1,6 +1,6 @@
 import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type Message, type State, type UIEvent, type UserHit, type UserProfile } from './api'
 import { plural } from './util'
-import { MAX_FILE, prepareFile, type Prepared } from './media'
+import { MAX_FILE, prepareFile, prepareSticker, type Prepared } from './media'
 import { restoreOpenChat, saveOpenChat } from './persist'
 
 export type Toast = { id: number; text: string; kind: 'info' | 'error' | 'warning' | 'security' }
@@ -109,8 +109,8 @@ class AppState {
     this.messages = {}
     this.currentId = null
     this.links = []
-    this.gifs = []
-    this.gifsLoaded = false
+    this.saved = { gif: [], sticker: [] }
+    this.savedLoaded = { gif: false, sticker: false }
     this.me = null
     this.search = ''
     this.userHits = []
@@ -519,10 +519,17 @@ class AppState {
     if (ok.length) this.modal = { kind: 'sendFiles', files: ok }
   }
 
-  async sendPrepared(files: File[], compress: boolean, caption: string) {
+  async sendPrepared(files: File[], compress: boolean, caption: string, asSticker = false) {
     for (let i = 0; i < files.length; i++) {
       try {
-        const p = await prepareFile(files[i], compress)
+        let p: Prepared
+        if (asSticker) {
+          const upload = await prepareSticker(files[i])
+          const blob = await (await fetch('data:' + upload.mime + ';base64,' + upload.base64)).blob()
+          p = { upload, blob, localUrl: URL.createObjectURL(blob) }
+        } else {
+          p = await prepareFile(files[i], compress)
+        }
         // Like Telegram: the caption goes with the first item.
         if (i === 0) p.upload.caption = caption
         await this.sendMedia(p)
@@ -566,40 +573,55 @@ class AppState {
     return run
   }
 
-  // ---- saved GIFs ----
-  gifs = $state<Message[]>([])
-  gifsLoaded = false
+  // ---- saved GIFs and stickers (no packs: what you liked, you keep) ----
+  saved = $state<{ gif: Message[]; sticker: Message[] }>({ gif: [], sticker: [] })
+  savedLoaded = { gif: false, sticker: false }
 
-  async loadGifs() {
-    const list = await Messenger.SavedGIFs().catch(() => null)
+  async loadSaved(kind: 'gif' | 'sticker') {
+    const list = await Messenger.Saved(kind).catch(() => null)
     if (list) {
-      this.gifs = list
-      this.gifsLoaded = true
+      this.saved[kind] = list
+      this.savedLoaded[kind] = true
     }
   }
 
-  async saveGif(m: Message) {
+  /** Saves a message's GIF/sticker (a photo as a sticker, a short video as a GIF). */
+  async saveAs(m: Message, kind: 'gif' | 'sticker') {
     try {
-      await Messenger.SaveGIF(m.chatId, m.id)
-      this.toast('GIF сохранён')
-      await this.loadGifs()
+      await Messenger.SaveAs(m.chatId, m.id, kind)
+      this.toast(kind === 'gif' ? 'GIF сохранён' : 'Стикер сохранён')
+      await this.loadSaved(kind)
     } catch (e) {
       this.toast(errorText(e), 'error')
     }
   }
 
-  async removeGif(g: Message) {
-    const before = this.gifs
-    this.gifs = before.filter((x) => x.id !== g.id)
+  /** Adds a file of one's own to the saved GIFs / stickers. */
+  async addSaved(file: File, kind: 'gif' | 'sticker') {
+    try {
+      const up = kind === 'sticker' ? await prepareSticker(file) : (await prepareFile(file, true)).upload
+      if (kind === 'gif' && up.kind !== 'gif' && up.kind !== 'video') throw new Error('Нужен файл GIF или короткое видео')
+      up.kind = kind
+      await Messenger.AddSaved(up)
+      await this.loadSaved(kind)
+    } catch (e) {
+      this.toast(errorText(e), 'error')
+    }
+  }
+
+  async removeSaved(g: Message) {
+    const kind = (g.file?.kind === 'sticker' ? 'sticker' : 'gif') as 'gif' | 'sticker'
+    const before = this.saved[kind]
+    this.saved[kind] = before.filter((x) => x.id !== g.id)
     try {
       await Messenger.RemoveSavedGIF(g.id)
     } catch (e) {
-      this.gifs = before
+      this.saved[kind] = before
       this.toast(errorText(e), 'error')
     }
   }
 
-  /** Sends a saved GIF: shown at once, nothing is uploaded again. */
+  /** Sends a saved GIF/sticker: shown at once, nothing is uploaded again. */
   async sendGif(g: Message) {
     const chatId = this.currentId
     if (!chatId) return
@@ -749,7 +771,8 @@ class AppState {
         await this.openTappedChat()
         break
       case 'gifs':
-        if (this.gifsLoaded) await this.loadGifs()
+        if (this.savedLoaded.gif) await this.loadSaved('gif')
+        if (this.savedLoaded.sticker) await this.loadSaved('sticker')
         break
       case 'files_dropped':
         if (e.files?.length) this.filesDropped(e.files)

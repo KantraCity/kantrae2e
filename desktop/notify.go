@@ -232,12 +232,12 @@ func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 }
 
 // Kinds of media whose picture goes into the notification.
-var notifyPicture = map[string]bool{"photo": true, "gif": true, "video": true, "round": true}
+var notifyPicture = map[string]bool{"photo": true, "gif": true, "sticker": true, "video": true, "round": true}
 
 // fileLabel: how a media message reads in a notification / the chat list.
 func fileLabel(f *FileInfo) string {
 	label := map[string]string{"photo": "🖼 Фото", "video": "📹 Видео", "voice": "🎤 Голосовое сообщение",
-		"round": "⏺ Видеосообщение", "gif": "GIF"}[f.Kind]
+		"round": "⏺ Видеосообщение", "gif": "GIF", "sticker": "Стикер"}[f.Kind]
 	if label == "" {
 		label = "📎 " + f.Name
 	}
@@ -263,7 +263,7 @@ func (m *Messenger) noticeImage(c *core.Client, msg *Message) (path, url string)
 	}
 	var data []byte
 	ext := ".jpg"
-	if (ref.Kind == "photo" || ref.Kind == "gif") && ref.Size <= 8<<20 {
+	if (ref.Kind == "photo" || ref.Kind == "gif" || ref.Kind == "sticker") && ref.Size <= 8<<20 {
 		if e, ok := decrypted.get(ref.Hash); ok {
 			data = e.data
 		} else if _, d, err := c.DownloadMedia(ctx, sm); err == nil {
