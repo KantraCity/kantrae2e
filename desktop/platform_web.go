@@ -16,3 +16,6 @@ func platformApplyBackground(bool)                                           {}
 func platformOpenSettings(string)                                            {}
 
 func titlebarStyle() string { return "" }
+
+// Web mode: the browser downloads the file itself.
+func platformSaveMedia(string, string, []byte) (string, error) { return "", errSaveUnsupported }

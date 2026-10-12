@@ -239,11 +239,11 @@ type Messenger struct {
 	notif      notifier
 	foreground bool
 	// Local passcode (passcode.go).
-	passcode *passcodeFile
-	locked   bool
-	bgSince  time.Time
-	failures int
-	retryAt  time.Time
+	passcode   *passcodeFile
+	locked     bool
+	bgSince    time.Time
+	failures   int
+	retryAt    time.Time
 	activeChat string
 	openChat   string // chat to open once the UI asks (tapped notification)
 }

@@ -445,6 +445,12 @@ func (c *Client) localMessage(groupID string, p payload) *store.Message {
 	return m
 }
 
+// MessagesOfKind returns the newest stored messages of one kind ("text",
+// "media", …), oldest first.
+func (c *Client) MessagesOfKind(ctx context.Context, groupID, kind string, limit int) ([]store.Message, error) {
+	return c.st.MessagesOfKind(ctx, groupID, kind, limit)
+}
+
 // Groups lists known groups.
 // The account's hidden self-group is not listed.
 func (c *Client) Groups(ctx context.Context) ([]store.Group, error) {

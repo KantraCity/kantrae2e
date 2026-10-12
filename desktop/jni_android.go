@@ -10,7 +10,10 @@ import "C"
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
+	"os"
+	"strings"
 	"sync/atomic"
 	"unsafe"
 )
@@ -113,3 +116,30 @@ func platformStatus(s *Settings) {
 func platformApplyBackground(on bool) { javaCall("setBackground", boolPref(on)) }
 
 func platformOpenSettings(what string) { javaCall("openSettings", what) }
+
+// platformSaveMedia hands a decrypted copy to the gallery (MediaStore).
+func platformSaveMedia(name, mime string, data []byte) (string, error) {
+	dir, _ := storageDir.Load().(string)
+	if dir == "" {
+		return "", errSaveUnsupported
+	}
+	tmp, err := os.CreateTemp(dir, "save-*")
+	if err != nil {
+		return "", err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	tmp.Close()
+	b, _ := json.Marshal(map[string]string{"path": tmp.Name(), "name": name, "mime": mime})
+	if msg := javaCallString("saveMedia", string(b)); msg != "" {
+		os.Remove(tmp.Name())
+		return "", errors.New(msg)
+	}
+	if strings.HasPrefix(mime, "image/") || strings.HasPrefix(mime, "video/") {
+		return "Сохранено в галерею", nil
+	}
+	return "Сохранено в Загрузки", nil
+}

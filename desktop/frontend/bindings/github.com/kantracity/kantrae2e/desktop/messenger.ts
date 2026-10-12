@@ -448,6 +448,15 @@ export function SaveGIF(chatID: string, id: string): $CancellablePromise<void> {
 }
 
 /**
+ * SaveMedia saves a message's file to the gallery (phones) or the Downloads
+ * folder (desktop). It returns where it went; "" means the UI should let
+ * the browser download it (web mode).
+ */
+export function SaveMedia(chatID: string, id: string): $CancellablePromise<string> {
+    return $Call.ByID(2491273540, chatID, id);
+}
+
+/**
  * Saved returns the saved GIFs ("gif") or stickers ("sticker"), newest first.
  */
 export function Saved(kind: string): $CancellablePromise<$models.Message[] | null> {
@@ -617,6 +626,15 @@ export function SetUsername(username: string): $CancellablePromise<$models.UserP
  */
 export function SetupRecovery(): $CancellablePromise<string> {
     return $Call.ByID(3336352441);
+}
+
+/**
+ * SharedMedia lists a chat's media for the profile tabs (newest first):
+ * kind "media" (photos, videos, GIFs), "files", "voice" (voice and video
+ * messages) or "links".
+ */
+export function SharedMedia(chatID: string, kind: string): $CancellablePromise<$models.Message[] | null> {
+    return $Call.ByID(555600688, chatID, kind);
 }
 
 /**

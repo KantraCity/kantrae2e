@@ -8,13 +8,17 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.PowerManager;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -24,6 +28,11 @@ import androidx.core.content.ContextCompat;
 
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 
 /**
@@ -172,6 +181,72 @@ public final class KantraNative {
             // (Android 12+); it is started again when the app is opened.
             Log.w(TAG, "background service", e);
         }
+    }
+
+    /**
+     * Saves a decrypted file to the phone's gallery / downloads, like
+     * Telegram's "Сохранить в галерею": {"path","name","mime"} → "" when
+     * saved, else an error text. Photos go to Pictures/Kantra, videos to
+     * Movies/Kantra, everything else to Download/Kantra.
+     */
+    public static String saveMedia(String json) {
+        File src = null;
+        try {
+            JSONObject o = new JSONObject(json);
+            src = new File(o.getString("path"));
+            String name = o.optString("name", src.getName());
+            String mime = o.optString("mime", "application/octet-stream");
+            boolean image = mime.startsWith("image/"), video = mime.startsWith("video/");
+            String dir = image ? Environment.DIRECTORY_PICTURES : video ? Environment.DIRECTORY_MOVIES : Environment.DIRECTORY_DOWNLOADS;
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentResolver cr = app.getContentResolver();
+                Uri collection = image ? MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                        : video ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                        : MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+                v.put(MediaStore.MediaColumns.RELATIVE_PATH, dir + "/Kantra");
+                v.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                Uri uri = cr.insert(collection, v);
+                if (uri == null) return "Не удалось сохранить файл";
+                try (InputStream in = new FileInputStream(src); OutputStream out = cr.openOutputStream(uri)) {
+                    copy(in, out);
+                }
+                v.clear();
+                v.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                cr.update(uri, v, null, null);
+                return "";
+            }
+            if (ContextCompat.checkSelfPermission(app, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                Activity a = activity.get();
+                if (a != null) a.runOnUiThread(() -> a.requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 4203));
+                return "Разрешите доступ к памяти и сохраните ещё раз";
+            }
+            File outDir = new File(Environment.getExternalStoragePublicDirectory(dir), "Kantra");
+            if (!outDir.isDirectory() && !outDir.mkdirs()) return "Не удалось создать папку";
+            File dst = new File(outDir, name);
+            for (int i = 1; dst.exists(); i++) {
+                int dot = name.lastIndexOf('.');
+                dst = new File(outDir, dot > 0 ? name.substring(0, dot) + " (" + i + ")" + name.substring(dot) : name + " (" + i + ")");
+            }
+            try (InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dst)) {
+                copy(in, out);
+            }
+            android.media.MediaScannerConnection.scanFile(app, new String[]{dst.getAbsolutePath()}, new String[]{mime}, null);
+            return "";
+        } catch (Exception e) {
+            Log.w(TAG, "save media", e);
+            return "Не удалось сохранить: " + e.getMessage();
+        } finally {
+            if (src != null) //noinspection ResultOfMethodCallIgnored
+                src.delete();
+        }
+    }
+
+    private static void copy(InputStream in, OutputStream out) throws java.io.IOException {
+        byte[] buf = new byte[64 * 1024];
+        for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
     }
 
     /** {"notificationsAllowed","batteryUnrestricted","background"} */

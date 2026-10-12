@@ -1,22 +1,25 @@
 <script lang="ts">
   // Full-screen photo/video viewer; ← → browse the chat's media.
   import type { Message } from '../lib/api'
-  import { app } from '../lib/app.svelte'
+  import { app, type Modal } from '../lib/app.svelte'
   import Icon from './Icon.svelte'
 
-  let { m: start }: { m: Message } = $props()
+  let { m: start, list, back }: { m: Message; list?: Message[]; back?: Modal } = $props()
   // svelte-ignore state_referenced_locally
   let m = $state(start)
-  const items = $derived((app.messages[m.chatId] ?? []).filter((x) => x.file && (x.file.kind === 'photo' || x.file.kind === 'video' || x.file.kind === 'gif' || x.file.kind === 'sticker')))
+  const items = $derived(list ?? (app.messages[m.chatId] ?? []).filter((x) => x.file && (x.file.kind === 'photo' || x.file.kind === 'video' || x.file.kind === 'gif' || x.file.kind === 'sticker')))
   const idx = $derived(items.findIndex((x) => x.id === m.id))
   const url = $derived(app.mediaUrl(m))
 
+  // svelte-ignore state_referenced_locally
+  const backTo = back ?? null
+  const close = () => (app.modal = backTo)
   function go(d: number) {
     const n = items[idx + d]
     if (n) m = n
   }
   function key(e: KeyboardEvent) {
-    if (e.key === 'Escape') app.modal = null
+    if (e.key === 'Escape') close()
     else if (e.key === 'ArrowLeft') go(-1)
     else if (e.key === 'ArrowRight') go(1)
   }
@@ -25,11 +28,11 @@
 <svelte:window onkeydown={key} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="viewer" onclick={(e) => e.target === e.currentTarget && (app.modal = null)}>
+<div class="viewer" onclick={(e) => e.target === e.currentTarget && close()}>
   <header>
     <div class="who"><b>{m.outgoing ? 'Вы' : m.sender}</b><span>{new Date(m.sentAt).toLocaleString('ru-RU')}</span></div>
-    <a class="icon-btn" href={url + (url.startsWith('blob:') ? '' : '?download=1')} download={m.file?.name} aria-label="Скачать"><Icon name="down" /></a>
-    <button class="icon-btn" aria-label="Закрыть" onclick={() => (app.modal = null)}><Icon name="close" /></button>
+    <button class="icon-btn" aria-label="Сохранить" title="Сохранить" onclick={() => app.saveMedia(m)}><Icon name="download" /></button>
+    <button class="icon-btn" aria-label="Закрыть" onclick={close}><Icon name="close" /></button>
   </header>
   {#key m.id}
     {#if m.file?.kind === 'video' || m.file?.mime?.startsWith('video/')}

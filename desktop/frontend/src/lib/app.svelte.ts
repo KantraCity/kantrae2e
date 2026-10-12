@@ -13,7 +13,7 @@ export type Modal =
   | { kind: 'drawer' }
   | { kind: 'forward'; chatId: string; ids: string[] }
   | { kind: 'sendFiles'; files: File[] }
-  | { kind: 'viewer'; m: Message }
+  | { kind: 'viewer'; m: Message; list?: Message[]; back?: Modal }
   | { kind: 'deleteMsg'; chatId: string; ids: string[]; canAll: boolean }
   | { kind: 'editProfile' }
   | { kind: 'logout' }
@@ -653,6 +653,24 @@ class AppState {
       return
     }
     this.jump = { chatId, id, n: ++this.jumpSeq }
+  }
+
+  // ---- saving files (gallery / Downloads; the browser downloads in web mode) ----
+  async saveMedia(m: Message) {
+    const where = await this.try(() => Messenger.SaveMedia(m.chatId, m.id))
+    if (where === undefined) return
+    if (where) {
+      this.toast(where)
+      return
+    }
+    const url = this.mediaUrl(m)
+    if (!url) return
+    const a = document.createElement('a')
+    a.href = url.startsWith('blob:') ? url : url + '?download=1'
+    a.download = m.file?.name || 'file'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   // ---- local passcode (desktop/passcode.go) ----

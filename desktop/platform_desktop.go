@@ -135,3 +135,8 @@ func titlebarStyle() string {
 	}
 	return ""
 }
+
+// platformSaveMedia saves into Downloads/Kantra, like Telegram Desktop.
+func platformSaveMedia(name, _ string, data []byte) (string, error) {
+	return saveToDownloads(name, data)
+}

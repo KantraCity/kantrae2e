@@ -5,6 +5,7 @@
   import { blobToBase64 } from '../lib/media'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
+  import SharedMedia from './SharedMedia.svelte'
   import Modal from './Modal.svelte'
   import StatusBadge from './StatusBadge.svelte'
 
@@ -236,6 +237,7 @@
       <span class="grow">Уведомления{#if isMuted}<small class="muted"> · {chat.mutedUntil! >= 253402300799000 ? 'выключены' : 'до ' + new Date(chat.mutedUntil!).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>{/if}</span>
       <input type="checkbox" class="switch" checked={!isMuted} onchange={(e) => app.muteChat(chat, (e.currentTarget as HTMLInputElement).checked ? 0 : -1)} />
     </label>
+    <SharedMedia chatId={chat.id} />
     <div class="danger-zone">
       <button class="row-btn plain" onclick={() => (app.modal = { kind: 'deleteChat', chatId: chat.id, action: 'clear' })}>
         <Icon name="broom" size={20} /><span>Очистить историю</span>

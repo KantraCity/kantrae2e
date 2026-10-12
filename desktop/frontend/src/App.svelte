@@ -79,7 +79,7 @@
 {#if app.pending}{#if app.modal?.kind === 'relogin'}<Relogin />{/if}
 {:else if app.modal?.kind === 'drawer'}<Drawer />
 {:else if app.modal?.kind === 'sendFiles'}<SendFiles files={app.modal.files} />
-{:else if app.modal?.kind === 'viewer'}<Viewer m={app.modal.m} />
+{:else if app.modal?.kind === 'viewer'}<Viewer m={app.modal.m} list={app.modal.list} back={app.modal.back} />
 {:else if app.modal?.kind === 'forward'}<Forward chatId={app.modal.chatId} ids={app.modal.ids} />
 {:else if app.modal?.kind === 'deleteMsg'}<DeleteMessages chatId={app.modal.chatId} ids={app.modal.ids} canAll={app.modal.canAll} />
 {:else if app.modal?.kind === 'editProfile'}<EditProfile />

@@ -66,3 +66,5 @@ func platformApplyBackground(bool) {}
 func platformOpenSettings(string)  {}
 
 func titlebarStyle() string { return "" }
+
+func platformSaveMedia(string, string, []byte) (string, error) { return "", errSaveUnsupported }

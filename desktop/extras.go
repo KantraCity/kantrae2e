@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -320,4 +321,54 @@ func (m *Messenger) userIDOf(c *core.Client) string {
 		}
 	}
 	return ""
+}
+
+// SharedMedia lists a chat's media for the profile tabs (newest first):
+// kind "media" (photos, videos, GIFs), "files", "voice" (voice and video
+// messages) or "links".
+func (m *Messenger) SharedMedia(chatID, kind string) ([]Message, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.Background()
+	storeKind := "media"
+	if kind == "links" {
+		storeKind = "text"
+	}
+	ms, err := c.MessagesOfKind(ctx, chatID, storeKind, 3000)
+	if err != nil {
+		return nil, err
+	}
+	v := m.viewOf(c, chatID)
+	out := []Message{}
+	for i := len(ms) - 1; i >= 0 && len(out) < 500; i-- {
+		s := &ms[i]
+		if kind == "links" {
+			if !linkRE.MatchString(s.Body) {
+				continue
+			}
+		} else {
+			ref, err := core.ParseMedia(s)
+			if err != nil || sharedTab(ref.Kind) != kind {
+				continue
+			}
+		}
+		out = append(out, *m.toMessageView(c, s, v))
+	}
+	return out, nil
+}
+
+var linkRE = regexp.MustCompile(`(?i)\bhttps?://\S+`)
+
+func sharedTab(mediaKind string) string {
+	switch mediaKind {
+	case "photo", "video", "gif":
+		return "media"
+	case "voice", "round":
+		return "voice"
+	case "sticker":
+		return ""
+	}
+	return "files"
 }

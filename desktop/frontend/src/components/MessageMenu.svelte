@@ -65,6 +65,9 @@
   {#if !app.sending[m.id] && (m.file?.kind === 'sticker' || m.file?.kind === 'photo')}
     <button onclick={() => act(() => app.saveAs(m, 'sticker'))}><Icon name="smile" size={20} /> {m.file?.kind === 'sticker' ? 'Сохранить стикер' : 'Сохранить как стикер'}</button>
   {/if}
+  {#if m.file && !app.sending[m.id] && m.file.kind !== 'sticker'}
+    <button onclick={() => act(() => app.saveMedia(m))}><Icon name="download" size={20} /> {m.file.kind === 'photo' || m.file.kind === 'video' || m.file.kind === 'gif' ? 'Сохранить в галерею' : 'Сохранить файл'}</button>
+  {/if}
   {#if !m.id.startsWith('local-')}
     <button onclick={() => act(() => (app.modal = { kind: 'pinMsg', m }))}><Icon name="pin" size={20} /> {m.pinned ? 'Открепить' : 'Закрепить'}</button>
   {/if}
