@@ -109,7 +109,7 @@ func (m *Messenger) toMessageView(c *core.Client, s *store.Message, v *chatView)
 
 func fileInfo(ref *core.MediaRef) *FileInfo {
 	f := &FileInfo{Name: ref.Name, Size: ref.Size, Kind: ref.Kind, Mime: ref.Mime, Width: ref.Width,
-		Height: ref.Height, Duration: ref.Duration, Caption: ref.Caption}
+		Height: ref.Height, Duration: ref.Duration, Caption: ref.Caption, Album: ref.Album}
 	if f.Kind == "" {
 		f.Kind = "file"
 	}
@@ -209,6 +209,8 @@ type MediaUpload struct {
 	ThumbBase64 string `json:"thumb"`
 	Waveform    []int  `json:"wave"`
 	Caption     string `json:"caption"`
+	// Album: the same id for photos/videos sent together (one grid).
+	Album string `json:"album,omitempty"`
 }
 
 // SendMedia sends a photo, video, voice or video message, or a file.
@@ -234,7 +236,7 @@ func mediaInput(up MediaUpload) (core.MediaInput, error) {
 		return core.MediaInput{}, err
 	}
 	in := core.MediaInput{Name: filepath.Base(up.Name), Data: data, Mime: up.Mime, Kind: up.Kind, Width: up.Width,
-		Height: up.Height, Duration: up.Duration, Caption: strings.TrimSpace(up.Caption)}
+		Height: up.Height, Duration: up.Duration, Caption: strings.TrimSpace(up.Caption), Album: up.Album}
 	if up.ThumbBase64 != "" {
 		in.Thumb, _ = base64.StdEncoding.DecodeString(up.ThumbBase64)
 	}

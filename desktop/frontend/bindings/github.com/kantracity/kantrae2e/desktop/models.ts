@@ -119,6 +119,7 @@ export interface FileInfo {
     "thumb"?: string;
     "wave"?: number[] | null;
     "caption"?: string;
+    "album"?: string;
 
     /**
      * URL serves the decrypted file (media.go); "?download=1" saves it.
@@ -174,6 +175,11 @@ export interface MediaUpload {
     "thumb": string;
     "wave": number[] | null;
     "caption": string;
+
+    /**
+     * Album: the same id for photos/videos sent together (one grid).
+     */
+    "album"?: string;
 }
 
 export interface Member {

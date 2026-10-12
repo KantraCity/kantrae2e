@@ -100,6 +100,7 @@ type FileInfo struct {
 	Thumb    string `json:"thumb,omitempty"`
 	Waveform []int  `json:"wave,omitempty"`
 	Caption  string `json:"caption,omitempty"`
+	Album    string `json:"album,omitempty"`
 	// URL serves the decrypted file (media.go); "?download=1" saves it.
 	URL string `json:"url"`
 }

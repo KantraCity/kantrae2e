@@ -64,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int FILE_PICKER_REQUEST = 7001;
 
     private WebView webView;
+    private KantraGallery gallery;
     private WailsBridge bridge;
     // <input type=file> and getUserMedia (voice / video messages) in the WebView.
     private static final int WEB_FILE_CHOOSER = 7101;
@@ -264,6 +265,10 @@ public class MainActivity extends AppCompatActivity {
                     // full URL including the query string, because
                     // WebViewAssetLoader.PathHandler strips query params
                     String path = request.getUrl().getPath();
+                    // Attach sheet: thumbnails and files of the phone's gallery.
+                    if (gallery != null && path != null && path.startsWith(KantraGallery.PREFIX)) {
+                        return gallery.serve(path);
+                    }
                     if (path != null && path.startsWith("/wails/")) {
                         String fullPath = path;
                         String query = request.getUrl().getQuery();
@@ -326,6 +331,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Add JavaScript interface for Go communication
         webView.addJavascriptInterface(new WailsJSBridge(bridge, webView), "wails");
+        gallery = new KantraGallery(this, webView);
+        webView.addJavascriptInterface(gallery, "KantraGallery");
     }
 
     private void loadApplication() {
@@ -369,6 +376,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == KantraGallery.PERMISSION_REQUEST && gallery != null) {
+            gallery.onPermissionResult();
+            return;
+        }
         if (requestCode == WEB_MEDIA_PERMISSIONS && pendingWebPermission != null) {
             boolean all = grantResults.length > 0;
             for (int g : grantResults) all &= g == PackageManager.PERMISSION_GRANTED;

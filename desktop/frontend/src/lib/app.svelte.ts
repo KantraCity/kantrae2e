@@ -520,6 +520,9 @@ class AppState {
   }
 
   async sendPrepared(files: File[], compress: boolean, caption: string, asSticker = false) {
+    // Several photos/videos sent "as media" go out as one album (one grid).
+    const visual = (f: File) => f.type.startsWith('image/') || f.type.startsWith('video/')
+    const album = compress && !asSticker && files.length > 1 && files.every(visual) ? 'al-' + Math.random().toString(36).slice(2, 12) : ''
     for (let i = 0; i < files.length; i++) {
       try {
         let p: Prepared
@@ -532,6 +535,7 @@ class AppState {
         }
         // Like Telegram: the caption goes with the first item.
         if (i === 0) p.upload.caption = caption
+        if (album && (p.upload.kind === 'photo' || p.upload.kind === 'video')) p.upload.album = album
         await this.sendMedia(p)
       } catch {
         this.toast(`Не удалось подготовить ${files[i].name}`, 'error')
@@ -551,7 +555,7 @@ class AppState {
       seq: 0, id: tmp, chatId, senderId: this.state?.account?.userId ?? '', sender: '', kind: 'file', text: '',
       sentAt: Date.now(), outgoing: true, origin: '',
       file: { name: u.name, size: p.blob.size, kind: u.kind, mime: u.mime, w: u.w, h: u.h, dur: u.dur,
-        thumb: u.thumb ? 'data:image/jpeg;base64,' + u.thumb : '', wave: u.wave, caption: u.caption, url: p.localUrl },
+        thumb: u.thumb ? 'data:image/jpeg;base64,' + u.thumb : '', wave: u.wave, caption: u.caption, url: p.localUrl, album: u.album },
     } as Message
     this.localUrls[tmp] = p.localUrl
     this.sending[tmp] = true

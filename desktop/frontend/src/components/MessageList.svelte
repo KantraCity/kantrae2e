@@ -32,19 +32,32 @@
 
   type Row =
     | { kind: 'day'; label: string; key: string }
-    | { kind: 'msg'; m: Message; first: boolean; last: boolean; key: string; animate: boolean }
+    | { kind: 'msg'; m: Message; first: boolean; last: boolean; key: string; animate: boolean; album?: Message[] }
 
   // Newest first (the DOM order of a column-reverse list).
   const rows = $derived.by(() => {
     const out: Row[] = []
-    const ms = visible
+    // Photos/videos sent together (same album) become one item.
+    const ms: Message[] = []
+    const albums = new Map<string, Message[]>()
+    for (const m of visible) {
+      const al = m.file?.album
+      const prev = ms[ms.length - 1]
+      if (al && prev?.file?.album === al && prev.senderId === m.senderId) {
+        albums.get(prev.id)!.push(m)
+        continue
+      }
+      ms.push(m)
+      if (al) albums.set(m.id, [m])
+    }
     const same = (a?: Message, b?: Message) =>
       !!a && !!b && a.senderId === b.senderId && a.outgoing === b.outgoing &&
       Math.abs(a.sentAt - b.sentAt) < 5 * 60000 && new Date(a.sentAt).toDateString() === new Date(b.sentAt).toDateString()
     for (let i = ms.length - 1; i >= 0; i--) {
       const m = ms[i]
+      const album = albums.get(m.id)
       out.push({ kind: 'msg', m, first: !same(ms[i - 1], m), last: !same(m, ms[i + 1]), key: m.id,
-        animate: m.sentAt > openedAt })
+        animate: m.sentAt > openedAt, album: album && album.length > 1 ? album : undefined })
       const day = new Date(m.sentAt).toDateString()
       if (i === 0 || new Date(ms[i - 1].sentAt).toDateString() !== day) {
         out.push({ kind: 'day', label: dayLabel(m.sentAt), key: 'd' + day })
@@ -111,10 +124,10 @@
       <div class="day"><span>{r.label}</span></div>
     {:else if r.animate}
       <div class="row" in:grow>
-        <Bubble m={r.m} first={r.first} last={r.last} {group} />
+        <Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} />
       </div>
     {:else}
-      <div class="row"><Bubble m={r.m} first={r.first} last={r.last} {group} /></div>
+      <div class="row"><Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} /></div>
     {/if}
   {/each}
   {#if shown >= all.length}

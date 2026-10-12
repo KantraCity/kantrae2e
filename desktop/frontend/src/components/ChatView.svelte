@@ -7,6 +7,7 @@
   import Avatar from './Avatar.svelte'
   import MessageList from './MessageList.svelte'
   import EmojiPanel from './EmojiPanel.svelte'
+  import AttachSheet from './AttachSheet.svelte'
   import { calls } from '../lib/call.svelte'
   import Icon from './Icon.svelte'
   import { duration, hasRecordPermission, micError, rememberRecordPermission, requestRecordPermission, RoundRecorder, VoiceRecorder } from '../lib/media'
@@ -20,6 +21,7 @@
   // system keyboard (like Telegram): opening it hides the keyboard, tapping
   // the text field brings the keyboard back.
   let panelOpen = $state(false)
+  let attachOpen = $state(false)
   const narrow = () => window.matchMedia('(max-width: 720px)').matches
   function togglePanel() {
     if (panelOpen) {
@@ -312,6 +314,7 @@
     {/if}
     {#if chat.active}
       <footer>
+        {#if attachOpen}<AttachSheet onclose={() => (attachOpen = false)} />{/if}
         {#if panelOpen}
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <div class="panel-backdrop" onclick={() => (panelOpen = false)}></div>
@@ -332,7 +335,7 @@
               {/if}
             </div>
           {:else}
-            <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => fileInput?.click()}><Icon name="clip" /></button>
+            <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => (attachOpen = !attachOpen)}><Icon name="clip" /></button>
             <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} onpaste={paste}
               onfocus={() => { if (narrow()) panelOpen = false }}
               oninput={() => { resize(); app.typingTick() }}></textarea>

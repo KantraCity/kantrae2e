@@ -34,6 +34,8 @@ type MediaRef struct {
 	// Waveform of a voice message (0..255 per bar).
 	Waveform []byte `json:"wave,omitempty"`
 	Caption  string `json:"caption,omitempty"`
+	// Album groups media sent together (shown as one grid, like Telegram).
+	Album string `json:"album,omitempty"`
 }
 
 // MediaInput describes a file to send.
@@ -48,6 +50,7 @@ type MediaInput struct {
 	Thumb    []byte
 	Waveform []byte
 	Caption  string
+	Album    string // media sent together share it
 }
 
 // MaxThumb bounds the inline preview.
@@ -90,7 +93,7 @@ func (c *Client) SendMedia(ctx context.Context, groupID string, in MediaInput, o
 	}
 	return c.sendLocked(ctx, groupID, payload{Type: "media", ReplyTo: opt.ReplyTo, Media: &MediaRef{Hash: hash, Key: key,
 		Name: in.Name, Size: len(data), Mime: in.Mime, Kind: in.Kind, Width: in.Width, Height: in.Height,
-		Duration: in.Duration, Thumb: in.Thumb, Waveform: in.Waveform, Caption: in.Caption}})
+		Duration: in.Duration, Thumb: in.Thumb, Waveform: in.Waveform, Caption: in.Caption, Album: in.Album}})
 }
 
 // ParseMedia extracts the MediaRef of a media message.
