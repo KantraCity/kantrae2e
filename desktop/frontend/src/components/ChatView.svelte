@@ -207,16 +207,31 @@
     else app.toast('Слишком короткое сообщение — удерживайте кнопку', 'info')
   }
 
+  function dragOver(e: DragEvent) {
+    if (!e.dataTransfer?.types.includes('Files')) return
+    e.preventDefault()
+    if (chat?.active) {
+      e.dataTransfer.dropEffect = 'copy'
+      dragging = true
+    }
+  }
+
   function drop(e: DragEvent) {
     e.preventDefault()
     dragging = false
-    if (chat?.active) pick(e.dataTransfer?.files)
+    const files = e.dataTransfer?.files
+    if (chat?.active && files?.length) {
+      app.lastDomDrop = Date.now()
+      pick(files)
+    }
   }
 </script>
 
 {#if chat}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <section class="chat-view" ondragover={(e) => { e.preventDefault(); dragging = !!chat.active }} ondragleave={() => (dragging = false)} ondrop={drop}>
+  <!-- data-file-drop-target: the desktop runtime accepts OS file drops only over it -->
+  <section class="chat-view" class:dragging data-file-drop-target={chat.active ? '' : undefined}
+    ondragover={dragOver} ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragging = false }} ondrop={drop}>
     <header>
       <button class="icon-btn back" aria-label="Назад" onclick={() => app.openChat(null)}><Icon name="back" /></button>
       <button class="title" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}>
@@ -298,7 +313,7 @@
       </div>
     {/if}
 
-    {#if dragging}
+    {#if chat.active}
       <div class="dropzone"><div><Icon name="file" size={40} /><br />Отпустите, чтобы отправить</div></div>
     {/if}
   </section>
@@ -361,7 +376,10 @@
   .placeholder { align-items: center; justify-content: center; }
   .pill { background: rgba(0, 0, 0, 0.35); padding: 6px 14px; border-radius: 14px; font-size: 14px; color: #d4dde6; }
   .dropzone { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 16px; background: rgba(14, 22, 33, 0.85);
-    display: flex; align-items: center; justify-content: center; text-align: center; color: var(--accent-light); font-size: 18px; pointer-events: none; }
+    display: flex; align-items: center; justify-content: center; text-align: center; color: var(--accent-light); font-size: 18px; pointer-events: none;
+    z-index: 20; opacity: 0; visibility: hidden; transform: scale(.98); transition: opacity .15s, transform .15s, visibility .15s; }
+  /* Shown while files are dragged over the chat (DOM drag, or the desktop runtime's hover class). */
+  .chat-view.dragging .dropzone, :global(.chat-view.file-drop-target-active) .dropzone { opacity: 1; visibility: visible; transform: none; }
   @media (max-width: 720px) {
     .back { display: inline-flex; }
     footer { padding: 6px 8px 10px; }

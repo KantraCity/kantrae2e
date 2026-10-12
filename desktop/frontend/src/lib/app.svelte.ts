@@ -458,6 +458,27 @@ class AppState {
   }
 
 
+  /** When the page itself last received a file drop (see "files_dropped"). */
+  lastDomDrop = 0
+
+  /** Files dropped onto the desktop window (macOS/Linux deliver them natively). */
+  private async filesDropped(list: { url: string; name: string; mime: string }[]) {
+    if (Date.now() - this.lastDomDrop < 3000) return // the page already got them
+    if (!this.current?.active) {
+      this.toast('Откройте чат, чтобы отправить файлы', 'info')
+      return
+    }
+    try {
+      const files = await Promise.all(list.map(async (f) => {
+        const blob = await (await fetch(f.url)).blob()
+        return new File([blob], f.name, { type: f.mime || blob.type })
+      }))
+      this.pickFiles(files)
+    } catch {
+      this.toast('Не удалось прочитать файл', 'error')
+    }
+  }
+
   /** Opens the "send files" dialog (caption, as photo / as file). */
   pickFiles(files: File[]) {
     const ok = files.filter((f) => f.size <= MAX_FILE)
@@ -624,6 +645,9 @@ class AppState {
         break
       case 'open_chat':
         await this.openTappedChat()
+        break
+      case 'files_dropped':
+        if (e.files?.length) this.filesDropped(e.files)
         break
       case 'notify':
         this.browserNotify(e)

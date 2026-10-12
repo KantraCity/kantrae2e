@@ -84,6 +84,8 @@ func main() {
 		MinHeight:        500,
 		BackgroundColour: application.NewRGB(23, 33, 43),
 		URL:              "/",
+		// Drag & drop of files from the OS into a chat (drop.go).
+		EnableFileDrop: true,
 		// Voice and video messages (getUserMedia).
 		Permissions: map[application.PermissionType]application.Permission{
 			application.PermissionMicrophone: application.PermissionAllow,

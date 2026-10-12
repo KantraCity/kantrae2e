@@ -146,6 +146,10 @@ func mediaMiddleware(m *Messenger) func(http.Handler) http.Handler {
 				m.serveMedia(w, r)
 				return
 			}
+			if strings.HasPrefix(r.URL.Path, droppedPrefix) {
+				serveDropped(w, r)
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

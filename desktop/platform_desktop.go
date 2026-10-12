@@ -6,6 +6,7 @@ import (
 	"context"
 	_ "embed"
 	"log"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -82,6 +83,13 @@ func platformSetup(app *application.App, w *application.WebviewWindow, m *Messen
 		}
 	})
 
+	// Native file drops (macOS, Linux). On Windows the page receives the
+	// drop itself (WebView2 DOM events), so it is not forwarded twice.
+	if runtime.GOOS != "windows" {
+		w.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+			m.filesDropped(e.Context().DroppedFiles())
+		})
+	}
 	w.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) { m.SetForeground(true) })
 	w.OnWindowEvent(events.Common.WindowLostFocus, func(*application.WindowEvent) { m.SetForeground(false) })
 	w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {

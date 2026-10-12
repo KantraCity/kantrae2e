@@ -67,6 +67,16 @@ export interface DeviceKey {
     "thisDevice": boolean;
 }
 
+/**
+ * DroppedFile is one file the user dropped onto the window.
+ */
+export interface DroppedFile {
+    "url": string;
+    "name": string;
+    "mime": string;
+    "size": number;
+}
+
 export interface FileData {
     "name": string;
     "mime": string;
@@ -295,6 +305,11 @@ export interface UIEvent {
      */
     "title"?: string;
     "body"?: string;
+
+    /**
+     * Files dropped onto the window ("files_dropped", drop.go).
+     */
+    "files"?: DroppedFile[] | null;
 }
 
 /**

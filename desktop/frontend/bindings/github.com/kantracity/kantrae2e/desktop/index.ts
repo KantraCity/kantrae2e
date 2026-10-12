@@ -12,6 +12,7 @@ export type {
     Chat,
     Device,
     DeviceKey,
+    DroppedFile,
     FileData,
     FileInfo,
     LinkRequest,

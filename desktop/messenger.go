@@ -40,6 +40,8 @@ type UIEvent struct {
 	// Title/Body of a "notify" event (web mode shows it as a browser notification).
 	Title string `json:"title,omitempty"`
 	Body  string `json:"body,omitempty"`
+	// Files dropped onto the window ("files_dropped", drop.go).
+	Files []DroppedFile `json:"files,omitempty"`
 }
 
 // Account is the logged-in identity of this device.
