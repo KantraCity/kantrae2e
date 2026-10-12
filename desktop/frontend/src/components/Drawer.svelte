@@ -1,6 +1,8 @@
 <script lang="ts">
   // Telegram's side menu: profile, account switcher, main actions.
   import { app } from '../lib/app.svelte'
+  import { fade, fly, slide } from 'svelte/transition'
+  import { cubicOut } from 'svelte/easing'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
 
@@ -16,8 +18,8 @@
 <svelte:window onkeydown={key} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="backdrop" onclick={close}></div>
-<nav class="drawer" aria-label="Меню">
+<div class="backdrop" onclick={close} transition:fade|global={{ duration: 180 }}></div>
+<nav class="drawer" aria-label="Меню" transition:fly|global={{ x: -300, duration: 240, opacity: 1, easing: cubicOut }}>
   <div class="head">
     <button class="me-avatar" aria-label="Мой профиль" onclick={() => (app.modal = { kind: 'editProfile' })}>
       <Avatar name={name} id={acc?.userId} user={acc?.userId} photo={app.me?.avatarId} size={64} />
@@ -32,7 +34,7 @@
   </div>
 
   {#if showAccounts}
-    <div class="accounts">
+    <div class="accounts" transition:slide={{ duration: 180 }}>
       {#each others as a (a.id)}
         <button class="item" onclick={() => { close(); app.switchAccount(a.id) }}>
           <Avatar name={a.name || a.username} id={a.userId} size={34} />
@@ -56,9 +58,9 @@
 </nav>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 40; animation: fade .15s; }
+  .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 40; }
   .drawer { position: fixed; top: 0; bottom: 0; left: 0; width: min(300px, 85vw); background: var(--bg-sidebar); z-index: 41;
-    display: flex; flex-direction: column; box-shadow: var(--shadow); animation: slide .18s ease-out; overflow-y: auto; }
+    display: flex; flex-direction: column; box-shadow: var(--shadow); overflow-y: auto; }
   .head { padding: 20px 18px 10px; background: var(--bg-header); display: flex; flex-direction: column; gap: 12px; }
   .me-avatar { align-self: flex-start; border-radius: 50%; }
   .me { display: flex; align-items: center; justify-content: space-between; text-align: left; }

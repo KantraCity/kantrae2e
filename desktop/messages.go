@@ -18,11 +18,27 @@ type chatView struct {
 	me        string
 	reactions map[string]map[string]string // uid -> user -> emoji
 	readUpTo  int64                        // newest time someone else has read up to
+	// Per-call caches: a chat of hundreds of messages has a handful of
+	// senders, and replies usually quote messages of the same page.
+	profiles map[string]*core.Profile
+	byUID    map[string]*store.Message
+}
+
+func (v *chatView) profile(c *core.Client, userID string) *core.Profile {
+	if v == nil {
+		return profileOf(c, userID)
+	}
+	if p, ok := v.profiles[userID]; ok {
+		return p
+	}
+	p := profileOf(c, userID)
+	v.profiles[userID] = p
+	return p
 }
 
 func (m *Messenger) viewOf(c *core.Client, chatID string) *chatView {
 	ctx := context.Background()
-	v := &chatView{}
+	v := &chatView{profiles: map[string]*core.Profile{}, byUID: map[string]*store.Message{}}
 	if a := c.Account(); a != nil {
 		v.me = a.UserID
 	}
@@ -42,7 +58,7 @@ func (m *Messenger) toMessage(c *core.Client, s *store.Message) *Message {
 }
 
 func (m *Messenger) toMessageView(c *core.Client, s *store.Message, v *chatView) *Message {
-	p := profileOf(c, s.SenderUser)
+	p := v.profile(c, s.SenderUser)
 	msg := &Message{Seq: s.Seq, ID: s.UID, ChatID: s.GroupID, SenderID: s.SenderUser,
 		Sender: core.DisplayName(p), SenderAvatar: p.AvatarID, Kind: "text", Text: s.Body,
 		SentAt: s.SentAt, Outgoing: s.Outgoing, Origin: s.Origin, Edited: s.EditedAt > 0, Forwarded: s.FwdFrom}
@@ -53,8 +69,15 @@ func (m *Messenger) toMessageView(c *core.Client, s *store.Message, v *chatView)
 	}
 	if s.ReplyTo != "" {
 		msg.Reply = &ReplyInfo{ID: s.ReplyTo, Text: "Сообщение удалено"}
-		if r, err := c.Message(context.Background(), s.GroupID, s.ReplyTo); err == nil && !r.Deleted {
-			msg.Reply.Sender = core.DisplayName(profileOf(c, r.SenderUser))
+		var r *store.Message
+		if v != nil {
+			r = v.byUID[s.ReplyTo]
+		}
+		if r == nil {
+			r, _ = c.Message(context.Background(), s.GroupID, s.ReplyTo)
+		}
+		if r != nil && !r.Deleted {
+			msg.Reply.Sender = core.DisplayName(v.profile(c, r.SenderUser))
 			msg.Reply.Text = r.Body
 			if ref, err := core.ParseMedia(r); err == nil {
 				msg.Reply.Text = mediaLabel(ref)
@@ -125,6 +148,9 @@ func (m *Messenger) Messages(chatID string, limit int) ([]Message, error) {
 		return nil, err
 	}
 	v := m.viewOf(c, chatID)
+	for i := range ms {
+		v.byUID[ms[i].UID] = &ms[i]
+	}
 	out := make([]Message, 0, len(ms))
 	for i := range ms {
 		out = append(out, *m.toMessageView(c, &ms[i], v))

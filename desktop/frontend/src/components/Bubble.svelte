@@ -38,7 +38,7 @@
     <div class="avatar-slot">{#if last}<Avatar name={m.sender} id={m.senderId} user={m.senderId} photo={m.senderAvatar} size={34} />{/if}</div>
   {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="bubble" class:tail={last && !bare} class:bare class:visual={isVisual} oncontextmenu={openMenu} ontouchstart={touchStart} ontouchend={touchEnd} ontouchmove={touchEnd}>
+  <div class="bubble" class:tail={last && !bare} class:joined-top={!first} class:joined-bottom={!last} class:bare class:visual={isVisual} oncontextmenu={openMenu} ontouchstart={touchStart} ontouchend={touchEnd} ontouchmove={touchEnd}>
     {#if group && first && !m.outgoing}
       <div class="sender" style="color:{nameColor(m.senderId)}">{m.sender}</div>
     {/if}
@@ -71,7 +71,13 @@
     <span class="time">
       {#if m.edited}<span class="edited">изменено</span>{/if}
       {timeHM(m.sentAt)}
-      {#if m.outgoing}<span class="check" title={m.read ? 'Прочитано' : 'Доставлено'}><Icon name={m.read ? 'double' : 'check'} size={15} /></span>{/if}
+      {#if app.failed[m.id]}
+        <button class="failed" title="Не отправлено — нажмите, чтобы повторить" onclick={() => app.failed[m.id]?.()}>!</button>
+      {:else if app.sending[m.id]}
+        <span class="check pending" title="Отправляется"><Icon name="clock" size={14} /></span>
+      {:else if m.outgoing}
+        <span class="check" title={m.read ? 'Прочитано' : 'Доставлено'}><Icon name={m.read ? 'double' : 'check'} size={15} /></span>
+      {/if}
     </span>
   </div>
 </div>
@@ -89,6 +95,11 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   }
   .out .bubble { background: var(--bubble-out); }
+  /* Telegram groups consecutive messages: tighter inner corners. */
+  .bubble.joined-top { border-top-left-radius: 6px; }
+  .bubble.joined-bottom { border-bottom-left-radius: 6px; }
+  .out .bubble.joined-top { border-top-left-radius: var(--radius-bubble); border-top-right-radius: 6px; }
+  .out .bubble.joined-bottom { border-bottom-left-radius: var(--radius-bubble); border-bottom-right-radius: 6px; }
   .bubble.tail { border-bottom-left-radius: 4px; }
   .out .bubble.tail { border-bottom-left-radius: var(--radius-bubble); border-bottom-right-radius: 4px; }
   .bubble.tail::before {
@@ -115,6 +126,8 @@
   .out .react { background: rgba(255,255,255,.15); }
   .out .react.mine { background: #fff; color: var(--bubble-out); }
   .edited { font-style: italic; }
+  .pending { opacity: .7; }
+  .failed { width: 18px; height: 18px; border-radius: 50%; background: var(--danger); color: #fff; font-weight: 700; font-size: 12px; line-height: 18px; }
   :global(.line.flash .bubble) { animation: flash 1.2s; }
   @keyframes flash { 30% { filter: brightness(1.6); } }
   .sender { font-weight: 600; font-size: 14px; margin-bottom: 2px; white-space: nowrap; }

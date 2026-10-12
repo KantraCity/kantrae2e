@@ -1,6 +1,7 @@
 import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type Message, type State, type UIEvent, type UserHit, type UserProfile } from './api'
 import { plural } from './util'
 import { MAX_FILE, prepareFile, type Prepared } from './media'
+import { restoreOpenChat, saveOpenChat } from './persist'
 
 export type Toast = { id: number; text: string; kind: 'info' | 'error' | 'warning' | 'security' }
 
@@ -77,10 +78,23 @@ class AppState {
       if (this.modal && this.modal.kind !== 'approveLink') this.modal = null
       if (!history.state?.chat) this.setCurrent(null)
     })
+    // Android back button: close the dialog, then the chat; false = leave the app.
+    ;(window as any).kantraBack = () => {
+      if (this.modal && this.modal.kind !== 'approveLink' && this.modal.kind !== 'relogin') {
+        this.modal = null
+        return true
+      }
+      if (this.currentId) {
+        this.openChat(null)
+        return true
+      }
+      return false
+    }
     // Web mode: the tab's visibility is "foreground" for notifications.
     document.addEventListener('visibilitychange', () => {
       if (this.state?.webMode) Messenger.SetForeground(!document.hidden).catch(() => {})
       if (!document.hidden && this.currentId) this.markRead()
+      if (document.hidden) saveOpenChat(this.state?.account?.userId, this.currentId)
     })
     await this.loadAccount()
     this.loaded = true
@@ -105,7 +119,11 @@ class AppState {
       if (this.state.account && !this.state.pending) {
         await this.refreshChats()
         await this.refreshLinks()
-        await this.openTappedChat()
+        if (!(await this.openTappedChat())) {
+          // The page was reloaded (e.g. Android recreated it): reopen the chat.
+          const id = restoreOpenChat(this.state.account.userId)
+          if (id && this.chats.some((c) => c.id === id)) await this.openChat(id)
+        }
         this.loadMe()
       }
     } catch (e) {
@@ -132,19 +150,21 @@ class AppState {
 
   private setCurrent(id: string | null) {
     this.currentId = id
+    saveOpenChat(this.state?.account?.userId, id)
     Messenger.SetActiveChat(id ?? '').catch(() => {})
   }
 
   /** A notification was tapped/clicked: show its chat. */
-  async openTappedChat() {
+  async openTappedChat(): Promise<boolean> {
     const id = await Messenger.TakeOpenChat().catch(() => '')
-    if (!id || this.state?.pending) return
+    if (!id || this.state?.pending) return false
     if (!this.chats.some((c) => c.id === id)) await this.refreshChats()
     this.modal = null
     if (this.currentId !== id) {
       if (this.currentId) this.setCurrent(null)
       await this.openChat(id)
     }
+    return true
   }
 
   /** Web mode: a browser notification (the Go side decided it is due). */
@@ -267,28 +287,79 @@ class AppState {
   // Sends are queued so that quickly typed messages keep their order.
   private sendQueue: Promise<unknown> = Promise.resolve()
 
+  /** Messages that failed to send (temporary id -> retry). */
+  failed = $state<Record<string, () => void>>({})
+
+  /**
+   * Sends (or saves an edit) optimistically: the message is on screen at
+   * once with a clock, the network round trip happens in the background.
+   */
   send(text: string): Promise<boolean> {
-    const id = this.currentId
-    if (!id || !text.trim()) return Promise.resolve(false)
+    const chatId = this.currentId
+    if (!chatId || !text.trim()) return Promise.resolve(false)
     const editing = this.editing
-    const replyTo = this.reply?.id ?? ''
+    const reply = this.reply
     this.reply = null
     this.editing = null
-    const p = this.sendQueue.then(async () => {
-      if (editing) {
-        const ok = await this.try(() => Messenger.EditMessage(id, editing.id, text))
-        if (ok === undefined) return false
-        await this.refreshMessage(id, editing.id)
-        return true
-      }
-      const msg = await this.try(() => Messenger.Send(id, text, replyTo))
-      if (!msg) return false
-      this.addMessage(msg)
-      return true
-    })
-    this.sendQueue = p
-    return p
+    if (editing) {
+      const list = this.messages[chatId]
+      const i = list?.findIndex((x) => x.id === editing.id) ?? -1
+      const before = i >= 0 ? { ...list![i] } : null
+      if (i >= 0) list![i] = { ...list![i], text, edited: true }
+      this.sending[editing.id] = true
+      const p = this.sendQueue.then(async () => {
+        const ok = await this.try(() => Messenger.EditMessage(chatId, editing.id, text))
+        delete this.sending[editing.id]
+        if (ok === undefined && before && i >= 0) list![i] = before
+        return ok !== undefined
+      })
+      this.sendQueue = p
+      return Promise.resolve(true)
+    }
+    const tmp = 'local-' + Math.random().toString(36).slice(2)
+    const temp = {
+      seq: 0, id: tmp, chatId, senderId: this.state?.account?.userId ?? '', sender: this.me?.name ?? '', kind: 'text', text,
+      sentAt: Date.now(), outgoing: true, origin: '',
+      reply: reply ? { id: reply.id, sender: reply.sender, text: reply.text || reply.file?.caption || reply.file?.name || '' } : undefined,
+    } as Message
+    const attempt = () => {
+      delete this.failed[tmp]
+      this.sending[tmp] = true
+      const p = this.sendQueue.then(async () => {
+        let msg: Message | null = null
+        try {
+          msg = await Messenger.Send(chatId, text, reply?.id ?? '')
+        } catch (e) {
+          this.toast(errorText(e), 'error', 5000)
+        }
+        delete this.sending[tmp]
+        const list = this.messages[chatId]
+        const i = list?.findIndex((x) => x.id === tmp) ?? -1
+        if (!msg) {
+          this.failed[tmp] = attempt // tap the red mark to retry
+          return
+        }
+        // Replace in place: no jump, the clock turns into a check mark.
+        if (list && i >= 0) list[i] = msg
+        else this.addMessage(msg)
+        this.touchChat(msg)
+      })
+      this.sendQueue = p
+    }
+    this.addMessage(temp)
+    attempt()
+    return Promise.resolve(true)
   }
+
+  /** Moves the chat to the top of the list with its new last message. */
+  private touchChat(m: Message) {
+    const chat = this.chats.find((c) => c.id === m.chatId)
+    if (!chat) return
+    chat.last = m
+    chat.updatedAt = m.sentAt
+    this.chats.sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
 
   /** Re-reads one message after an edit/deletion/reaction (null: deleted). */
   async refreshMessage(chatId: string, id: string) {
@@ -314,11 +385,41 @@ class AppState {
     if (chat?.last?.id === id) this.refreshChats()
   }
 
+  /** Reaction, applied on screen first. */
   async react(m: Message, emoji: string) {
     const mine = m.reactions?.find((r) => r.mine)
     const next = mine?.emoji === emoji ? '' : emoji // tapping your reaction again removes it
-    if ((await this.try(() => Messenger.React(m.chatId, m.id, next))) !== undefined) await this.refreshMessage(m.chatId, m.id)
+    const list = this.messages[m.chatId]
+    const i = list?.findIndex((x) => x.id === m.id) ?? -1
+    if (list && i >= 0) {
+      const rs = (list[i].reactions ?? []).map((r) => ({ ...r }))
+      if (mine) {
+        const r = rs.find((x) => x.emoji === mine.emoji)!
+        r.count--
+        r.mine = false
+      }
+      if (next) {
+        const r = rs.find((x) => x.emoji === next)
+        if (r) { r.count++; r.mine = true } else rs.push({ emoji: next, count: 1, mine: true })
+      }
+      list[i] = { ...list[i], reactions: rs.filter((r) => r.count > 0) }
+    }
+    if ((await this.try(() => Messenger.React(m.chatId, m.id, next))) === undefined) await this.refreshMessage(m.chatId, m.id)
   }
+
+  /** Deletion, removed from the screen first (restored if it fails). */
+  async deleteMessages(chatId: string, ids: string[], forAll: boolean) {
+    const list = this.messages[chatId] ?? []
+    const removed = list.filter((x) => ids.includes(x.id))
+    this.messages[chatId] = list.filter((x) => !ids.includes(x.id))
+    const ok = await this.try(() => Messenger.DeleteMessages(chatId, ids, forAll))
+    if (ok === undefined) {
+      this.messages[chatId] = [...(this.messages[chatId] ?? []), ...removed].sort((a, b) => a.sentAt - b.sentAt || a.seq - b.seq)
+    }
+    const chat = this.chats.find((c) => c.id === chatId)
+    if (chat?.last && ids.includes(chat.last.id)) this.refreshChats()
+  }
+
 
   startReply(m: Message) {
     this.editing = null
@@ -420,8 +521,12 @@ class AppState {
     const list = this.messages[m.chatId]
     if (list) {
       if (!list.some((x) => x.id === m.id)) {
+        const last = list[list.length - 1]
         list.push(m)
-        list.sort((a, b) => a.sentAt - b.sentAt || a.seq - b.seq)
+        // Usually already in order: sort only when it is not.
+        if (last && (m.sentAt < last.sentAt || (m.sentAt === last.sentAt && m.seq < last.seq))) {
+          list.sort((a, b) => a.sentAt - b.sentAt || a.seq - b.seq)
+        }
       }
     } else if (m.chatId === this.currentId) {
       // The chat is still loading: remember it, loadMessages merges it.
@@ -463,6 +568,13 @@ class AppState {
           } else if (!e.message.outgoing && e.chatId === this.currentId) {
             this.markRead()
           }
+        }
+        break
+      case 'read_self':
+        // Read on another device of ours.
+        if (e.chatId && this.unread[e.chatId]) {
+          this.unread[e.chatId] = 0
+          this.saveUnread()
         }
         break
       case 'message_updated':

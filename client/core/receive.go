@@ -235,7 +235,9 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 				break
 			}
 			msg := store.Message{UID: pl.ID, GroupID: e.GroupId, SenderUser: uid, SenderDevice: did,
-				Kind: pl.Type, Body: pl.Body, SentAt: pl.TS, ReplyTo: pl.ReplyTo, FwdFrom: pl.Fwd}
+				Kind: pl.Type, Body: pl.Body, SentAt: pl.TS, ReplyTo: pl.ReplyTo, FwdFrom: pl.Fwd,
+				// Sent from another device of this account: ours.
+				Outgoing: uid == c.acct.UserID}
 			if pl.Media != nil {
 				b, _ := json.Marshal(pl.Media)
 				msg.Body = string(b)
@@ -395,7 +397,7 @@ func (c *Client) listenOnce(ctx context.Context) error {
 			continue
 		}
 		if e.Ephemeral {
-			if e.Type == deliveryv1.MessageType_MESSAGE_TYPE_TYPING && e.SenderUserId != "" {
+			if e.Type == deliveryv1.MessageType_MESSAGE_TYPE_TYPING && e.SenderUserId != "" && e.SenderUserId != c.userID() {
 				c.emit(Event{Type: EventTyping, GroupID: e.GroupId, UserID: e.SenderUserId})
 			}
 			continue // not queued: nothing to ack

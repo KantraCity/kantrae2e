@@ -226,3 +226,18 @@ export function duration(sec: number): string {
   const s = Math.max(0, Math.round(sec))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
+
+// Permission is asked once with a separate tap (the system dialog would
+// otherwise interrupt a press-and-hold and the recording would go nowhere).
+const permKey = (kind: 'voice' | 'round') => 'kantra.perm.' + kind
+export function hasRecordPermission(kind: 'voice' | 'round'): boolean {
+  try { return localStorage.getItem(permKey(kind)) === '1' } catch { return false }
+}
+export function rememberRecordPermission(kind: 'voice' | 'round') {
+  try { localStorage.setItem(permKey(kind), '1') } catch { /* ignore */ }
+}
+export async function requestRecordPermission(kind: 'voice' | 'round'): Promise<void> {
+  const s = await navigator.mediaDevices.getUserMedia(kind === 'voice' ? { audio: true } : { audio: true, video: { facingMode: 'user' } })
+  s.getTracks().forEach((t) => t.stop())
+  rememberRecordPermission(kind)
+}

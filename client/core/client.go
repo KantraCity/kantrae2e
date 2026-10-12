@@ -343,6 +343,14 @@ func (c *Client) Account() *Account {
 	return &a
 }
 
+// userID of the account; safe while c.mu is held (set once at login).
+func (c *Client) userID() string {
+	if c.acct == nil {
+		return ""
+	}
+	return c.acct.UserID
+}
+
 func identity(userID, deviceID string) []byte { return []byte(userID + ":" + deviceID) }
 
 func splitIdentity(id []byte) (userID, deviceID string) {
@@ -376,6 +384,9 @@ func (c *Client) loadAccount(ctx context.Context) error {
 		return fmt.Errorf("restore MLS state: %w", err)
 	}
 	c.acct, c.m, c.token = acct, m, string(vals[kvToken])
+	if err := c.st.Update(ctx, func(tx *store.Tx) error { return tx.FixOutgoing(acct.UserID) }); err != nil {
+		return err
+	}
 	return c.rememberOwnKey(ctx)
 }
 

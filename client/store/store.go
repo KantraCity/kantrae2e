@@ -382,6 +382,13 @@ func (t *Tx) InsertMessage(m Message) error {
 	return err
 }
 
+// FixOutgoing marks the account's own messages as outgoing (earlier
+// versions stored messages sent from another own device as incoming).
+func (t *Tx) FixOutgoing(userID string) error {
+	_, err := t.tx.Exec(`UPDATE messages SET outgoing=1 WHERE sender_user=? AND outgoing=0`, userID)
+	return err
+}
+
 // EditMessage replaces the text of a message by its author (a newer edit
 // wins); the message is backed up again.
 func (t *Tx) EditMessage(groupID, uid, sender, body string, at int64) (bool, error) {

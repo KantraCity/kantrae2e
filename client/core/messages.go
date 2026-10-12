@@ -273,8 +273,9 @@ func (c *Client) applyControlLocked(groupID, senderUser string, pl *payload) (fu
 	case "reaction":
 		return func(tx *store.Tx) error { return tx.SetReaction(groupID, pl.Target, senderUser, pl.Emoji) }, ev
 	case "read":
+		// From another device of ours, it means "read here too" (UserID).
 		return func(tx *store.Tx) error { return tx.SetReadMark(groupID, senderUser, pl.UpTo) },
-			&Event{Type: EventRead, GroupID: groupID}
+			&Event{Type: EventRead, GroupID: groupID, UserID: senderUser, Count: int(pl.UpTo / 1000)}
 	}
 	return nil, nil
 }

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte'
-  import { Messenger } from '../lib/api'
   import Modal from './Modal.svelte'
 
   let { chatId, ids, canAll }: { chatId: string; ids: string[]; canAll: boolean } = $props()
@@ -11,13 +10,10 @@
   async function del() {
     busy = true
     // Props come from app.modal, which is cleared below: copy them first.
-    const chat = chatId, list = [...ids]
-    const ok = await app.try(() => Messenger.DeleteMessages(chat, list, canAll && forAll))
+    const chat = chatId, list = [...ids], all = canAll && forAll
+    app.modal = null
+    await app.deleteMessages(chat, list, all)
     busy = false
-    if (ok !== undefined) {
-      app.modal = null
-      for (const id of list) await app.refreshMessage(chat, id)
-    }
   }
 </script>
 

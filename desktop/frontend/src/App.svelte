@@ -83,7 +83,8 @@
 
 <style>
   .splash { height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-sidebar); }
-  .layout { height: 100%; display: grid; grid-template-columns: var(--sidebar-w) 0 1fr; }
+  .layout { height: 100%; display: grid; grid-template-columns: var(--sidebar-w) 0 1fr; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .layout > :global(*) { min-height: 0; min-width: 0; }
   .layout.resizing { cursor: col-resize; user-select: none; }
   .resizer { position: relative; z-index: 4; width: 8px; margin-left: -4px; cursor: col-resize; height: 100%; }
   .resizer:hover, .layout.resizing .resizer { background: rgba(82, 136, 193, .35); }
@@ -92,5 +93,10 @@
     .resizer { display: none; }
     .layout.chat-open :global(.sidebar) { display: none; }
     .layout:not(.chat-open) :global(.chat-view) { display: none; }
+    /* Telegram-like push: the chat slides in, the list slides back. */
+    .layout.chat-open :global(.chat-view) { animation: push-in .26s cubic-bezier(.2, .8, .2, 1); }
+    .layout:not(.chat-open) :global(.sidebar) { animation: pop-back .22s cubic-bezier(.2, .8, .2, 1); }
   }
+  @keyframes push-in { from { transform: translateX(100%); } }
+  @keyframes pop-back { from { transform: translateX(-24%); opacity: .6; } }
 </style>

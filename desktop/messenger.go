@@ -322,6 +322,20 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 		s.online = false
 	}
 	m.mu.Unlock()
+	// Read on another device of ours: clear this device's notification and
+	// unread counter for the chat, like Telegram's synced read state.
+	if e.Type == core.EventRead && e.UserID != "" && e.UserID == s.userID {
+		m.mu.Lock()
+		delete(s.unread, e.GroupID)
+		m.mu.Unlock()
+		m.notif.Clear(noticeKey(s.file, e.GroupID))
+		if isActive {
+			m.emit(UIEvent{Type: "read_self", ChatID: e.GroupID})
+		} else {
+			m.emit(UIEvent{Type: "accounts"})
+		}
+		return
+	}
 	if !isActive {
 		// Background account: only notifications and its unread badge.
 		if e.Type == core.EventMessage && e.Message != nil && s.c != nil {

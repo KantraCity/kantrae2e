@@ -87,8 +87,8 @@
 </div>
 
 <style>
-  .wrap { height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; background: var(--bg-sidebar); }
-  .card { max-width: 400px; width: 100%; display: flex; flex-direction: column; gap: 12px; text-align: center; align-items: center; }
+  .wrap { height: 100%; display: flex; padding: 24px; overflow-y: auto; background: var(--bg-sidebar); }
+  .card { margin: auto; max-width: 400px; width: 100%; display: flex; flex-direction: column; gap: 12px; text-align: center; align-items: center; }
   .icon { width: 96px; height: 96px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
   h1 { margin: 0; font-size: 24px; font-weight: 600; }
   p { margin: 0; line-height: 1.45; }

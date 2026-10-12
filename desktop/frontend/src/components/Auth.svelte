@@ -2,17 +2,21 @@
   import { app } from '../lib/app.svelte'
   import { Messenger, errorText } from '../lib/api'
   import { plural } from '../lib/util'
+  import { loadAuthDraft, saveAuthDraft } from '../lib/persist'
 
-  let mode = $state<'login' | 'register'>('register')
+  // The form (except the password) survives a page reload.
+  const draft = loadAuthDraft()
+  let mode = $state<'login' | 'register'>(draft?.mode ?? 'register')
   let server = $state(app.state?.serverUrl ?? 'https://localhost')
   let editServer = $state(false)
-  let firstName = $state('')
-  let lastName = $state('')
-  let username = $state('')
+  let firstName = $state(draft?.firstName ?? '')
+  let lastName = $state(draft?.lastName ?? '')
+  let username = $state(draft?.username ?? '')
   let password = $state('')
   let device = $state('')
   let busy = $state(false)
   let error = $state('')
+  $effect(() => saveAuthDraft({ mode, firstName, lastName, username }))
 
   const valid = $derived(username.trim().length >= 3 && password.length >= 8 && server.trim() !== ''
     && (mode === 'login' || firstName.trim() !== ''))
@@ -37,6 +41,7 @@
           if (parts.length) app.toast(parts.join(', '))
         }
       }
+      saveAuthDraft(null)
       await app.afterAuth()
     } catch (err) {
       error = errorText(err)
@@ -64,13 +69,13 @@
 
     {#if mode === 'register'}
       <div class="row2">
-        <input class="field" placeholder="Имя" autocomplete="given-name" bind:value={firstName} />
-        <input class="field" placeholder="Фамилия (необязательно)" autocomplete="family-name" bind:value={lastName} />
+        <input class="field" placeholder="Имя" autocomplete="off" bind:value={firstName} />
+        <input class="field" placeholder="Фамилия (необязательно)" autocomplete="off" bind:value={lastName} />
       </div>
     {/if}
-    <input class="field" placeholder={mode === 'register' ? 'Имя пользователя (@username)' : 'Имя пользователя'} autocomplete="username" bind:value={username} />
+    <input class="field" placeholder={mode === 'register' ? 'Имя пользователя (@username)' : 'Имя пользователя'} autocomplete="off" autocapitalize="off" spellcheck="false" bind:value={username} />
     <input class="field" type="password" placeholder="Пароль (от 8 символов)"
-      autocomplete={mode === 'register' ? 'new-password' : 'current-password'} bind:value={password} />
+      autocomplete="off" data-lpignore="true" bind:value={password} />
     <input class="field" placeholder="Название устройства (необязательно)" bind:value={device} />
 
     {#if editServer}
@@ -90,8 +95,8 @@
 </div>
 
 <style>
-  .auth { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; background: var(--bg-sidebar); }
-  .card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+  .auth { position: relative; height: 100%; display: flex; padding: 24px; overflow-y: auto; background: var(--bg-sidebar); }
+  .card { margin: auto; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; text-align: center; }
   .logo { width: 120px; height: 120px; margin: 0 auto 8px; }
   h1 { margin: 0; font-size: 28px; font-weight: 600; }
   .sub { margin: 0 0 8px; line-height: 1.4; }

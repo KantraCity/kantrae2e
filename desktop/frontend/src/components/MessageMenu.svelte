@@ -1,6 +1,7 @@
 <script lang="ts">
   // Telegram's message context menu: quick reactions + actions.
   import { app } from '../lib/app.svelte'
+  import { scale } from 'svelte/transition'
   import Icon from './Icon.svelte'
 
   const QUICK = ['👍', '❤️', '🔥', '😂', '😮', '😢', '🙏']
@@ -35,7 +36,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="backdrop" onclick={close} oncontextmenu={(e) => { e.preventDefault(); close() }}></div>
-<div class="menu" bind:this={el} style="left:{pos.x}px;top:{pos.y}px" role="menu">
+<div class="menu" transition:scale|global={{ start: 0.9, duration: 140 }} bind:this={el} style="left:{pos.x}px;top:{pos.y}px" role="menu">
   {#if chat?.active}
     <div class="reactions">
       {#each QUICK as r}
@@ -55,7 +56,7 @@
 <style>
   .backdrop { position: fixed; inset: 0; z-index: 60; }
   .menu { position: fixed; z-index: 61; width: 240px; background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow);
-    padding: 6px 0; display: flex; flex-direction: column; animation: pop .1s ease-out; }
+    padding: 6px 0; display: flex; flex-direction: column; transform-origin: top left; }
   .menu > button { display: flex; align-items: center; gap: 14px; padding: 9px 16px; text-align: left; font-size: 15px; }
   .menu > button:hover { background: var(--bg-hover); }
   .menu .danger { color: #e17076; }

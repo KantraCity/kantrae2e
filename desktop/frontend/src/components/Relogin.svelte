@@ -18,7 +18,7 @@
   <form onsubmit={submit}>
     <p class="muted">Введите пароль, чтобы продолжить на этом устройстве.</p>
     <!-- svelte-ignore a11y_autofocus -->
-    <input class="field" type="password" placeholder="Пароль" bind:value={password} autofocus />
+    <input class="field" type="password" autocomplete="off" placeholder="Пароль" bind:value={password} autofocus />
     <button class="btn block" disabled={password.length < 8}>Продолжить</button>
   </form>
 </Modal>

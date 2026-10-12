@@ -117,8 +117,10 @@
   .search { flex: 1; display: flex; align-items: center; gap: 8px; background: var(--bg-input); border-radius: 20px; padding: 0 14px; height: 38px; color: var(--text-muted); }
   .search input { flex: 1; background: transparent; border: 0; outline: 0; min-width: 0; }
   .search input::placeholder { color: var(--text-muted); }
-  .list { flex: 1; overflow-y: auto; padding: 0 6px 80px; }
-  .chat-item { width: 100%; display: flex; gap: 12px; align-items: center; padding: 7px 10px; border-radius: 10px; text-align: left; }
+  .list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 6px 80px; }
+  .chat-item { width: 100%; display: flex; gap: 12px; align-items: center; padding: 7px 10px; border-radius: 10px; text-align: left;
+    transition: background .15s, transform .1s; }
+  .chat-item:active { transform: scale(.985); }
   .chat-item:hover { background: var(--bg-hover); }
   .chat-item.active { background: var(--bg-active); }
   .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }

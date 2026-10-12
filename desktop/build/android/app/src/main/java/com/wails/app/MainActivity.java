@@ -119,7 +119,9 @@ public class MainActivity extends AppCompatActivity {
                 android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 4200);
         }
-        handleOpenChat(getIntent());
+        // A recreated activity still carries the notification intent that
+        // started it: only act on it the first time.
+        if (savedInstanceState == null) handleOpenChat(getIntent());
 
         // Set up WebView
         setupWebView();
@@ -173,7 +175,11 @@ public class MainActivity extends AppCompatActivity {
 
     /** A tapped message notification opens its chat. */
     private void handleOpenChat(Intent intent) {
-        if (intent != null) KantraNative.openChat(intent.getStringExtra(KantraNative.EXTRA_CHAT));
+        if (intent == null) return;
+        String chat = intent.getStringExtra(KantraNative.EXTRA_CHAT);
+        if (chat == null) return;
+        intent.removeExtra(KantraNative.EXTRA_CHAT); // consume: never reopen it again
+        KantraNative.openChat(chat);
     }
 
     private static Uri[] clipUris(Intent data) {
@@ -195,6 +201,11 @@ public class MainActivity extends AppCompatActivity {
         webView = findViewById(R.id.webview);
         bridge.setWebView(webView);
         webView.setBackgroundColor(0xFF17212B);
+        // No Google autofill/"save password" sheets over the app: they
+        // pause the activity and get in the way of sign-up.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        }
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
@@ -955,12 +966,14 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            // Like Telegram: leave the app running in the background instead
-            // of destroying the activity.
+        if (webView == null) {
             moveTaskToBack(true);
+            return;
         }
+        // Like Telegram: back closes the open dialog / chat first; only on
+        // the chat list does it leave the app (running in the background).
+        webView.evaluateJavascript("window.kantraBack ? window.kantraBack() : false", (r) -> {
+            if (!"true".equals(r)) moveTaskToBack(true);
+        });
     }
 }

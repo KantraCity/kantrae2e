@@ -1,15 +1,16 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { app } from '../lib/app.svelte'
-  import { Messenger, type Message } from '../lib/api'
-  import { dayLabel, plural } from '../lib/util'
+  import { Messenger } from '../lib/api'
+  import { plural } from '../lib/util'
+  import { loadDraft, saveDraft } from '../lib/persist'
   import Avatar from './Avatar.svelte'
-  import Bubble from './Bubble.svelte'
+  import MessageList from './MessageList.svelte'
   import Icon from './Icon.svelte'
-  import { duration, micError, RoundRecorder, VoiceRecorder } from '../lib/media'
+  import { duration, hasRecordPermission, micError, rememberRecordPermission, requestRecordPermission, RoundRecorder, VoiceRecorder } from '../lib/media'
+  import { fade, scale } from 'svelte/transition'
 
   let text = $state('')
-  let scroller: HTMLDivElement | undefined = $state()
   let input: HTMLTextAreaElement | undefined = $state()
   let fileInput: HTMLInputElement | undefined = $state()
   let dragging = $state(false)
@@ -18,39 +19,19 @@
   const chat = $derived(app.current)
   const messages = $derived(chat ? (app.messages[chat.id] ?? []) : [])
 
-  type Row = { kind: 'day'; label: string; key: string } | { kind: 'msg'; m: Message; first: boolean; last: boolean; key: string }
-
-  const rows = $derived.by(() => {
-    const out: Row[] = []
-    let prevDay = ''
-    messages.forEach((m, i) => {
-      const day = new Date(m.sentAt).toDateString()
-      if (day !== prevDay) {
-        out.push({ kind: 'day', label: dayLabel(m.sentAt), key: 'd' + day })
-        prevDay = day
-      }
-      const prev = messages[i - 1]
-      const next = messages[i + 1]
-      const same = (a?: Message, b?: Message) =>
-        !!a && !!b && a.senderId === b.senderId && a.outgoing === b.outgoing &&
-        Math.abs(a.sentAt - b.sentAt) < 5 * 60000 && new Date(a.sentAt).toDateString() === new Date(b.sentAt).toDateString()
-      out.push({ kind: 'msg', m, first: !same(prev, m), last: !same(m, next), key: m.id })
-    })
-    return out
-  })
-
-  // Scroll to the bottom when the chat changes or a message arrives while at the bottom.
-  let lastChat = ''
-  let lastCount = 0
+  // Per-chat drafts, kept across chat switches and reloads.
+  let draftFor = ''
   $effect(() => {
     const id = chat?.id ?? ''
-    const count = messages.length
-    const switched = id !== lastChat
-    const nearBottom = scroller ? scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 160 : true
-    const mine = count > lastCount && messages[count - 1]?.outgoing
-    lastChat = id
-    lastCount = count
-    if (switched || nearBottom || mine) tick().then(() => scroller?.scrollTo({ top: scroller.scrollHeight }))
+    if (id === draftFor) return
+    if (draftFor && !app.editing) saveDraft(draftFor, text)
+    draftFor = id
+    text = id ? loadDraft(id) : ''
+    tick().then(resize)
+  })
+  $effect(() => {
+    const t = text
+    if (draftFor && !app.editing) saveDraft(draftFor, t)
   })
 
   $effect(() => {
@@ -140,24 +121,43 @@
   let pressAt = 0
   let cancelHint = $state(false)
 
+  let asking = false
   function micDown(e: PointerEvent) {
-    if (rec) return
+    if (rec || asking) return
+    e.preventDefault()
+    const kind = recMode
+    if (!hasRecordPermission(kind)) {
+      // First time: ask for access with this tap, record with the next hold.
+      asking = true
+      requestRecordPermission(kind)
+        .then(() => app.toast(kind === 'voice' ? 'Микрофон доступен — удерживайте кнопку, чтобы записать' : 'Камера доступна — удерживайте кнопку, чтобы записать', 'info', 4000))
+        .catch((err) => app.toast(micError(err), 'error', 6000))
+        .finally(() => (asking = false))
+      pressAt = 0
+      return
+    }
     pressAt = Date.now()
     const x = e.clientX, y = e.clientY
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
     holdTimer = setTimeout(() => startRec(x, y), 250)
   }
 
+  let starting: Promise<void> | null = null
   async function startRec(x: number, y: number) {
     const kind = recMode
+    const r = kind === 'voice' ? new VoiceRecorder() : new RoundRecorder()
+    recorder = r
+    rec = { kind, locked: false, startX: x, startY: y, t: 0, level: 0 }
+    navigator.vibrate?.(20)
+    starting = r.start()
     try {
-      recorder = kind === 'voice' ? new VoiceRecorder() : new RoundRecorder()
-      rec = { kind, locked: false, startX: x, startY: y, t: 0, level: 0 }
-      await recorder.start()
-      if (recorder instanceof VoiceRecorder) recorder.onLevel = (v) => rec && (rec.level = v)
-      if (recorder instanceof RoundRecorder) {
+      await starting
+      rememberRecordPermission(kind)
+      if (recorder !== r) { r.cancel(); return } // released before the mic was ready
+      if (r instanceof VoiceRecorder) r.onLevel = (v) => rec && (rec.level = v)
+      if (r instanceof RoundRecorder) {
         await tick()
-        if (roundPreview) { roundPreview.srcObject = recorder.stream; roundPreview.play().catch(() => {}) }
+        if (roundPreview) { roundPreview.srcObject = r.stream; roundPreview.play().catch(() => {}) }
       }
       tickTimer = setInterval(() => {
         if (!rec || !recorder) return
@@ -165,10 +165,11 @@
         if (rec.kind === 'round' && rec.t >= 60) finishRec(true) // Telegram's limit
       }, 200)
     } catch (err) {
-      recorder?.cancel()
-      recorder = null
-      rec = null
+      r.cancel()
+      if (recorder === r) { recorder = null; rec = null }
       app.toast(micError(err), 'error', 6000)
+    } finally {
+      starting = null
     }
   }
 
@@ -182,7 +183,7 @@
   function micUp() {
     clearTimeout(holdTimer)
     if (!rec) {
-      if (Date.now() - pressAt < 250) recMode = recMode === 'voice' ? 'round' : 'voice'
+      if (pressAt && Date.now() - pressAt < 250) recMode = recMode === 'voice' ? 'round' : 'voice'
       return
     }
     if (!rec.locked) finishRec(!cancelHint)
@@ -195,6 +196,11 @@
     cancelHint = false
     rec = null
     if (!r) return
+    if (starting) {
+      // Released while the mic/camera was still starting: nothing recorded.
+      r.cancel()
+      return
+    }
     if (!send) { r.cancel(); return }
     const p = r instanceof RoundRecorder ? await r.stop(roundPreview) : await r.stop()
     if (p) await app.sendMedia(p)
@@ -230,18 +236,9 @@
       <button class="icon-btn" aria-label="Информация" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}><Icon name="dots" /></button>
     </header>
 
-    <div class="messages" bind:this={scroller}>
-      <div class="inner">
-        <div class="e2e-note"><Icon name="lock" size={14} /> Сообщения защищены сквозным шифрованием (MLS)</div>
-        {#each rows as r (r.key)}
-          {#if r.kind === 'day'}
-            <div class="day"><span>{r.label}</span></div>
-          {:else}
-            <Bubble m={r.m} first={r.first} last={r.last} group={chat.kind === 'group'} />
-          {/if}
-        {/each}
-      </div>
-    </div>
+    {#key chat.id}
+      <MessageList chatId={chat.id} group={chat.kind === 'group'} />
+    {/key}
 
     {#if chat.active && (app.reply || app.editing)}
       {@const ref = app.editing ?? app.reply}
@@ -292,10 +289,12 @@
     {/if}
 
     {#if rec?.kind === 'round'}
-      <div class="round-rec">
+      <div class="round-backdrop" transition:fade={{ duration: 150 }}></div>
+      <div class="round-rec" transition:scale={{ start: 0.6, duration: 200 }}>
         <!-- svelte-ignore a11y_media_has_caption -->
         <video bind:this={roundPreview} muted playsinline></video>
         <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" pathLength="1" stroke-dasharray="1" stroke-dashoffset={1 - rec.t / 60} /></svg>
+        <span class="round-time"><span class="recdot"></span>{duration(rec.t)}</span>
       </div>
     {/if}
 
@@ -311,7 +310,7 @@
 
 <style>
   .chat-view {
-    position: relative; display: flex; flex-direction: column; height: 100%; min-width: 0;
+    position: relative; display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; overflow: hidden;
     background-color: var(--bg-chat);
     background-image:
       radial-gradient(circle at 20% 20%, rgba(82, 136, 193, 0.08), transparent 45%),
@@ -323,12 +322,6 @@
   .title-text { min-width: 0; }
   .name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status { font-size: 13px; }
-  .messages { flex: 1; overflow-y: auto; padding: 8px 16px; }
-  .inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; min-height: 100%; justify-content: flex-end; }
-  .e2e-note { align-self: center; display: flex; align-items: center; gap: 6px; font-size: 13px; color: #d4dde6;
-    background: rgba(0, 0, 0, 0.3); border-radius: 12px; padding: 6px 12px; margin: 12px 0; text-align: center; }
-  .day { display: flex; justify-content: center; margin: 10px 0; position: sticky; top: 4px; z-index: 1; }
-  .day span { background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; font-weight: 500; padding: 4px 10px; border-radius: 12px; backdrop-filter: blur(4px); }
   footer { display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px 14px; max-width: 792px; width: 100%; margin: 0 auto; }
   .composer { flex: 1; display: flex; align-items: flex-end; background: var(--bg-sidebar); border-radius: 18px; padding: 4px 6px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 10px 6px; font-size: 15px; line-height: 1.35; max-height: 180px; }
@@ -346,7 +339,8 @@
   .typing { color: var(--accent-light); }
   .dots::after { content: '…'; animation: dots 1.2s steps(3) infinite; display: inline-block; width: 1em; overflow: hidden; vertical-align: bottom; }
   @keyframes dots { from { width: 0; } to { width: 1em; } }
-  .send.mic { background: var(--bg-sidebar); color: var(--text-muted); touch-action: none; }
+  .send.mic { background: var(--bg-sidebar); color: var(--text-muted); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    position: relative; z-index: 32; }
   .send.mic:hover { color: var(--accent-light); }
   .send.mic.recording { background: var(--accent); color: #fff; transform: scale(1.35); }
   .recbar { flex: 1; display: flex; align-items: center; gap: 10px; padding: 10px 8px; min-height: 42px; }
@@ -357,7 +351,10 @@
   .hint.warn { color: #e17076; }
   .link { margin-left: auto; color: var(--accent-light); }
   @keyframes blink { 50% { opacity: .2; } }
-  .round-rec { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); width: min(300px, 70vw); aspect-ratio: 1; z-index: 5; }
+  .round-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); z-index: 30; pointer-events: none; }
+  .round-rec { position: fixed; left: 0; right: 0; top: 0; bottom: 120px; margin: auto; width: min(300px, 72vw); height: min(300px, 72vw); z-index: 31; pointer-events: none; }
+  .round-time { position: absolute; left: 50%; bottom: -36px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+    background: rgba(0, 0, 0, .5); color: #fff; padding: 4px 12px; border-radius: 14px; font-size: 14px; font-variant-numeric: tabular-nums; }
   .round-rec video { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #000; box-shadow: var(--shadow); }
   .round-rec svg { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); transform: rotate(-90deg); fill: none; stroke: var(--accent); stroke-width: 2; }
   .readonly { justify-content: center; padding: 18px; font-size: 14px; background: var(--bg-header); max-width: none; }
@@ -367,7 +364,6 @@
     display: flex; align-items: center; justify-content: center; text-align: center; color: var(--accent-light); font-size: 18px; pointer-events: none; }
   @media (max-width: 720px) {
     .back { display: inline-flex; }
-    .messages { padding: 8px 8px; }
     footer { padding: 6px 8px 10px; }
   }
 </style>

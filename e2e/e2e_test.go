@@ -826,6 +826,10 @@ func TestLinkingAndDirectChats(t *testing.T) {
 	}
 	_, err = bob.SendText(ctx, dm, "hi alice")
 	ok(t, err)
+	// A message from alice's other device is hers on the phone too (right
+	// side, no notification), not someone else's.
+	mine, err := alice.SendText(ctx, dm, "from the laptop")
+	ok(t, err)
 	// Alice's phone joins the chat by itself and gets the messages from
 	// alice's laptop (history sharing).
 	ok(t, phone.Sync(ctx))
@@ -833,7 +837,10 @@ func TestLinkingAndDirectChats(t *testing.T) {
 	ok(t, alice.Sync(ctx))
 	alice.Settle(10 * time.Second)
 	ok(t, phone.Sync(ctx))
-	eq(t, texts(t, phone, dm), "hi bob", "hi alice")
+	eq(t, texts(t, phone, dm), "hi bob", "hi alice", "from the laptop")
+	if m, _ := phone.Message(ctx, dm, mine.UID); m == nil || !m.Outgoing {
+		t.Fatalf("own message from another device shown as incoming: %+v", m)
+	}
 	gs, err := phone.Groups(ctx)
 	ok(t, err)
 	if len(gs) != 1 || gs[0].ID != dm || gs[0].Peer != bob.Account().UserID {
@@ -856,10 +863,10 @@ func TestLinkingAndDirectChats(t *testing.T) {
 	ok(t, err)
 	r, err := tablet.Recover(ctx, strings.ToUpper(phrase))
 	ok(t, err)
-	if r.Restored != 2 {
+	if r.Restored != 3 {
 		t.Fatalf("tablet recovery %+v", r)
 	}
-	eq(t, texts(t, tablet, dm), "hi bob", "hi alice")
+	eq(t, texts(t, tablet, dm), "hi bob", "hi alice", "from the laptop")
 	_, err = tablet.SendText(ctx, dm, "from the tablet")
 	ok(t, err)
 	ok(t, bob.Sync(ctx))
