@@ -7,6 +7,7 @@
   import Avatar from './Avatar.svelte'
   import MessageList from './MessageList.svelte'
   import GifPanel from './GifPanel.svelte'
+  import { calls } from '../lib/call.svelte'
   import Icon from './Icon.svelte'
   import { duration, hasRecordPermission, micError, rememberRecordPermission, requestRecordPermission, RoundRecorder, VoiceRecorder } from '../lib/media'
   import { fade, scale } from 'svelte/transition'
@@ -257,8 +258,18 @@
           </div>
         </div>
       </button>
+      {#if chat.active}
+        <button class="icon-btn" aria-label="Аудиозвонок" title="Позвонить" onclick={() => calls.start(chat.id, false)}><Icon name="phone" /></button>
+        <button class="icon-btn" aria-label="Видеозвонок" title="Видеозвонок" onclick={() => calls.start(chat.id, true)}><Icon name="video" /></button>
+      {/if}
       <button class="icon-btn" aria-label="Информация" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}><Icon name="dots" /></button>
     </header>
+    {#if calls.active[chat.id] && calls.call?.chatId !== chat.id && chat.kind === 'group'}
+      <button class="call-banner" onclick={() => calls.join(chat.id)}>
+        <span class="cb-dot"></span> Идёт групповой {calls.active[chat.id].video ? 'видеозвонок' : 'звонок'}
+        <span class="cb-join">Присоединиться</span>
+      </button>
+    {/if}
 
     {#key chat.id}
       <MessageList chatId={chat.id} group={chat.kind === 'group'} />
@@ -352,6 +363,11 @@
   .status { font-size: 13px; }
   footer { position: relative; display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px 14px; max-width: 792px; width: 100%; margin: 0 auto; }
   .gif-btn.on { color: var(--accent-light); }
+  .call-banner { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--bg-header); border-bottom: 1px solid var(--border);
+    font-size: 14px; color: var(--text); text-align: left; }
+  .call-banner:hover { background: var(--bg-hover); }
+  .cb-dot { width: 8px; height: 8px; border-radius: 50%; background: #4dcd5e; animation: blink 1.4s infinite; }
+  .cb-join { margin-left: auto; color: #fff; background: #3fbf5f; border-radius: 14px; padding: 4px 12px; font-weight: 500; }
   .composer { flex: 1; display: flex; align-items: flex-end; background: var(--bg-sidebar); border-radius: 18px; padding: 4px 6px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 10px 6px; font-size: 15px; line-height: 1.35; max-height: 180px; }
   textarea::placeholder { color: var(--text-muted); }

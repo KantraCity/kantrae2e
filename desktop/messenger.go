@@ -343,6 +343,10 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 		}
 		return
 	}
+	if e.Type == core.EventSignal {
+		m.onSignal(s, isActive, e)
+		return
+	}
 	// The self-group holds the saved GIFs (and never shows up as a chat).
 	if e.GroupID != "" && core.GroupKind(e.GroupID) == core.KindSelf {
 		if isActive && (e.Type == core.EventMessage || e.Type == core.EventMessageUpdated) {

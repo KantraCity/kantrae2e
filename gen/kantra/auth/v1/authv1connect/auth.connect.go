@@ -73,6 +73,9 @@ const (
 	AuthServiceSetAvatarProcedure = "/kantra.auth.v1.AuthService/SetAvatar"
 	// AuthServiceGetAvatarProcedure is the fully-qualified name of the AuthService's GetAvatar RPC.
 	AuthServiceGetAvatarProcedure = "/kantra.auth.v1.AuthService/GetAvatar"
+	// AuthServiceGetIceServersProcedure is the fully-qualified name of the AuthService's GetIceServers
+	// RPC.
+	AuthServiceGetIceServersProcedure = "/kantra.auth.v1.AuthService/GetIceServers"
 )
 
 // AuthServiceClient is a client for the kantra.auth.v1.AuthService service.
@@ -110,6 +113,9 @@ type AuthServiceClient interface {
 	// Sets (or with empty image removes) the caller's profile photo (JPEG/PNG/WebP, <= 512 KiB).
 	SetAvatar(context.Context, *v1.SetAvatarRequest) (*v1.SetAvatarResponse, error)
 	GetAvatar(context.Context, *v1.GetAvatarRequest) (*v1.GetAvatarResponse, error)
+	// Calls: STUN/TURN servers for WebRTC with short-lived TURN credentials
+	// (the server relays encrypted media only; it never has the keys).
+	GetIceServers(context.Context, *v1.GetIceServersRequest) (*v1.GetIceServersResponse, error)
 }
 
 // NewAuthServiceClient constructs a client for the kantra.auth.v1.AuthService service. By default,
@@ -225,6 +231,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("GetAvatar")),
 			connect.WithClientOptions(opts...),
 		),
+		getIceServers: connect.NewClient[v1.GetIceServersRequest, v1.GetIceServersResponse](
+			httpClient,
+			baseURL+AuthServiceGetIceServersProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetIceServers")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -247,6 +259,7 @@ type authServiceClient struct {
 	setUsername      *connect.Client[v1.SetUsernameRequest, v1.SetUsernameResponse]
 	setAvatar        *connect.Client[v1.SetAvatarRequest, v1.SetAvatarResponse]
 	getAvatar        *connect.Client[v1.GetAvatarRequest, v1.GetAvatarResponse]
+	getIceServers    *connect.Client[v1.GetIceServersRequest, v1.GetIceServersResponse]
 }
 
 // Register calls kantra.auth.v1.AuthService.Register.
@@ -402,6 +415,15 @@ func (c *authServiceClient) GetAvatar(ctx context.Context, req *v1.GetAvatarRequ
 	return nil, err
 }
 
+// GetIceServers calls kantra.auth.v1.AuthService.GetIceServers.
+func (c *authServiceClient) GetIceServers(ctx context.Context, req *v1.GetIceServersRequest) (*v1.GetIceServersResponse, error) {
+	response, err := c.getIceServers.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // AuthServiceHandler is an implementation of the kantra.auth.v1.AuthService service.
 type AuthServiceHandler interface {
 	Register(context.Context, *v1.RegisterRequest) (*v1.RegisterResponse, error)
@@ -437,6 +459,9 @@ type AuthServiceHandler interface {
 	// Sets (or with empty image removes) the caller's profile photo (JPEG/PNG/WebP, <= 512 KiB).
 	SetAvatar(context.Context, *v1.SetAvatarRequest) (*v1.SetAvatarResponse, error)
 	GetAvatar(context.Context, *v1.GetAvatarRequest) (*v1.GetAvatarResponse, error)
+	// Calls: STUN/TURN servers for WebRTC with short-lived TURN credentials
+	// (the server relays encrypted media only; it never has the keys).
+	GetIceServers(context.Context, *v1.GetIceServersRequest) (*v1.GetIceServersResponse, error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -548,6 +573,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("GetAvatar")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetIceServersHandler := connect.NewUnaryHandlerSimple(
+		AuthServiceGetIceServersProcedure,
+		svc.GetIceServers,
+		connect.WithSchema(authServiceMethods.ByName("GetIceServers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/kantra.auth.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceRegisterProcedure:
@@ -584,6 +615,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceSetAvatarHandler.ServeHTTP(w, r)
 		case AuthServiceGetAvatarProcedure:
 			authServiceGetAvatarHandler.ServeHTTP(w, r)
+		case AuthServiceGetIceServersProcedure:
+			authServiceGetIceServersHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -659,4 +692,8 @@ func (UnimplementedAuthServiceHandler) SetAvatar(context.Context, *v1.SetAvatarR
 
 func (UnimplementedAuthServiceHandler) GetAvatar(context.Context, *v1.GetAvatarRequest) (*v1.GetAvatarResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.GetAvatar is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetIceServers(context.Context, *v1.GetIceServersRequest) (*v1.GetIceServersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kantra.auth.v1.AuthService.GetIceServers is not implemented"))
 }

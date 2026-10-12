@@ -1,7 +1,8 @@
 # Быстрый деплой: один VPS + один домен
 
-Всё (Postgres, MinIO, 5 сервисов, Caddy с HTTPS от Let's Encrypt) поднимается одной командой
-`docker compose` на одном сервере. Наружу открыт только Caddy (80/443). Приложения (Windows,
+Всё (Postgres, MinIO, 5 сервисов, Caddy с HTTPS от Let's Encrypt, TURN-сервер coturn для звонков)
+поднимается одной командой `docker compose` на одном сервере. Наружу открыты Caddy (80/443) и
+coturn (3478 и UDP 49160–49200 — для звонков). Приложения (Windows,
 macOS, Linux, Android, iOS) подключаются к `https://<ваш домен>`.
 
 ## 1. Что нужно
@@ -25,7 +26,9 @@ ssh root@<IP>
 curl -fsSL https://get.docker.com | sh
 
 # Файрвол (если включён ufw)
-ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp && ufw --force enable
+ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp \
+  && ufw allow 3478 && ufw allow 49160:49200/udp && ufw --force enable   # 3478 и 49160-49200 — звонки
+# У облачных провайдеров (Hetzner, Timeweb, Yandex Cloud…) те же порты откройте и в их файрволе/группе безопасности.
 
 # Мало памяти? Добавьте swap на время сборки
 fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
@@ -110,8 +113,9 @@ Apple не даёт ставить приложения без подписи. C
 
 ```bash
 cd kantrae2e
-# Обновление
-git pull && docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+# Обновление (init-env.sh --upgrade дописывает в deploy/.env секреты новых функций,
+# например TURN_SECRET для звонков; уже настроенный .env не трогает)
+git pull && deploy/init-env.sh --upgrade && docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 # Логи
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs -f --tail=100
 # Бэкап Postgres + MinIO (зашифрованные данные пользователей) — например, раз в сутки по cron
@@ -119,5 +123,13 @@ deploy/backup.sh
 ```
 
 Что видит сервер: логины и публичные профили, кто в каких чатах и когда пишет, размеры
-сообщений. Чего не видит: содержимое сообщений, файлов и историй (MLS / XChaCha20 на
-устройствах).
+сообщений, факт и длительность звонков, если они идут через TURN. Чего не видит: содержимое
+сообщений, файлов, историй и звонков (MLS / XChaCha20 / DTLS-SRTP на устройствах; ключи звонка
+согласуются внутри MLS, поэтому сервер не может подменить их).
+
+### Звонки
+
+Аудио и видео идут напрямую между устройствами; если напрямую не получается (NAT, мобильный
+интернет), их пересылает coturn на вашем сервере — уже зашифрованными. Групповые звонки — «каждый
+с каждым», комфортно до 5–6 участников. Если звонки соединяются только в одной сети (Wi-Fi), а через
+мобильный интернет — нет, проверьте, что порты 3478 и 49160–49200/udp открыты.

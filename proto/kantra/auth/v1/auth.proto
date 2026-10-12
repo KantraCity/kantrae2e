@@ -40,6 +40,9 @@ service AuthService {
   // Sets (or with empty image removes) the caller's profile photo (JPEG/PNG/WebP, <= 512 KiB).
   rpc SetAvatar(SetAvatarRequest) returns (SetAvatarResponse) {}
   rpc GetAvatar(GetAvatarRequest) returns (GetAvatarResponse) {}
+  // Calls: STUN/TURN servers for WebRTC with short-lived TURN credentials
+  // (the server relays encrypted media only; it never has the keys).
+  rpc GetIceServers(GetIceServersRequest) returns (GetIceServersResponse) {}
 }
 
 message RegisterRequest {
@@ -205,4 +208,14 @@ message GetAvatarRequest {
 message GetAvatarResponse {
   string avatar_id = 1;
   bytes image = 2;
+}
+
+message GetIceServersRequest {}
+message IceServer {
+  repeated string urls = 1;
+  string username = 2;
+  string credential = 3;
+}
+message GetIceServersResponse {
+  repeated IceServer servers = 1;
 }

@@ -15,6 +15,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as core$0 from "../client/core/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 /**
@@ -161,6 +165,13 @@ export function HasRecovery(): $CancellablePromise<boolean> {
     return $Call.ByID(4175914496);
 }
 
+/**
+ * IceServers returns the STUN/TURN servers for RTCPeerConnection.
+ */
+export function IceServers(): $CancellablePromise<core$0.IceServer[] | null> {
+    return $Call.ByID(3276701456);
+}
+
 export function Invite(chatID: string, usernames: string[] | null): $CancellablePromise<void> {
     return $Call.ByID(1649811096, chatID, usernames);
 }
@@ -238,6 +249,13 @@ export function OpenNotification(key: string): $CancellablePromise<void> {
  */
 export function OpenSystemSettings(what: string): $CancellablePromise<void> {
     return $Call.ByID(662245325, what);
+}
+
+/**
+ * PendingCall returns a call that is ringing right now (or nothing).
+ */
+export function PendingCall(): $CancellablePromise<$models.CallSignal | null> {
+    return $Call.ByID(2950476756);
 }
 
 export function PendingLinks(): $CancellablePromise<$models.LinkRequest[] | null> {
@@ -354,6 +372,13 @@ export function SendMedia(chatID: string, up: $models.MediaUpload, replyTo: stri
  */
 export function SendSavedGIF(chatID: string, id: string, replyTo: string): $CancellablePromise<$models.Message | null> {
     return $Call.ByID(4211156348, chatID, id, replyTo);
+}
+
+/**
+ * SendSignal sends a call signal (JSON) to the other members of a chat.
+ */
+export function SendSignal(chatID: string, body: string): $CancellablePromise<void> {
+    return $Call.ByID(12662335, chatID, body);
 }
 
 /**

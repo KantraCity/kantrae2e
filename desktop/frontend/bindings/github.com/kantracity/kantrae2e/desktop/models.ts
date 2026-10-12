@@ -26,6 +26,23 @@ export interface AccountInfo {
     "unread": number;
 }
 
+/**
+ * CallSignal is a received call signal, as the UI gets it ("signal" event,
+ * and PendingCall after a cold start).
+ */
+export interface CallSignal {
+    "chatId": string;
+    "userId": string;
+    "deviceId": string;
+    "name": string;
+    "body": string;
+
+    /**
+     * unix seconds (sender's clock)
+     */
+    "at": number;
+}
+
 export interface Chat {
     "id": string;
 

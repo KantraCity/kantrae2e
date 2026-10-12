@@ -238,6 +238,12 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 			if g, err := c.st.Group(ctx, e.GroupId); err == nil && g.LeftAt > 0 {
 				break // left this group: its messages are not ours any more
 			}
+			if pl.Type == "signal" {
+				if ev := c.signalEvent(e.GroupId, uid, did, &pl); ev != nil {
+					events = append(events, *ev)
+				}
+				break
+			}
 			if w, ev := c.applyControlLocked(e.GroupId, uid, &pl); ev != nil {
 				writes = w
 				events = append(events, *ev)

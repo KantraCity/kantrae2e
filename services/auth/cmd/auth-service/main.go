@@ -23,7 +23,8 @@ func main() {
 	defer pool.Close()
 
 	mux := http.NewServeMux()
-	mux.Handle(auth.New(pool, server.JWTSecret(), ttl).Handler())
+	ice := auth.ICEFromEnv(server.Env("TURN_HOST", ""), server.Env("TURN_SECRET", ""))
+	mux.Handle(auth.New(pool, server.JWTSecret(), ttl).WithICE(ice).Handler())
 	if tok := server.Env("INTERNAL_TOKEN", ""); tok != "" {
 		if len(tok) < 32 {
 			l.Fatal().Msg("INTERNAL_TOKEN must be at least 32 bytes")

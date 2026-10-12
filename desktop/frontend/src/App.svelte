@@ -25,8 +25,10 @@
   import TitleBar from './components/TitleBar.svelte'
   import ChatMenu from './components/ChatMenu.svelte'
   import DeleteChat from './components/DeleteChat.svelte'
+  import CallView from './components/CallView.svelte'
+  import { checkPendingCall } from './lib/call.svelte'
 
-  onMount(() => { app.init() })
+  onMount(() => { app.init().then(checkPendingCall) })
 
   // Resizable chat list (desktop), remembered on this device.
   const SIDEBAR_KEY = 'kantra.sidebar'
@@ -88,6 +90,8 @@
 
 {#if app.menu}<MessageMenu />{/if}
 {#if app.chatMenu}<ChatMenu />{/if}
+
+<CallView />
 
 <Toasts />
 

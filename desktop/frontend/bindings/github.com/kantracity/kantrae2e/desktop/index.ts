@@ -9,6 +9,7 @@ export {
 export type {
     Account,
     AccountInfo,
+    CallSignal,
     Chat,
     Device,
     DeviceKey,

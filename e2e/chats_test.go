@@ -206,3 +206,30 @@ func TestSavedGIFs(t *testing.T) {
 		t.Fatalf("still saved: %d", len(saved))
 	}
 }
+
+func TestCallSignals(t *testing.T) {
+	c := newCluster(t)
+	ctx := context.Background()
+	alice := c.register("alice")
+	bob := c.register("bob")
+	dm, err := alice.OpenDirect(ctx, "bob")
+	ok(t, err)
+	ok(t, bob.Sync(ctx))
+	ok(t, alice.SendSignal(ctx, dm, `{"t":"invite","call":"c1"}`))
+	ok(t, bob.Sync(ctx))
+	ev := bob.eventsOf(core.EventSignal)
+	if len(ev) != 1 || ev[0].Detail != `{"t":"invite","call":"c1"}` || ev[0].UserID != alice.Account().UserID ||
+		ev[0].DeviceID != alice.Account().DeviceID || ev[0].GroupID != dm || ev[0].Count == 0 {
+		t.Fatalf("signal events %+v", ev)
+	}
+	// Not a message, on either side.
+	eq(t, texts(t, bob, dm))
+	eq(t, texts(t, alice, dm))
+	if len(alice.eventsOf(core.EventSignal)) != 0 {
+		t.Fatal("own signal echoed")
+	}
+	// The server hands out no call servers unless configured.
+	if s, err := alice.IceServers(ctx); err != nil || len(s) != 0 {
+		t.Fatalf("ice servers: %v %v", s, err)
+	}
+}

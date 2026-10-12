@@ -74,7 +74,12 @@ services:
   auth-service:
     <<: *service
     build: { context: .., args: { SERVICE: auth-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
-    environment: { <<: *env, LISTEN_ADDR: ":8080" }
+    environment:
+      <<: *env
+      LISTEN_ADDR: ":8080"
+      # Calls: TURN credentials for coturn below (services/auth/ice.go).
+      TURN_HOST: ${DOMAIN}
+      TURN_SECRET: ${TURN_SECRET:?run deploy/init-env.sh --upgrade (adds TURN_SECRET for calls)}
     depends_on: { postgres: { condition: service_healthy } }
     healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"], <<: *health }
 
@@ -136,6 +141,44 @@ services:
       delivery-service: { condition: service_healthy }
       history-service: { condition: service_healthy }
       media-service: { condition: service_healthy }
+
+  # TURN/STUN for calls: relays (already end-to-end encrypted) call media
+  # when two devices cannot reach each other directly (NAT, mobile data).
+  # Host networking: it needs a public UDP port range.
+  # Firewall: 3478/tcp+udp and 49160-49200/udp.
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    command:
+      - -n
+      - --listening-port=3478
+      - --min-port=49160
+      - --max-port=49200
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:?run deploy/init-env.sh --upgrade}
+      - --realm=${DOMAIN}
+      - --fingerprint
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --stale-nonce=600
+      - --user-quota=12
+      - --total-quota=1200
+      # Never relay into the server's own networks.
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --denied-peer-ip=::1
+      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
 
 volumes:
   pgdata:

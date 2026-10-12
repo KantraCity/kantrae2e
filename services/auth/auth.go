@@ -44,6 +44,7 @@ type Service struct {
 	pool     *pgxpool.Pool
 	secret   []byte
 	tokenTTL time.Duration
+	ice      ICEConfig // calls (ice.go)
 }
 
 func New(pool *pgxpool.Pool, secret []byte, tokenTTL time.Duration) *Service {
