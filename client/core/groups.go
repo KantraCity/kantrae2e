@@ -42,10 +42,15 @@ type payload struct {
 	// clear (see chats.go): for everyone (direct chats), and hide the chat.
 	All  bool `json:"all,omitempty"`
 	Hide bool `json:"hide,omitempty"`
+	// Message extras (extras.go): link preview, poll, silent.
+	Extra *Extra `json:"x,omitempty"`
+	// pin: unpin instead; vote: the chosen options of a poll.
+	Unpin   bool  `json:"unpin,omitempty"`
+	Options []int `json:"opts,omitempty"`
 }
 
 // storable reports whether a payload type is a user-visible message.
-func storable(t string) bool { return t == "text" || t == "media" }
+func storable(t string) bool { return t == "text" || t == "media" || t == "poll" || t == "sched" }
 
 // groupMeta: group info shared among the members (groupinfo.go). Nil
 // pointers leave a field unchanged; Name is always set by older clients.
@@ -350,11 +355,14 @@ func (c *Client) SendMessage(ctx context.Context, groupID, text string, opt Send
 	if err := c.requireLogin(); err != nil {
 		return nil, err
 	}
-	return c.sendLocked(ctx, groupID, payload{Type: "text", Body: text, ReplyTo: opt.ReplyTo})
+	return c.sendLocked(ctx, groupID, payload{Type: "text", Body: text, ReplyTo: opt.ReplyTo, Extra: opt.extra()})
 }
 
 func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*store.Message, error) {
-	p.V, p.ID, p.TS = 1, uuid.NewString(), time.Now().UnixMilli()
+	p.V, p.TS = 1, time.Now().UnixMilli()
+	if p.ID == "" { // scheduled messages carry their own id (dedup across devices)
+		p.ID = uuid.NewString()
+	}
 	plain, err := json.Marshal(p)
 	if err != nil {
 		return nil, err
@@ -406,7 +414,7 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 // localMessage converts an outgoing payload to a stored message.
 func (c *Client) localMessage(groupID string, p payload) *store.Message {
 	m := &store.Message{UID: p.ID, GroupID: groupID, SenderUser: c.acct.UserID, SenderDevice: c.acct.DeviceID,
-		Kind: p.Type, Body: p.Body, SentAt: p.TS, Outgoing: true, ReplyTo: p.ReplyTo, FwdFrom: p.Fwd}
+		Kind: p.Type, Body: p.Body, SentAt: p.TS, Outgoing: true, ReplyTo: p.ReplyTo, FwdFrom: p.Fwd, Extra: p.Extra.json()}
 	if p.Media != nil {
 		b, _ := json.Marshal(p.Media)
 		m.Body = string(b)

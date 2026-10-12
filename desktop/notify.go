@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -182,6 +183,9 @@ func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 	if msg.Outgoing || msg.Origin != "" { // own or restored/shared history
 		return
 	}
+	// Sent "without sound": counted as unread, but no notification —
+	// unless it mentions this account (like Telegram).
+	silent := msg.Silent && !mentions(msg.Text, s, c)
 	m.mu.Lock()
 	if s == m.active && m.foreground && m.activeChat == msg.ChatID {
 		m.mu.Unlock()
@@ -191,7 +195,7 @@ func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 	count := s.unread[msg.ChatID]
 	multi := len(m.slots) > 1
 	m.mu.Unlock()
-	if !clientPref(c, prefNotify) {
+	if !clientPref(c, prefNotify) || silent {
 		return
 	}
 	preview := clientPref(c, prefPreview)
@@ -200,9 +204,11 @@ func (m *Messenger) maybeNotify(s *slot, c *core.Client, msg *Message) {
 		ch := m.toChat(c, *g)
 		n.Title = ch.Name
 		if preview {
-			body := msg.Text
+			body := plainText(msg.Text)
 			if msg.Kind == "file" && msg.File != nil {
 				body = fileLabel(msg.File)
+			} else if msg.Kind == "poll" && msg.Poll != nil {
+				body = "📊 " + msg.Poll.Question
 			}
 			if ch.Kind == core.KindGroup {
 				body = msg.Sender + ": " + body
@@ -326,4 +332,46 @@ func (m *Messenger) reconnect() {
 	if c, err := m.client(); err == nil {
 		c.Reconnect()
 	}
+}
+
+// mentions reports whether a text mentions the slot's account (@username).
+var (
+	mdLink    = regexp.MustCompile(`\[([^\]\n]{1,200})\]\((https?://[^\s)]+)\)`)
+	mdSpoiler = regexp.MustCompile(`\|\|([^|]+?)\|\|`)
+	mdMarks   = strings.NewReplacer("```", "", "**", "", "__", "", "~~", "", "`", "")
+)
+
+// plainText drops the formatting markup of a message (frontend lib/format.ts)
+// for notifications; spoilers stay hidden.
+func plainText(s string) string {
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = mdSpoiler.ReplaceAllString(s, "▒▒▒")
+	return mdMarks.Replace(s)
+}
+
+func mentions(text string, s *slot, c *core.Client) bool {
+	if s.userID == "" || !strings.Contains(text, "@") {
+		return false
+	}
+	u := c.CachedProfile(context.Background(), s.userID).Username
+	if u == "" {
+		return false
+	}
+	low, at := strings.ToLower(text), "@"+strings.ToLower(u)
+	for i := strings.Index(low, at); i >= 0; {
+		end := i + len(at)
+		if end == len(low) || !isNameChar(low[end]) {
+			return true
+		}
+		j := strings.Index(low[end:], at)
+		if j < 0 {
+			break
+		}
+		i = end + j
+	}
+	return false
+}
+
+func isNameChar(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_' || b == '.' || b == '-'
 }

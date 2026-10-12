@@ -140,5 +140,5 @@ func (c *Client) sendMediaRef(ctx context.Context, groupID string, ref *MediaRef
 	if err := c.requireLogin(); err != nil {
 		return nil, err
 	}
-	return c.sendLocked(ctx, groupID, payload{Type: "media", ReplyTo: opt.ReplyTo, Media: ref})
+	return c.sendLocked(ctx, groupID, payload{Type: "media", ReplyTo: opt.ReplyTo, Media: ref, Extra: opt.extra()})
 }

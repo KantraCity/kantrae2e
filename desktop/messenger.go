@@ -143,6 +143,11 @@ type Message struct {
 	Reactions []ReactionInfo `json:"reactions,omitempty"`
 	// Read: an outgoing message someone else has read (✓✓).
 	Read bool `json:"read,omitempty"`
+	// Extras (extras.go): pinned in the chat, sent silently, link preview, poll.
+	Pinned bool      `json:"pinned,omitempty"`
+	Silent bool      `json:"silent,omitempty"`
+	Link   *LinkView `json:"link,omitempty"`
+	Poll   *PollView `json:"poll,omitempty"`
 }
 
 type Chat struct {
@@ -309,6 +314,8 @@ func (m *Messenger) startListening(s *slot) {
 		_ = c.Sync(ctx)
 		_ = c.Listen(ctx)
 	}()
+	// Scheduled messages go out from whichever device of the account runs.
+	go c.RunScheduler(ctx)
 	// A pending device keeps asking for approval and notices it even when
 	// the approving device could not send the history key.
 	go func() {
@@ -357,7 +364,8 @@ func (m *Messenger) onCoreEvent(s *slot, e core.Event) {
 	// The self-group holds the saved GIFs (and never shows up as a chat).
 	if e.GroupID != "" && core.GroupKind(e.GroupID) == core.KindSelf {
 		if isActive && (e.Type == core.EventMessage || e.Type == core.EventMessageUpdated) {
-			m.emit(UIEvent{Type: "gifs"})
+			m.emit(UIEvent{Type: "gifs"})      // saved GIFs / stickers
+			m.emit(UIEvent{Type: "scheduled"}) // scheduled messages
 		}
 		if e.Type == core.EventMessage || e.Type == core.EventMessageUpdated {
 			return

@@ -3,6 +3,7 @@
   import { app } from '../lib/app.svelte'
   import { scale } from 'svelte/transition'
   import Icon from './Icon.svelte'
+  import { plain } from '../lib/format'
 
   import EmojiPanel from './EmojiPanel.svelte'
   import { emojiPrefs } from '../lib/emoji.svelte'
@@ -31,7 +32,7 @@
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(m.text || m.file?.caption || '')
+      await navigator.clipboard.writeText(plain(m.text || m.file?.caption || ''))
       app.toast('Текст скопирован')
     } catch { app.toast('Не удалось скопировать', 'error') }
   }
@@ -64,7 +65,13 @@
   {#if !app.sending[m.id] && (m.file?.kind === 'sticker' || m.file?.kind === 'photo')}
     <button onclick={() => act(() => app.saveAs(m, 'sticker'))}><Icon name="smile" size={20} /> {m.file?.kind === 'sticker' ? 'Сохранить стикер' : 'Сохранить как стикер'}</button>
   {/if}
+  {#if !m.id.startsWith('local-')}
+    <button onclick={() => act(() => (app.modal = { kind: 'pinMsg', m }))}><Icon name="pin" size={20} /> {m.pinned ? 'Открепить' : 'Закрепить'}</button>
+  {/if}
   <button onclick={() => act(() => (app.modal = { kind: 'forward', chatId: m.chatId, ids: [m.id] }))}><Icon name="forward" size={20} /> Переслать</button>
+  {#if !m.id.startsWith('local-')}
+    <button onclick={() => act(() => app.toggleSelect(m.id))}><Icon name="select" size={20} /> Выделить</button>
+  {/if}
   <button class="danger" onclick={() => act(() => (app.modal = { kind: 'deleteMsg', chatId: m.chatId, ids: [m.id], canAll: !!(canDeleteAll && chat?.active) }))}>
     <Icon name="trash" size={20} /> Удалить
   </button>

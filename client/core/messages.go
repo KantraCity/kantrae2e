@@ -11,6 +11,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -22,7 +23,16 @@ import (
 
 // SendOptions for text and media messages.
 type SendOptions struct {
-	ReplyTo string // uid of the message answered
+	ReplyTo string       // uid of the message answered
+	Silent  bool         // no notification for the others
+	Link    *LinkPreview // preview of the first link (text messages)
+}
+
+func (o SendOptions) extra() *Extra {
+	if !o.Silent && o.Link == nil {
+		return nil
+	}
+	return &Extra{Silent: o.Silent, Link: o.Link}
 }
 
 var (
@@ -272,6 +282,15 @@ func (c *Client) applyControlLocked(groupID, senderUser string, pl *payload) (fu
 		}, ev
 	case "reaction":
 		return func(tx *store.Tx) error { return tx.SetReaction(groupID, pl.Target, senderUser, pl.Emoji) }, ev
+	case "pin":
+		at := pl.TS
+		if pl.Unpin {
+			at = 0
+		}
+		return func(tx *store.Tx) error { return tx.SetPinned(groupID, pl.Target, at) }, ev
+	case "vote":
+		opts, _ := json.Marshal(pl.Options)
+		return func(tx *store.Tx) error { return tx.SetVote(groupID, pl.Target, senderUser, string(opts)) }, ev
 	case "read":
 		// From another device of ours, it means "read here too" (UserID).
 		return func(tx *store.Tx) error { return tx.SetReadMark(groupID, senderUser, pl.UpTo) },

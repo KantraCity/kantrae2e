@@ -8,6 +8,11 @@
   import MessageList from './MessageList.svelte'
   import EmojiPanel from './EmojiPanel.svelte'
   import AttachSheet from './AttachSheet.svelte'
+  import PinnedBar from './PinnedBar.svelte'
+  import ChatSearch from './ChatSearch.svelte'
+  import SelectBar from './SelectBar.svelte'
+  import { firstLink, wrap } from '../lib/format'
+  import type { LinkView, Member } from '../lib/api'
   import { calls } from '../lib/call.svelte'
   import Icon from './Icon.svelte'
   import { duration, hasRecordPermission, micError, rememberRecordPermission, requestRecordPermission, RoundRecorder, VoiceRecorder } from '../lib/media'
@@ -44,6 +49,7 @@
     })
   }
   let memberCount = $state<number | null>(null)
+  let searching = $state(false)
 
   const chat = $derived(app.current)
   const messages = $derived(chat ? (app.messages[chat.id] ?? []) : [])
@@ -74,22 +80,148 @@
       app.refreshPresence([peer])
       presenceTimer = setInterval(() => app.refreshPresence([peer]), 30_000)
     }
-    if (id && active && chat?.kind === 'group') Messenger.Members(id).then((ms) => (memberCount = new Set((ms ?? []).map((x) => x.userId)).size)).catch(() => {})
+    members = []
+    mention = null
+    searching = false
+    preview = null
+    previewOff = ''
+    if (id && active && chat?.kind === 'group') Messenger.Members(id).then((ms) => { members = ms ?? []; memberCount = new Set(members.map((x) => x.userId)).size }).catch(() => {})
     input?.focus()
     return () => clearInterval(presenceTimer)
   })
 
-  async function send() {
+  async function send(silent = false) {
     const t = text
     if (!t.trim()) return
+    const link = !app.editing && preview && !previewOff && firstLink(t) === preview.url ? preview : null
     text = ''
+    preview = null
+    previewOff = ''
     resize()
     input?.focus()
     // On failure put the text back unless the user already typed something new.
-    if (!(await app.send(t)) && !text) text = t
+    if (!(await app.send(t, { silent, link })) && !text) text = t
+  }
+
+  // ---- send menu (right click / long press on send): silent, scheduled ----
+  let sendMenu = $state(false)
+  let sendPress: ReturnType<typeof setTimeout> | undefined
+  let sendLong = false
+  function sendDown(e: PointerEvent) {
+    if (app.editing || e.pointerType === 'mouse') return
+    sendLong = false
+    sendPress = setTimeout(() => { sendLong = true; navigator.vibrate?.(15); sendMenu = true }, 450)
+  }
+  function sendUp() { clearTimeout(sendPress) }
+  function sendClick() {
+    if (sendLong) { sendLong = false; return }
+    send()
+  }
+  function scheduleIt() {
+    sendMenu = false
+    if (!chat || !text.trim()) return
+    const link = preview && !previewOff && firstLink(text) === preview.url ? preview : null
+    app.modal = { kind: 'schedule', chatId: chat.id, text, silent: false, link }
+    text = ''
+    preview = null
+  }
+  let scheduledCount = $state(0)
+  $effect(() => {
+    void app.scheduledTick
+    const id = chat?.id
+    if (!id) return
+    Messenger.Scheduled(id).then((l) => { if (chat?.id === id) scheduledCount = l?.length ?? 0 }).catch(() => {})
+  })
+
+  // ---- link preview of the first link being typed ----
+  let preview = $state<LinkView | null>(null)
+  let previewOff = $state('') // the link whose preview was closed
+  let previewTimer: ReturnType<typeof setTimeout> | undefined
+  $effect(() => {
+    const url = app.editing ? '' : firstLink(text)
+    clearTimeout(previewTimer)
+    if (!url) { preview = null; return }
+    if (preview?.url === url) return
+    previewTimer = setTimeout(async () => {
+      const lp = await Messenger.LinkPreview(url).catch(() => null)
+      if (firstLink(text) === url) preview = lp && (lp.title || lp.desc || lp.image) ? lp : null
+    }, 600)
+  })
+
+  // ---- formatting: shortcuts and a toolbar over a selection ----
+  let hasSel = $state(false)
+  function checkSel() {
+    hasSel = !!input && input.selectionStart !== input.selectionEnd && document.activeElement === input
+  }
+  function fmt(mark: string, close = mark) {
+    if (!input) return
+    const r = wrap(input, text, mark, close)
+    text = r.text
+    tick().then(() => { input?.focus(); input?.setSelectionRange(r.start, r.end); checkSel() })
+  }
+  function fmtLink() {
+    if (!input) return
+    const url = prompt('Ссылка (https://…)', 'https://')
+    if (!url || !/^https?:\/\/\S+$/.test(url.trim())) return
+    const s0 = input.selectionStart ?? 0, e0 = input.selectionEnd ?? 0
+    const label = text.slice(s0, e0) || url.trim()
+    text = text.slice(0, s0) + `[${label}](${url.trim()})` + text.slice(e0)
+    tick().then(() => input?.focus())
+  }
+
+  // ---- @mentions in groups ----
+  let members = $state<Member[]>([])
+  let mention = $state<{ q: string; at: number } | null>(null)
+  let mentionIdx = $state(0)
+  const mentionHits = $derived.by(() => {
+    if (!mention) return []
+    const q = mention.q.toLowerCase()
+    const me = app.state?.account?.userId
+    const seen = new Set<string>()
+    return members.filter((x) => {
+      if (x.userId === me || seen.has(x.userId) || !x.username) return false
+      seen.add(x.userId)
+      return !q || x.username.toLowerCase().startsWith(q) || x.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q))
+    }).slice(0, 8)
+  })
+  function checkMention() {
+    if (!input || chat?.kind !== 'group') { mention = null; return }
+    const pos = input.selectionStart ?? 0
+    const m = /(^|\s)@([a-zA-Z0-9_.-]{0,32})$/.exec(text.slice(0, pos))
+    mention = m ? { q: m[2], at: pos - m[2].length - 1 } : null
+    mentionIdx = 0
+  }
+  function insertMention(u: Member) {
+    if (!mention || !input) return
+    const pos = input.selectionStart ?? text.length
+    const ins = '@' + u.username + ' '
+    text = text.slice(0, mention.at) + ins + text.slice(pos)
+    const caret = mention.at + ins.length
+    mention = null
+    tick().then(() => { input?.focus(); input?.setSelectionRange(caret, caret) })
   }
 
   function key(e: KeyboardEvent) {
+    if (mention && mentionHits.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        mentionIdx = (mentionIdx + (e.key === 'ArrowDown' ? 1 : mentionHits.length - 1)) % mentionHits.length
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        insertMention(mentionHits[mentionIdx])
+        return
+      }
+      if (e.key === 'Escape') { mention = null; return }
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = e.code
+      const f = !e.shiftKey && k === 'KeyB' ? ['**'] : !e.shiftKey && k === 'KeyI' ? ['__'] : e.shiftKey && k === 'KeyX' ? ['~~']
+        : e.shiftKey && k === 'KeyM' ? ['`'] : e.shiftKey && k === 'KeyP' ? ['||'] : null
+      if (f) { e.preventDefault(); fmt(f[0]); return }
+      if (!e.shiftKey && k === 'KeyK') { e.preventDefault(); fmtLink(); return }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault()
       send()
@@ -276,6 +408,11 @@
   <!-- data-file-drop-target: the desktop runtime accepts OS file drops only over it -->
   <section class="chat-view" class:dragging data-file-drop-target={chat.active ? '' : undefined}
     ondragover={dragOver} ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragging = false }} ondrop={drop}>
+    {#if app.selected.length}
+      <SelectBar chatId={chat.id} />
+    {:else if searching}
+      <ChatSearch chatId={chat.id} onclose={() => (searching = false)} />
+    {:else}
     <header>
       <button class="icon-btn back" aria-label="Назад" onclick={() => app.openChat(null)}><Icon name="back" /></button>
       <button class="title" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}>
@@ -296,8 +433,11 @@
         <button class="icon-btn" aria-label="Аудиозвонок" title="Позвонить" onclick={() => calls.start(chat.id, false)}><Icon name="phone" /></button>
         <button class="icon-btn" aria-label="Видеозвонок" title="Видеозвонок" onclick={() => calls.start(chat.id, true)}><Icon name="video" /></button>
       {/if}
+      <button class="icon-btn" aria-label="Поиск" title="Поиск по чату" onclick={() => (searching = true)}><Icon name="search" /></button>
       <button class="icon-btn" aria-label="Информация" onclick={() => (app.modal = { kind: 'chatInfo', chatId: chat.id })}><Icon name="dots" /></button>
     </header>
+    {/if}
+    <PinnedBar chatId={chat.id} />
     {#if calls.active[chat.id] && calls.call?.chatId !== chat.id && chat.kind === 'group'}
       <button class="call-banner" onclick={() => calls.join(chat.id)}>
         <span class="cb-dot"></span> Идёт групповой {calls.active[chat.id].video ? 'видеозвонок' : 'звонок'}
@@ -309,6 +449,17 @@
       <MessageList chatId={chat.id} group={chat.kind === 'group'} />
     {/key}
 
+    {#if chat.active && preview && previewOff !== preview.url && !app.editing}
+      <div class="compose-bar lp-bar">
+        <span class="cb-icon"><Icon name="link" size={22} /></span>
+        <div class="cb-text">
+          <div class="cb-title">{preview.site || preview.title}</div>
+          <div class="cb-body">{preview.title || preview.desc}</div>
+        </div>
+        {#if preview.image}<img class="lp-thumb" src={preview.image} alt="" />{/if}
+        <button class="icon-btn" aria-label="Без превью" onclick={() => (previewOff = preview!.url)}><Icon name="close" size={20} /></button>
+      </div>
+    {/if}
     {#if chat.active && (app.reply || app.editing)}
       {@const ref = app.editing ?? app.reply}
       <div class="compose-bar">
@@ -334,6 +485,34 @@
             <EmojiPanel onpick={insertEmoji} onclose={() => (panelOpen = false)} ongif={() => (panelOpen = false)} />
           </div>
         {/if}
+        {#if mention && mentionHits.length}
+          <div class="mentions" transition:fly={{ y: 8, duration: 120 }}>
+            {#each mentionHits as u, i (u.userId)}
+              <button class:cur={i === mentionIdx} onmousedown={(e) => e.preventDefault()} onclick={() => insertMention(u)}>
+                <Avatar name={u.name} id={u.userId} user={u.userId} photo={u.avatarId} size={32} />
+                <span class="mn">{u.name}</span><span class="mu muted">@{u.username}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {#if hasSel && !rec}
+          <div class="fmt" transition:fly={{ y: 6, duration: 120 }}>
+            <button title="Жирный (Ctrl+B)" onmousedown={(e) => e.preventDefault()} onclick={() => fmt('**')}><Icon name="bold" size={18} /></button>
+            <button title="Курсив (Ctrl+I)" onmousedown={(e) => e.preventDefault()} onclick={() => fmt('__')}><Icon name="italic" size={18} /></button>
+            <button title="Зачёркнутый (Ctrl+Shift+X)" onmousedown={(e) => e.preventDefault()} onclick={() => fmt('~~')}><Icon name="strike" size={18} /></button>
+            <button title="Моноширинный (Ctrl+Shift+M)" onmousedown={(e) => e.preventDefault()} onclick={() => fmt('`')}><Icon name="code" size={18} /></button>
+            <button title="Спойлер (Ctrl+Shift+P)" onmousedown={(e) => e.preventDefault()} onclick={() => fmt('||')}><Icon name="spoiler" size={18} /></button>
+            <button title="Ссылка (Ctrl+K)" onmousedown={(e) => e.preventDefault()} onclick={fmtLink}><Icon name="link" size={18} /></button>
+          </div>
+        {/if}
+        {#if sendMenu}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div class="panel-backdrop show" onclick={() => (sendMenu = false)}></div>
+          <div class="send-menu" transition:fly={{ y: 8, duration: 140 }}>
+            <button onclick={() => { sendMenu = false; send(true) }}><Icon name="bell-off" size={20} /> Отправить без звука</button>
+            <button onclick={scheduleIt}><Icon name="clock" size={20} /> Отложить сообщение</button>
+          </div>
+        {/if}
         <div class="composer">
           {#if rec}
             <div class="recbar">
@@ -349,8 +528,13 @@
           {:else}
             <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => (attachOpen = !attachOpen)}><Icon name="clip" /></button>
             <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} onpaste={paste}
-              onfocus={() => { if (narrow()) panelOpen = false }}
-              oninput={() => { resize(); app.typingTick() }}></textarea>
+              onfocus={() => { if (narrow()) panelOpen = false }} onselect={checkSel} onkeyup={() => { checkSel(); checkMention() }}
+              onmouseup={checkSel} onblur={() => setTimeout(() => { hasSel = false; mention = null }, 150)} onclick={checkMention}
+              oninput={() => { resize(); app.typingTick(); checkMention() }}></textarea>
+            {#if scheduledCount && !app.editing}
+              <button class="icon-btn sched-btn" aria-label="Отложенные сообщения" title="Отложенные сообщения"
+                onclick={() => (app.modal = { kind: 'scheduled', chatId: chat.id })}><Icon name="clock" /></button>
+            {/if}
             {#if !app.editing}
               <button class="icon-btn emoji-btn" class:on={panelOpen} aria-label={panelOpen ? 'Клавиатура' : 'Эмодзи, стикеры и GIF'}
                 title="Эмодзи, стикеры и GIF" onclick={togglePanel}><Icon name={panelOpen && narrow() ? 'keyboard' : 'smile'} /></button>
@@ -359,7 +543,8 @@
           <input type="file" multiple hidden accept="*/*" bind:this={fileInput} onchange={(e) => pick((e.currentTarget as HTMLInputElement).files)} />
         </div>
         {#if text.trim() || app.editing}
-          <button class="send" aria-label="Отправить" onclick={send}><Icon name={app.editing ? 'check' : 'send'} /></button>
+          <button class="send" aria-label="Отправить" onclick={sendClick} onpointerdown={sendDown} onpointerup={sendUp} onpointerleave={sendUp}
+            oncontextmenu={(e) => { e.preventDefault(); if (!app.editing) sendMenu = true }}><Icon name={app.editing ? 'check' : 'send'} /></button>
         {:else if rec?.locked}
           <button class="send" aria-label="Отправить" onclick={() => finishRec(true)}><Icon name="send" /></button>
         {:else}
@@ -410,6 +595,24 @@
   .status { font-size: 13px; }
   footer { position: relative; display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px 14px; max-width: 792px; width: 100%; margin: 0 auto; }
   .emoji-btn.on { color: var(--accent-light); }
+  .sched-btn { color: var(--accent-light); }
+  .lp-bar { margin-bottom: 0; border-radius: 12px 12px 0 0; }
+  .lp-bar + .compose-bar { border-radius: 0; margin-top: 0; }
+  .lp-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
+  .mentions { position: absolute; left: 16px; right: 84px; bottom: calc(100% + 4px); z-index: 27; max-height: 260px; overflow-y: auto;
+    background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow); padding: 4px 0; }
+  .mentions button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; text-align: left; }
+  .mentions button:hover, .mentions button.cur { background: var(--bg-hover); }
+  .mn { font-weight: 500; }
+  .mu { font-size: 13px; }
+  .fmt { position: absolute; left: 60px; bottom: calc(100% + 4px); z-index: 27; display: flex; gap: 2px; padding: 4px;
+    background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow); }
+  .fmt button { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text); }
+  .fmt button:hover { background: var(--bg-hover); }
+  .send-menu { position: absolute; right: 16px; bottom: calc(100% + 4px); z-index: 27; min-width: 240px; padding: 6px 0;
+    background: var(--bg-menu, #212d3b); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+  .send-menu button { display: flex; align-items: center; gap: 14px; padding: 10px 16px; font-size: 15px; text-align: left; }
+  .send-menu button:hover { background: var(--bg-hover); }
   .unblock { color: #e17076; font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .3px; padding: 6px 16px; border-radius: 10px; }
   .unblock:hover { background: var(--bg-hover); }
   .panel-backdrop { position: fixed; inset: 0; z-index: 25; }
@@ -418,7 +621,8 @@
   @media (max-width: 720px) {
     footer { flex-wrap: wrap; }
     /* Phones: docked under the field, where the keyboard was. */
-    .panel-backdrop { display: none; }
+    .panel-backdrop:not(.show) { display: none; }
+    .mentions { left: 8px; right: 8px; }
     .emoji-pop { position: static; order: 10; flex-basis: 100%; width: auto; height: 300px; max-height: 45vh; border-radius: 0;
       box-shadow: none; margin: 6px -8px -10px; }
   }

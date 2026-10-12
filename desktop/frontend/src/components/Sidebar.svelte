@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { plain } from '../lib/format'
   import { app } from '../lib/app.svelte'
   import { Messenger, type Chat } from '../lib/api'
   import { chatListTime } from '../lib/util'
@@ -38,7 +39,8 @@
     // Like Telegram: sender names only in groups.
     const who = c.last.outgoing ? 'Вы: ' : c.kind === 'group' && c.last.sender ? `${c.last.sender}: ` : ''
     const f = c.last.file
-    const body = c.last.kind === 'file' && f ? (MEDIA[f.kind] ?? `📎 ${f.name}`) + (f.caption ? ', ' + f.caption : '') : c.last.text
+    const body = c.last.kind === 'file' && f ? (MEDIA[f.kind] ?? `📎 ${f.name}`) + (f.caption ? ', ' + plain(f.caption) : '')
+      : c.last.kind === 'poll' && c.last.poll ? '📊 ' + c.last.poll.question : plain(c.last.text)
     return who + body
   }
 

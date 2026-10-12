@@ -1,4 +1,4 @@
-import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type Message, type State, type UIEvent, type UserHit, type UserProfile } from './api'
+import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type LinkView, type Message, type State, type UIEvent, type UserHit, type UserProfile } from './api'
 import { plural } from './util'
 import { MAX_FILE, prepareFile, prepareSticker, type Prepared } from './media'
 import { restoreOpenChat, saveOpenChat } from './persist'
@@ -22,6 +22,10 @@ export type Modal =
   | { kind: 'settings' }
   | { kind: 'relogin' }
   | { kind: 'deleteChat'; chatId: string; action: 'delete' | 'clear' | 'leave' }
+  | { kind: 'schedule'; chatId: string; text: string; silent: boolean; link: LinkView | null }
+  | { kind: 'scheduled'; chatId: string }
+  | { kind: 'poll'; chatId: string }
+  | { kind: 'pinMsg'; m: Message }
 
 // Unread counters per account (localStorage, this device only).
 const unreadKey = (userId?: string) => 'kantra.unread' + (userId ? '.' + userId : '')
@@ -277,6 +281,7 @@ class AppState {
     if (id !== this.currentId) {
       this.reply = null
       this.editing = null
+      this.selected = []
     }
     this.setCurrent(id)
     if (!id) return
@@ -308,7 +313,7 @@ class AppState {
    * Sends (or saves an edit) optimistically: the message is on screen at
    * once with a clock, the network round trip happens in the background.
    */
-  send(text: string): Promise<boolean> {
+  send(text: string, opts: { silent?: boolean; link?: LinkView | null } = {}): Promise<boolean> {
     const chatId = this.currentId
     if (!chatId || !text.trim()) return Promise.resolve(false)
     const editing = this.editing
@@ -333,7 +338,7 @@ class AppState {
     const tmp = 'local-' + Math.random().toString(36).slice(2)
     const temp = {
       seq: 0, id: tmp, chatId, senderId: this.state?.account?.userId ?? '', sender: this.me?.name ?? '', kind: 'text', text,
-      sentAt: Date.now(), outgoing: true, origin: '',
+      sentAt: Date.now(), outgoing: true, origin: '', silent: opts.silent, link: opts.link ?? undefined,
       reply: reply ? { id: reply.id, sender: reply.sender, text: reply.text || reply.file?.caption || reply.file?.name || '' } : undefined,
     } as Message
     const attempt = () => {
@@ -342,7 +347,7 @@ class AppState {
       const p = this.sendQueue.then(async () => {
         let msg: Message | null = null
         try {
-          msg = await Messenger.Send(chatId, text, reply?.id ?? '')
+          msg = await Messenger.SendWith(chatId, text, { replyTo: reply?.id ?? '', silent: !!opts.silent, link: opts.link ?? null })
         } catch (e) {
           this.toast(errorText(e), 'error', 5000)
         }
@@ -581,6 +586,65 @@ class AppState {
     return run
   }
 
+  /** Joins a group by its invite link (search box, a link in a message). */
+  async joinByLink(link: string) {
+    const id = await this.try(() => Messenger.JoinByLink(link.trim()))
+    if (id === undefined) return
+    if (this.chats.some((c) => c.id === id)) this.openChat(id)
+    else this.toast('Запрос отправлен — вас добавят, как только кто-то из участников будет в сети', 'info', 6000)
+  }
+
+  // ---- pinned messages of the open chat ----
+  pinned = $state<Record<string, Message[]>>({})
+  async loadPinned(chatId: string) {
+    this.pinned[chatId] = (await Messenger.Pinned(chatId).catch(() => null)) ?? []
+  }
+  async pin(m: Message, pin: boolean, forAll: boolean) {
+    const ok = await this.try(() => Messenger.Pin(m.chatId, m.id, pin, forAll))
+    if (ok === undefined) return
+    await this.loadPinned(m.chatId)
+    await this.refreshMessage(m.chatId, m.id)
+  }
+
+  // ---- jumping to a message (reply quote, search, pinned bar) ----
+  /** MessageList scrolls to it and flashes it. */
+  jump = $state<{ chatId: string; id: string; n: number } | null>(null)
+  private jumpSeq = 0
+  async jumpTo(chatId: string, id: string) {
+    // Older than what is loaded: load more history first.
+    let list = this.messages[chatId] ?? []
+    for (const limit of [2000, 10000, 50000]) {
+      if (list.some((m) => m.id === id)) break
+      const ms = await Messenger.Messages(chatId, limit).catch(() => null)
+      if (!ms) break
+      this.messages[chatId] = ms
+      list = ms
+      if (ms.length < limit) break
+    }
+    if (!list.some((m) => m.id === id)) {
+      this.toast('Сообщение не найдено', 'info')
+      return
+    }
+    this.jump = { chatId, id, n: ++this.jumpSeq }
+  }
+
+  // ---- scheduled messages (sent by this device at their time) ----
+  /** Bumped when the list may have changed (scheduled event, own changes). */
+  scheduledTick = $state(0)
+  async schedule(chatId: string, text: string, at: number, silent: boolean, link: LinkView | null) {
+    const ok = await this.try(() => Messenger.Schedule(chatId, text, at, { replyTo: '', silent, link }))
+    if (ok === undefined) return false
+    this.scheduledTick++
+    this.toast('Сообщение будет отправлено ' + new Date(at).toLocaleString('ru', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }))
+    return true
+  }
+
+  // ---- selecting several messages ----
+  selected = $state<string[]>([])
+  toggleSelect(id: string) {
+    this.selected = this.selected.includes(id) ? this.selected.filter((x) => x !== id) : [...this.selected, id]
+  }
+
   // ---- block list (ids), for the "Разблокировать" bar of a direct chat ----
   blocked = $state<string[]>([])
   async loadBlocked() {
@@ -683,7 +747,7 @@ class AppState {
     return this.localUrls[m.id] ?? m.file?.url ?? ''
   }
 
-  private addMessage(m: Message) {
+  addMessage(m: Message) {
     const list = this.messages[m.chatId]
     if (list) {
       if (!list.some((x) => x.id === m.id)) {
@@ -745,6 +809,10 @@ class AppState {
         break
       case 'message_updated':
         if (e.chatId && e.detail) await this.refreshMessage(e.chatId, e.detail)
+        if (e.chatId && this.pinned[e.chatId]) await this.loadPinned(e.chatId)
+        break
+      case 'scheduled':
+        this.scheduledTick++
         break
       case 'read':
         if (e.chatId && this.messages[e.chatId]) {

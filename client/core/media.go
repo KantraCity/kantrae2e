@@ -73,7 +73,7 @@ func (c *Client) SendMedia(ctx context.Context, groupID string, in MediaInput, o
 	if err := c.requireLogin(); err != nil {
 		return nil, err
 	}
-	return c.sendLocked(ctx, groupID, payload{Type: "media", ReplyTo: opt.ReplyTo, Media: ref})
+	return c.sendLocked(ctx, groupID, payload{Type: "media", ReplyTo: opt.ReplyTo, Media: ref, Extra: opt.extra()})
 }
 
 // uploadMedia encrypts a file with a fresh key and stores the ciphertext.

@@ -108,6 +108,24 @@
     lastLen = len
   })
 
+  // app.jumpTo: render enough history, scroll the message to the middle, flash it.
+  $effect(() => {
+    const j = app.jump
+    if (!j || j.chatId !== chatId) return
+    const idx = all.findIndex((m) => m.id === j.id)
+    if (idx < 0) return
+    if (all.length - idx > shown) shown = all.length - idx + 10
+    setTimeout(() => {
+      const el = document.getElementById('msg-' + j.id)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.remove('flash')
+      void el.offsetWidth
+      el.classList.add('flash')
+      setTimeout(() => el.classList.remove('flash'), 1300)
+    }, 30)
+  })
+
   onMount(() => {
     const io = new IntersectionObserver((es) => {
       if (es.some((e) => e.isIntersecting) && shown < all.length) shown += PAGE

@@ -89,6 +89,10 @@ export function CancelPending(): $CancellablePromise<void> {
     return $Call.ByID(1708660658);
 }
 
+export function CancelScheduled(id: string): $CancellablePromise<void> {
+    return $Call.ByID(2220966362, id);
+}
+
 /**
  * Chat returns one chat.
  */
@@ -237,6 +241,13 @@ export function LeaveGroup(chatID: string): $CancellablePromise<void> {
 }
 
 /**
+ * LinkPreview fetches the preview card of a web link (on this device).
+ */
+export function LinkPreview(url: string): $CancellablePromise<$models.LinkView | null> {
+    return $Call.ByID(914527835, url);
+}
+
+/**
  * Login adds this app as a new device of an existing account. Usually the
  * result is Pending: approve it on another device (same Code) or Recover.
  */
@@ -309,6 +320,20 @@ export function PendingCall(): $CancellablePromise<$models.CallSignal | null> {
 
 export function PendingLinks(): $CancellablePromise<$models.LinkRequest[] | null> {
     return $Call.ByID(3055171637);
+}
+
+/**
+ * Pin pins / unpins a message, for everybody or only for me.
+ */
+export function Pin(chatID: string, id: string, pin: boolean, forAll: boolean): $CancellablePromise<void> {
+    return $Call.ByID(3061908764, chatID, id, pin, forAll);
+}
+
+/**
+ * Pinned messages of a chat, newest pin first.
+ */
+export function Pinned(chatID: string): $CancellablePromise<$models.Message[] | null> {
+    return $Call.ByID(538011383, chatID);
 }
 
 export function Presence(userIDs: string[] | null): $CancellablePromise<$models.PresenceView[] | null> {
@@ -412,6 +437,24 @@ export function SavedGIFs(): $CancellablePromise<$models.Message[] | null> {
 }
 
 /**
+ * Schedule sends a text message later (at: unix ms).
+ */
+export function Schedule(chatID: string, text: string, at: number, opts: $models.SendOpts): $CancellablePromise<void> {
+    return $Call.ByID(280900772, chatID, text, at, opts);
+}
+
+export function Scheduled(chatID: string): $CancellablePromise<$models.ScheduledView[] | null> {
+    return $Call.ByID(460130880, chatID);
+}
+
+/**
+ * Search finds messages of a chat (newest first).
+ */
+export function Search(chatID: string, query: string): $CancellablePromise<$models.Message[] | null> {
+    return $Call.ByID(3525302257, chatID, query);
+}
+
+/**
  * SearchUsers finds people by username (global search, like in Telegram).
  */
 export function SearchUsers(query: string): $CancellablePromise<$models.UserHit[] | null> {
@@ -440,10 +483,21 @@ export function SendMedia(chatID: string, up: $models.MediaUpload, replyTo: stri
 }
 
 /**
+ * SendPoll sends a poll.
+ */
+export function SendPoll(chatID: string, question: string, options: string[] | null, multiple: boolean, anonymous: boolean): $CancellablePromise<$models.Message | null> {
+    return $Call.ByID(3558587118, chatID, question, options, multiple, anonymous);
+}
+
+/**
  * SendSavedGIF sends a saved GIF to a chat.
  */
 export function SendSavedGIF(chatID: string, id: string, replyTo: string): $CancellablePromise<$models.Message | null> {
     return $Call.ByID(4211156348, chatID, id, replyTo);
+}
+
+export function SendScheduledNow(id: string): $CancellablePromise<void> {
+    return $Call.ByID(678937142, id);
 }
 
 /**
@@ -451,6 +505,13 @@ export function SendSavedGIF(chatID: string, id: string, replyTo: string): $Canc
  */
 export function SendSignal(chatID: string, body: string): $CancellablePromise<void> {
     return $Call.ByID(12662335, chatID, body);
+}
+
+/**
+ * SendWith sends a text message with options.
+ */
+export function SendWith(chatID: string, text: string, opts: $models.SendOpts): $CancellablePromise<$models.Message | null> {
+    return $Call.ByID(1389365471, chatID, text, opts);
 }
 
 /**
@@ -565,4 +626,11 @@ export function UpdateProfile(name: string, bio: string): $CancellablePromise<$m
  */
 export function UserProfile(userID: string): $CancellablePromise<$models.UserProfile | null> {
     return $Call.ByID(1522381447, userID);
+}
+
+/**
+ * Vote chooses options of a poll (none retracts the vote).
+ */
+export function Vote(chatID: string, id: string, options: number[] | null): $CancellablePromise<void> {
+    return $Call.ByID(4209870141, chatID, id, options);
 }

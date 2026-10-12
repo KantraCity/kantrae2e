@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -135,6 +136,17 @@ var migrations = []string{
 	`ALTER TABLE groups ADD COLUMN about TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE groups ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE groups ADD COLUMN invite TEXT NOT NULL DEFAULT '';`,
+	// Message extras (link preview, poll, silent…; JSON), pinned messages
+	// (pinned_at > 0; pin_local = only on this account's devices), votes.
+	`ALTER TABLE messages ADD COLUMN extra TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE messages ADD COLUMN pinned_at INTEGER NOT NULL DEFAULT 0;
+	 CREATE TABLE votes (
+	     group_id TEXT NOT NULL,
+	     msg_uid  TEXT NOT NULL,
+	     user_id  TEXT NOT NULL,
+	     options  TEXT NOT NULL,
+	     PRIMARY KEY (group_id, msg_uid, user_id)
+	 );`,
 }
 
 func migrate(db *sql.DB) error {
@@ -386,13 +398,15 @@ type Message struct {
 	EditedAt     int64  `json:",omitempty"` // unix ms of the last edit
 	Deleted      bool   `json:",omitempty"` // deleted for everyone (tombstone)
 	FwdFrom      string `json:",omitempty"` // forwarded: name of the original author
+	Extra        string `json:",omitempty"` // JSON: link preview, poll, silent (core/extras.go)
+	PinnedAt     int64  `json:",omitempty"` // pinned in the chat at (unix ms), 0 = not pinned
 }
 
 // InsertMessage stores a message; duplicates (group_id, uid) are ignored.
 func (t *Tx) InsertMessage(m Message) error {
-	_, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, reply_to, fwd_from)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
-		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.FwdFrom)
+	_, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, reply_to, fwd_from, extra)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.FwdFrom, m.Extra)
 	return err
 }
 
@@ -498,6 +512,23 @@ func (t *Tx) ResetChatFlags(groupID string, hidden, left bool) error {
 	return nil
 }
 
+// SetPinned pins (at > 0) or unpins (0) a message; it is backed up again.
+func (t *Tx) SetPinned(groupID, uid string, at int64) error {
+	_, err := t.tx.Exec(`UPDATE messages SET pinned_at=?, backed_up=0 WHERE group_id=? AND uid=? AND deleted=0`, at, groupID, uid)
+	return err
+}
+
+// SetVote records a user's choice in a poll (empty: vote retracted).
+func (t *Tx) SetVote(groupID, uid, userID, options string) error {
+	if options == "" || options == "[]" {
+		_, err := t.tx.Exec(`DELETE FROM votes WHERE group_id=? AND msg_uid=? AND user_id=?`, groupID, uid, userID)
+		return err
+	}
+	_, err := t.tx.Exec(`INSERT INTO votes (group_id, msg_uid, user_id, options) VALUES (?, ?, ?, ?)
+		ON CONFLICT(group_id, msg_uid, user_id) DO UPDATE SET options=excluded.options`, groupID, uid, userID, options)
+	return err
+}
+
 // SetReaction sets (emoji "" removes) a user's reaction to a message.
 func (t *Tx) SetReaction(groupID, uid, userID, emoji string) error {
 	if emoji == "" {
@@ -580,15 +611,21 @@ func (s *Store) Message(ctx context.Context, groupID, uid string) (*Message, err
 // backed up) and reports whether it was new.
 func (t *Tx) InsertRestoredMessage(m Message) (bool, error) {
 	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, backed_up, origin,
-			reply_to, edited_at, deleted, fwd_from)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'backup', ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
-		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.EditedAt, m.Deleted, m.FwdFrom)
+			reply_to, edited_at, deleted, fwd_from, extra, pinned_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'backup', ?, ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.EditedAt, m.Deleted, m.FwdFrom,
+		m.Extra, m.PinnedAt)
 	if err != nil {
 		return false, err
 	}
 	n, _ := r.RowsAffected()
 	if n == 0 {
-		// Known already: a later edit or deletion in the backup still applies.
+		// Known already: a later edit, deletion or pin in the backup still applies.
+		if m.PinnedAt > 0 {
+			if _, err := t.tx.Exec(`UPDATE messages SET pinned_at=max(pinned_at, ?) WHERE group_id=? AND uid=?`, m.PinnedAt, m.GroupID, m.UID); err != nil {
+				return false, err
+			}
+		}
 		if m.Deleted {
 			_, err = t.tx.Exec(`UPDATE messages SET body='', deleted=1 WHERE group_id=? AND uid=?`, m.GroupID, m.UID)
 		} else if m.EditedAt > 0 {
@@ -604,9 +641,9 @@ func (t *Tx) InsertRestoredMessage(m Message) (bool, error) {
 // whether the message was new.
 func (t *Tx) InsertSharedMessage(m Message, sharedBy string) (bool, error) {
 	r, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by,
-			reply_to, edited_at, fwd_from)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shared', ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
-		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, sharedBy, m.ReplyTo, m.EditedAt, m.FwdFrom)
+			reply_to, edited_at, fwd_from, extra)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shared', ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, sharedBy, m.ReplyTo, m.EditedAt, m.FwdFrom, m.Extra)
 	if err != nil {
 		return false, err
 	}
@@ -620,7 +657,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		if err := rows.Scan(&m.Seq, &m.UID, &m.GroupID, &m.SenderUser, &m.SenderDevice, &m.Kind, &m.Body, &m.SentAt, &m.Outgoing, &m.Origin, &m.SharedBy,
-			&m.ReplyTo, &m.EditedAt, &m.Deleted, &m.FwdFrom); err != nil {
+			&m.ReplyTo, &m.EditedAt, &m.Deleted, &m.FwdFrom, &m.Extra, &m.PinnedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -629,7 +666,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 }
 
 const msgCols = `seq, uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by,
-	reply_to, edited_at, deleted, fwd_from`
+	reply_to, edited_at, deleted, fwd_from, extra, pinned_at`
 
 // Messages returns the last `limit` messages of a group, oldest first.
 func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Message, error) {
@@ -639,6 +676,64 @@ func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Mess
 		return nil, err
 	}
 	return scanMessages(rows)
+}
+
+// Pinned returns the pinned messages of a group, newest pin first.
+func (s *Store) Pinned(ctx context.Context, groupID string) ([]Message, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND pinned_at>0 AND deleted=0
+		ORDER BY pinned_at DESC LIMIT 100`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	return scanMessages(rows)
+}
+
+// Search finds messages of a group whose text (or media caption/name)
+// contains q, newest first. Messages are stored decrypted on this device
+// only, so the search never leaves it.
+func (s *Store) Search(ctx context.Context, groupID, q string, limit int) ([]Message, error) {
+	// SQLite's lower() only knows ASCII: match in Go (Unicode-aware).
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND deleted=0
+		AND kind IN ('text', 'media', 'poll') ORDER BY sent_at DESC LIMIT 50000`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	all, err := scanMessages(rows)
+	if err != nil {
+		return nil, err
+	}
+	var out []Message
+	for _, m := range all {
+		if strings.Contains(strings.ToLower(m.Body), q) {
+			out = append(out, m)
+			if len(out) == limit {
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+// Votes returns the votes of a poll: user id -> options JSON.
+func (s *Store) Votes(ctx context.Context, groupID, uid string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id, options FROM votes WHERE group_id=? AND msg_uid=?`, groupID, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var u, o string
+		if err := rows.Scan(&u, &o); err != nil {
+			return nil, err
+		}
+		out[u] = o
+	}
+	return out, rows.Err()
 }
 
 // MessagesSince returns up to limit messages of a group with sent_at >= from,

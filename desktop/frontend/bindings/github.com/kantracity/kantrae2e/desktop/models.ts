@@ -144,6 +144,17 @@ export interface LinkRequest {
     "at": number;
 }
 
+/**
+ * LinkView is a link preview card; Image is a data: URL.
+ */
+export interface LinkView {
+    "url": string;
+    "site"?: string;
+    "title"?: string;
+    "desc"?: string;
+    "image"?: string;
+}
+
 export interface LoginResult {
     "pending": boolean;
     "code"?: string;
@@ -244,6 +255,45 @@ export interface Message {
      * Read: an outgoing message someone else has read (✓✓).
      */
     "read"?: boolean;
+
+    /**
+     * Extras (extras.go): pinned in the chat, sent silently, link preview, poll.
+     */
+    "pinned"?: boolean;
+    "silent"?: boolean;
+    "link"?: LinkView | null;
+    "poll"?: PollView | null;
+}
+
+export interface PollOption {
+    "text": string;
+    "votes": number;
+    "mine"?: boolean;
+
+    /**
+     * names (not for anonymous polls)
+     */
+    "voters"?: string[] | null;
+}
+
+/**
+ * PollView: a poll with its results.
+ */
+export interface PollView {
+    "question": string;
+    "options": PollOption[] | null;
+    "multiple"?: boolean;
+    "anonymous"?: boolean;
+
+    /**
+     * people who voted
+     */
+    "total": number;
+
+    /**
+     * this account voted
+     */
+    "voted": boolean;
 }
 
 /**
@@ -272,6 +322,30 @@ export interface ReplyInfo {
     "id": string;
     "sender": string;
     "text": string;
+}
+
+/**
+ * ScheduledView: a message waiting to be sent.
+ */
+export interface ScheduledView {
+    "id": string;
+    "chatId": string;
+    "text": string;
+
+    /**
+     * unix ms
+     */
+    "at": number;
+    "silent"?: boolean;
+}
+
+/**
+ * SendOpts for SendWith: reply, silent (no notification), link preview.
+ */
+export interface SendOpts {
+    "replyTo": string;
+    "silent": boolean;
+    "link"?: LinkView | null;
 }
 
 /**

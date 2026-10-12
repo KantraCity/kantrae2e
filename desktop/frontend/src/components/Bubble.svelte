@@ -5,6 +5,8 @@
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
   import MediaContent from './MediaContent.svelte'
+  import RichText from './RichText.svelte'
+  import Poll from './Poll.svelte'
   import { bigEmojiCount } from '../lib/emoji.svelte'
 
   let { m, first, last, group, album }: { m: Message; first: boolean; last: boolean; group: boolean; album?: Message[] } = $props()
@@ -28,17 +30,23 @@
   }
   function touchEnd() { clearTimeout(pressTimer) }
 
-  function jumpTo(id: string) {
-    const el = document.getElementById('msg-' + id)
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    el.classList.add('flash')
-    setTimeout(() => el.classList.remove('flash'), 1200)
+  const jumpTo = (id: string) => app.jumpTo(m.chatId, id)
+
+  // Selection mode: a click selects instead of opening anything.
+  const selecting = $derived(app.selected.length > 0)
+  const isSelected = $derived(app.selected.includes(m.id))
+  function lineClick(e: MouseEvent) {
+    if (!selecting || m.id.startsWith('local-')) return
+    e.preventDefault()
+    e.stopPropagation()
+    app.toggleSelect(m.id)
   }
 
 </script>
 
-<div class="line" class:out={m.outgoing} class:last id={'msg-' + m.id}>
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div class="line" class:out={m.outgoing} class:last class:selecting class:selected={isSelected} id={'msg-' + m.id} onclickcapture={lineClick}>
+  {#if selecting}<span class="sel-check" class:on={isSelected}>{#if isSelected}<Icon name="check" size={14} />{/if}</span>{/if}
   {#if group && !m.outgoing}
     <div class="avatar-slot">{#if last}<Avatar name={m.sender} id={m.senderId} user={m.senderId} photo={m.senderAvatar} size={34} />{/if}</div>
   {/if}
@@ -80,7 +88,19 @@
     {:else if m.kind === 'file' && m.file}
       <MediaContent {m} />
     {:else}
-      <span class="text" class:big-emoji={bigEmoji > 0} style={bigEmoji ? `--emoji-size:${[0, 64, 50, 40][bigEmoji]}px` : undefined}>{m.text}</span>
+      {#if m.kind === 'poll' && m.poll}
+        <Poll {m} />
+      {:else}
+        <span class="text" class:big-emoji={bigEmoji > 0} style={bigEmoji ? `--emoji-size:${[0, 64, 50, 40][bigEmoji]}px` : undefined}>{#if bigEmoji}{m.text}{:else}<RichText text={m.text} />{/if}</span>
+      {/if}
+      {#if m.link}
+        <a class="lp" href={m.link.url} target="_blank" rel="noopener noreferrer">
+          <span class="lp-site">{m.link.site}</span>
+          {#if m.link.title}<span class="lp-title">{m.link.title}</span>{/if}
+          {#if m.link.desc}<span class="lp-desc">{m.link.desc}</span>{/if}
+          {#if m.link.image}<img class="lp-img" src={m.link.image} alt="" />{/if}
+        </a>
+      {/if}
     {/if}
     {#if m.reactions?.length}
       <div class="reacts">
@@ -91,6 +111,7 @@
     {/if}
     <span class="time">
       {#if m.edited}<span class="edited">изменено</span>{/if}
+      {#if m.pinned}<span class="pin-mark" title="Закреплено"><Icon name="pin" size={12} /></span>{/if}
       {timeHM(m.sentAt)}
       {#if app.failed[m.id]}
         <button class="failed" title="Не отправлено — нажмите, чтобы повторить" onclick={() => app.failed[m.id]?.()}>!</button>
@@ -172,4 +193,18 @@
   .a-spin { width: 18px; height: 18px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: aspin .8s linear infinite; }
   @keyframes aspin { to { transform: rotate(360deg) } }
   .album-caption { white-space: pre-wrap; margin-top: 6px; padding: 0 4px; }
+  .lp { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; padding: 4px 0 4px 10px; border-left: 3px solid var(--accent-light);
+    border-radius: 3px; text-decoration: none; color: inherit; max-width: 360px; }
+  :global(.out) .lp { border-left-color: #fff; }
+  .lp-site { font-weight: 600; font-size: 13px; color: var(--accent-light); }
+  :global(.out) .lp-site { color: #fff; }
+  .lp-title { font-weight: 600; font-size: 14px; }
+  .lp-desc { font-size: 13px; opacity: .85; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .lp-img { margin-top: 6px; border-radius: 8px; max-width: 100%; max-height: 200px; object-fit: cover; }
+  .pin-mark { display: inline-flex; opacity: .8; }
+  .line.selecting { cursor: pointer; padding-left: 34px; position: relative; border-radius: 10px; transition: background .15s; }
+  .line.selected { background: rgba(82, 136, 193, .18); }
+  .sel-check { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.5); display: flex; align-items: center; justify-content: center; color: #fff; transition: background .15s; }
+  .sel-check.on { background: var(--accent); border-color: var(--accent); }
 </style>

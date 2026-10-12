@@ -73,6 +73,12 @@
     }
   }
 
+  function poll() {
+    const id = app.currentId
+    onclose()
+    if (id) app.modal = { kind: 'poll', chatId: id }
+  }
+
   function picked(list: FileList | null | undefined, asMedia: boolean) {
     const files = Array.from(list ?? [])
     if (!files.length) return
@@ -128,6 +134,7 @@
         <button onclick={() => mediaInput?.click()}><span class="ai blue"><Icon name="image" size={22} /></span>Галерея</button>
         <button onclick={() => fileInput?.click()}><span class="ai green"><Icon name="file" size={22} /></span>Файл</button>
         <button onclick={() => cameraInput?.click()}><span class="ai orange"><Icon name="camera" size={22} /></span>Камера</button>
+        <button onclick={poll}><span class="ai yellow"><Icon name="poll" size={22} /></span>Опрос</button>
       </div>
     {/if}
   </div>
@@ -135,6 +142,7 @@
   <div class="menu" transition:fly={{ y: 10, duration: 160 }}>
     <button onclick={() => mediaInput?.click()}><Icon name="image" size={20} /> Фото или видео</button>
     <button onclick={() => fileInput?.click()}><Icon name="file" size={20} /> Файл</button>
+    <button onclick={poll}><Icon name="poll" size={20} /> Опрос</button>
   </div>
 {/if}
 
@@ -166,6 +174,7 @@
   .ai.blue { background: #3d8be0; }
   .ai.green { background: #3fbf5f; }
   .ai.orange { background: #f0a24a; }
+  .ai.yellow { background: #e0b12f; }
   .send-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px 12px; border-top: 1px solid var(--border); }
   .send-bar .field { flex: 1; }
   .send { position: relative; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: #fff; display: flex;

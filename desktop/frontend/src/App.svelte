@@ -24,6 +24,10 @@
   import Verify from './components/Verify.svelte'
   import TitleBar from './components/TitleBar.svelte'
   import ChatMenu from './components/ChatMenu.svelte'
+  import ScheduleMessage from './components/ScheduleMessage.svelte'
+  import ScheduledList from './components/ScheduledList.svelte'
+  import PollCreate from './components/PollCreate.svelte'
+  import PinMessage from './components/PinMessage.svelte'
   import DeleteChat from './components/DeleteChat.svelte'
   import CallView from './components/CallView.svelte'
   import { checkPendingCall } from './lib/call.svelte'
@@ -86,6 +90,10 @@
 {:else if app.modal?.kind === 'settings'}<Settings />
 {:else if app.modal?.kind === 'relogin'}<Relogin />
 {:else if app.modal?.kind === 'deleteChat'}<DeleteChat chatId={app.modal.chatId} action={app.modal.action} />
+{:else if app.modal?.kind === 'schedule'}<ScheduleMessage chatId={app.modal.chatId} text={app.modal.text} silent={app.modal.silent} link={app.modal.link} />
+{:else if app.modal?.kind === 'scheduled'}<ScheduledList chatId={app.modal.chatId} />
+{:else if app.modal?.kind === 'poll'}<PollCreate chatId={app.modal.chatId} />
+{:else if app.modal?.kind === 'pinMsg'}<PinMessage m={app.modal.m} />
 {/if}
 
 {#if app.menu}<MessageMenu />{/if}
