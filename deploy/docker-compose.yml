@@ -48,6 +48,7 @@ services:
     build:
       context: .
       dockerfile: minio.Dockerfile
+      args: { GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" }
     command: server /data --console-address ":9001"
     restart: unless-stopped
     environment:
@@ -64,7 +65,7 @@ services:
 
   # Creates the `history` and `media` buckets (idempotent).
   s3init:
-    build: { context: .., args: { SERVICE: s3init } }
+    build: { context: .., args: { SERVICE: s3init, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment: *s3
     networks: [backend]
     depends_on:
@@ -73,7 +74,7 @@ services:
 
   auth-service:
     <<: *service
-    build: { context: .., args: { SERVICE: auth-service } }
+    build: { context: .., args: { SERVICE: auth-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment:
       <<: *env
       LISTEN_ADDR: ":8080"
@@ -83,7 +84,7 @@ services:
 
   directory-service:
     <<: *service
-    build: { context: .., args: { SERVICE: directory-service } }
+    build: { context: .., args: { SERVICE: directory-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment:
       <<: *env
       LISTEN_ADDR: ":8081"
@@ -93,7 +94,7 @@ services:
 
   delivery-service:
     <<: *service
-    build: { context: .., args: { SERVICE: delivery-service } }
+    build: { context: .., args: { SERVICE: delivery-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment:
       <<: *env
       LISTEN_ADDR: ":8082"
@@ -103,7 +104,7 @@ services:
 
   history-service:
     <<: *service
-    build: { context: .., args: { SERVICE: history-service } }
+    build: { context: .., args: { SERVICE: history-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment:
       <<: [*env, *s3]
       LISTEN_ADDR: ":8083"
@@ -116,7 +117,7 @@ services:
 
   media-service:
     <<: *service
-    build: { context: .., args: { SERVICE: media-service } }
+    build: { context: .., args: { SERVICE: media-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment:
       <<: [*env, *s3]
       LISTEN_ADDR: ":8084"
@@ -132,6 +133,7 @@ services:
     build:
       context: .
       dockerfile: caddy.Dockerfile
+      args: { GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" }
     restart: unless-stopped
     command: caddy run --config /etc/caddy/Caddyfile.dev --adapter caddyfile
     ports:

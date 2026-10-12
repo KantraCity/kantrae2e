@@ -52,6 +52,7 @@ services:
     build:
       context: .
       dockerfile: minio.Dockerfile
+      args: { GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" }
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -64,7 +65,7 @@ services:
       <<: *health
 
   s3init:
-    build: { context: .., args: { SERVICE: s3init } }
+    build: { context: .., args: { SERVICE: s3init, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment: *s3
     networks: [backend]
     depends_on:
@@ -72,28 +73,28 @@ services:
 
   auth-service:
     <<: *service
-    build: { context: .., args: { SERVICE: auth-service } }
+    build: { context: .., args: { SERVICE: auth-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment: { <<: *env, LISTEN_ADDR: ":8080" }
     depends_on: { postgres: { condition: service_healthy } }
     healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"], <<: *health }
 
   directory-service:
     <<: *service
-    build: { context: .., args: { SERVICE: directory-service } }
+    build: { context: .., args: { SERVICE: directory-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment: { <<: *env, LISTEN_ADDR: ":8081" }
     depends_on: { postgres: { condition: service_healthy } }
     healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"], <<: *health }
 
   delivery-service:
     <<: *service
-    build: { context: .., args: { SERVICE: delivery-service } }
+    build: { context: .., args: { SERVICE: delivery-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment: { <<: *env, LISTEN_ADDR: ":8082" }
     depends_on: { postgres: { condition: service_healthy } }
     healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"], <<: *health }
 
   history-service:
     <<: *service
-    build: { context: .., args: { SERVICE: history-service } }
+    build: { context: .., args: { SERVICE: history-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment: { <<: [*env, *s3], LISTEN_ADDR: ":8083" }
     depends_on:
       postgres: { condition: service_healthy }
@@ -102,7 +103,7 @@ services:
 
   media-service:
     <<: *service
-    build: { context: .., args: { SERVICE: media-service } }
+    build: { context: .., args: { SERVICE: media-service, GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" } }
     environment: { <<: [*env, *s3], LISTEN_ADDR: ":8084" }
     depends_on:
       postgres: { condition: service_healthy }
@@ -115,6 +116,7 @@ services:
     build:
       context: .
       dockerfile: caddy.Dockerfile
+      args: { GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}" }
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}

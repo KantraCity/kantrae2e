@@ -1,6 +1,9 @@
 # All Go services in one image (pure Go, no cgo). Select with SERVICE:
 #   docker build --build-arg SERVICE=auth-service .
 FROM golang:1.26-alpine AS build
+# Go module mirror, e.g. https://goproxy.cn,direct where proxy.golang.org is slow.
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

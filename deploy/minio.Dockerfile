@@ -3,6 +3,8 @@
 # kantra/minio:local). Pin a version with --build-arg MINIO_VERSION=<module version>.
 FROM golang:1.26-alpine AS build
 ARG MINIO_VERSION=latest
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 RUN CGO_ENABLED=0 go install -trimpath github.com/minio/minio@${MINIO_VERSION}
 
 FROM alpine:3.22

@@ -54,6 +54,20 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env ps   # �
 месте: без него не поднять этот же сервер с теми же данными (переписку он не защищает — она
 и так зашифрована на устройствах).
 
+### Если сборка падает
+
+- **`proxy.golang.org … TLS handshake timeout`** (часто на российских VPS): Go-модули качаются
+  через зеркало. Добавьте в `deploy/.env` строку
+  `GOPROXY=https://goproxy.cn,https://goproxy.io,direct` и повторите команду запуска.
+  Если не помогло — соберите образы по одному (меньше одновременных загрузок):
+  ```bash
+  C="docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env"
+  for s in caddy minio s3init auth-service directory-service delivery-service history-service media-service; do $C build $s || break; done
+  $C up -d
+  ```
+- **Сборка MinIO убита (`signal: killed`, exit 137)** — не хватило памяти: включите swap (выше).
+- Повторный запуск продолжает с кэша: уже собранные слои не скачиваются заново.
+
 ## 4. Приложения с вашим доменом
 
 Вариант А — **сразу в сборках**: в GitHub → Settings → Secrets and variables → Actions →

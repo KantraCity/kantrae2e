@@ -21,5 +21,8 @@ POSTGRES_PASSWORD=$(rnd 24)
 POSTGRES_DB=kantra
 MINIO_ROOT_USER=kantra
 MINIO_ROOT_PASSWORD=$(rnd 24)
+# Go module mirror for building the images (uncomment if proxy.golang.org
+# times out from this server):
+# GOPROXY=https://goproxy.cn,https://goproxy.io,direct
 EOT
 echo "deploy/.env written for $DOMAIN (secrets are random; keep this file private and backed up)"
