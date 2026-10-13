@@ -3,6 +3,8 @@ name: ci
 on:
   push:
   pull_request:
+  # Actions → ci → "Run workflow": build and release without a push.
+  workflow_dispatch:
 
 # Every build is versioned 1.0.<run number>; the apps trust update manifests
 # signed with the key whose public part is the repository variable
@@ -269,7 +271,7 @@ jobs:
   # from (desktop/update.go): the files, latest.json signed with the update
   # key, and the AltStore / SideStore source for the iPhone app.
   release:
-    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == github.event.repository.default_branch
     needs: [test, desktop, windows, android, macos, ios]
     runs-on: ubuntu-latest
     permissions:
