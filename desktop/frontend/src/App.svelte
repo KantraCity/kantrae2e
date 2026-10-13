@@ -70,9 +70,16 @@
     const id = app.currentId
     if (id === lastChat) return
     lastChat = id
-    if (swipeNav) swipeNav = false
-    else noAnim = false
+    if (swipeNav) {
+      swipeNav = false
+      resetSwipe() // the chat is closed now: the slid-away view can go
+    } else noAnim = false
   })
+  function resetSwipe() {
+    backSwipe = false
+    layoutEl?.style.removeProperty('--sx')
+    layoutEl?.style.removeProperty('--sp')
+  }
   const narrow = () => matchMedia('(max-width: 720px)').matches
   function backMove(d: number) {
     if (!layoutEl) return
@@ -92,13 +99,16 @@
     el.style.setProperty('--sp', go ? '1' : '0')
     setTimeout(() => {
       el.classList.remove('settle')
-      if (go) {
-        swipeNav = true
-        app.openChat(null)
+      if (!go) {
+        resetSwipe()
+        return
       }
-      backSwipe = false
-      el.style.removeProperty('--sx')
-      el.style.removeProperty('--sp')
+      // Closing goes through the history (back), which lands a moment
+      // later: the chat stays slid away until it is really closed, or it
+      // flashed back for a frame.
+      swipeNav = true
+      app.openChat(null)
+      setTimeout(() => { if (swipeNav) { swipeNav = false; resetSwipe() } }, 800)
     }, 190)
   }
 </script>
