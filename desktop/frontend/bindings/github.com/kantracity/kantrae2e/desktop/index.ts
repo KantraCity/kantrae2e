@@ -34,6 +34,7 @@ export type {
     Settings,
     State,
     UIEvent,
+    UpdateState,
     UserHit,
     UserProfile
 } from "./models.js";

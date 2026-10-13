@@ -14,8 +14,10 @@ android {
         applicationId "city.kantra.app"
         minSdk 21
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        // CI sets the build number: every release must have a higher one
+        // to install over the previous.
+        versionCode (System.getenv("KANTRA_BUILD") ?: "1").toInteger()
+        versionName System.getenv("KANTRA_VERSION") ?: "dev"
 
         // Configure supported ABIs
         ndk {
@@ -42,6 +44,7 @@ android {
         release {
             if (hasKeystore) {
                 storeFile file(keystoreFile)
+                if (keystoreFile.endsWith(".p12")) storeType "pkcs12"
                 storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 keyAlias System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword System.getenv("ANDROID_KEY_PASSWORD")

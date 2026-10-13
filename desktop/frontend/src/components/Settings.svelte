@@ -245,6 +245,29 @@
     </div>
 
     <div class="section">
+      <div class="label"><Icon name="download" size={18} /> Версия и обновления</div>
+      {#if app.update}
+        {@const u = app.update}
+        <p class="muted small">Kantra {u.current}{u.state === 'off' ? ' (сборка без автообновления)' : ''}</p>
+        {#if u.state === 'checking'}<p class="muted small">Проверяем обновления…</p>
+        {:else if u.state === 'downloading'}<p class="muted small">Загружается версия {u.latest}…</p>
+        {:else if u.state === 'ready'}
+          <p class="small">Версия {u.latest} загружена{u.install === 'restart' ? ' — установится при следующем запуске' : ''}.</p>
+          <button class="btn flat" onclick={() => app.applyUpdate()}>{u.install === 'restart' ? 'Перезапустить сейчас' : 'Установить'}</button>
+        {:else if u.state === 'manual'}
+          <p class="small">Вышла версия {u.latest}: обновите Kantra в AltStore / SideStore.</p>
+          <button class="btn flat" onclick={() => app.applyUpdate()}>Страница версии</button>
+        {:else if u.state === 'failed'}
+          <p class="muted small">Не удалось обновиться: {u.error}</p>
+          <button class="btn flat" onclick={() => Messenger.CheckForUpdate()}>Проверить ещё раз</button>
+        {:else if u.state === 'none'}
+          <p class="muted small">Установлена последняя версия.</p>
+          <button class="btn flat" onclick={() => Messenger.CheckForUpdate()}>Проверить обновления</button>
+        {/if}
+      {/if}
+    </div>
+
+    <div class="section">
       <div class="label"><Icon name="key" size={18} /> Ключ восстановления</div>
       <p class="muted small">
         {#if hasRecovery === null}…

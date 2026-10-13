@@ -55,7 +55,10 @@ func main() {
 	if !mainStarted.CompareAndSwap(false, true) {
 		return
 	}
+	// A downloaded update is installed before anything else (update.go).
+	earlyUpdate()
 	messenger := sharedMessenger()
+	go messenger.updateLoop()
 
 	// Desktop: one running app per user. Starting it again (shortcut,
 	// autostart) brings the existing window to the front instead of a
@@ -80,7 +83,9 @@ func main() {
 	app := application.New(application.Options{
 		SingleInstance: single,
 		Name:           "Kantra",
-		Description:    "E2EE messenger (MLS)",
+		// A downloaded update takes the old version's place on quit.
+		OnShutdown:  onQuit,
+		Description: "E2EE messenger (MLS)",
 		Services: append([]application.Service{
 			application.NewService(messenger),
 		}, platformServices(messenger)...),

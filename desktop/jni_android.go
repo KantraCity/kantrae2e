@@ -143,3 +143,18 @@ func platformSaveMedia(name, mime string, data []byte) (string, error) {
 	}
 	return "Сохранено в Загрузки", nil
 }
+
+// Updates: the verified APK is installed with the system installer
+// (KantraNative.installUpdate); Android asks the user to confirm unless
+// Kantra installed the current version itself (Android 12+).
+func platformStageUpdate(string, string) error { return nil }
+
+func platformApplyUpdate(path string) error {
+	if msg := javaCallString("installUpdate", path); msg != "" {
+		return errors.New(msg)
+	}
+	return nil
+}
+
+func earlyUpdate() {}
+func onQuit()      {}

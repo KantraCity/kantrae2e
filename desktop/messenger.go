@@ -239,6 +239,9 @@ type Messenger struct {
 	// Notifications (notify.go), guarded by mu.
 	notif      notifier
 	foreground bool
+	// Self-update (update.go).
+	updOnce sync.Once
+	updater *updater
 	// Local passcode (passcode.go).
 	passcode   *passcodeFile
 	locked     bool

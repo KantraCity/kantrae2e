@@ -44,6 +44,14 @@ export function AddSaved(up: $models.MediaUpload): $CancellablePromise<$models.M
     return $Call.ByID(3859539335, up);
 }
 
+/**
+ * ApplyUpdate: desktop — restart now with the new version; Android — open
+ * the installer; iPhone — the release page (AltStore / SideStore).
+ */
+export function ApplyUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(3502265634);
+}
+
 export function ApproveLink(deviceID: string): $CancellablePromise<void> {
     return $Call.ByID(3157958442, deviceID);
 }
@@ -102,6 +110,13 @@ export function Chat(chatID: string): $CancellablePromise<$models.Chat | null> {
 
 export function Chats(): $CancellablePromise<$models.Chat[] | null> {
     return $Call.ByID(3197888096);
+}
+
+/**
+ * CheckForUpdate checks now (Settings).
+ */
+export function CheckForUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(2571543763);
 }
 
 /**
@@ -183,6 +198,13 @@ export function GetSettings(): $CancellablePromise<$models.Settings> {
  */
 export function GetState(): $CancellablePromise<$models.State> {
     return $Call.ByID(3948464848);
+}
+
+/**
+ * GetUpdate reports the version and the update state.
+ */
+export function GetUpdate(): $CancellablePromise<$models.UpdateState> {
+    return $Call.ByID(4149948654);
 }
 
 /**

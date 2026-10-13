@@ -72,6 +72,16 @@
     {#if app.passcode.enabled}<button class="icon-btn" aria-label="Заблокировать" title="Заблокировать (код-пароль)" onclick={() => app.lock()}><Icon name="lock" size={20} /></button>{/if}
   </header>
 
+  {#if app.update && (app.update.state === 'ready' || app.update.state === 'manual')}
+    <button class="link-banner update-banner" onclick={() => app.applyUpdate()}>
+      <Icon name="download" size={20} />
+      <span class="grow">{app.update.state === 'manual'
+        ? `Вышла версия ${app.update.latest} — обновите в AltStore / SideStore`
+        : app.update.install === 'restart'
+          ? `Обновление ${app.update.latest} установится при перезапуске — перезапустить сейчас`
+          : `Доступна версия ${app.update.latest} — установить`}</span>
+    </button>
+  {/if}
   {#if app.links.length}
     <button class="link-banner" onclick={() => (app.modal = { kind: 'approveLink', deviceId: app.links[0].deviceId })}>
       <Icon name="device" size={20} />
@@ -179,6 +189,8 @@
   .empty.small { padding: 16px; font-size: 14px; }
   .clear { color: var(--text-muted); display: inline-flex; }
   .section-title { font-size: 14px; font-weight: 500; color: var(--text-muted); padding: 10px 12px 6px; background: var(--bg-sidebar); }
+  .update-banner { background: #2f6f3e; }
+  .grow { flex: 1; }
   .link-banner { display: flex; align-items: center; gap: 10px; margin: 0 12px 6px; padding: 10px 14px; border-radius: 10px; background: var(--bg-active); color: #fff; text-align: left; font-size: 14px; }
   .menu-backdrop { position: absolute; inset: 0; z-index: 2; }
   .fab-menu { position: absolute; right: 20px; bottom: 84px; z-index: 3; background: var(--bg-menu); border-radius: 12px; padding: 6px 0; box-shadow: var(--shadow);

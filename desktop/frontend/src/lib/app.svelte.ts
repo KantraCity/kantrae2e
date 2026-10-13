@@ -1,4 +1,4 @@
-import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type LinkView, type Message, type State, type UIEvent, type UserHit, type UserProfile } from './api'
+import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type LinkView, type Message, type State, type UIEvent, type UpdateState, type UserHit, type UserProfile } from './api'
 import { plural } from './util'
 import { MAX_FILE, prepareFile, prepareSticker, type Prepared } from './media'
 import { restoreOpenChat, saveOpenChat } from './persist'
@@ -83,6 +83,7 @@ class AppState {
     this.unsubscribe?.()
     this.unsubscribe = onEvent((e) => this.handleEvent(e))
     await this.loadPasscode()
+    this.loadUpdate()
     // A fresh page (browser reload, Android activity recreated) is a new
     // start: ask for the passcode like on launch.
     if (this.passcode.enabled && !this.locked) {
@@ -678,6 +679,23 @@ class AppState {
     a.remove()
   }
 
+  // ---- app updates (desktop/update.go) ----
+  update = $state<UpdateState | null>(null)
+  async loadUpdate() {
+    this.update = await Messenger.GetUpdate().catch(() => null)
+  }
+  /** Desktop: restart into the new version; Android: the installer;
+   * iPhone: the release page (AltStore / SideStore update it). */
+  async applyUpdate() {
+    const u = this.update
+    if (!u) return
+    if (u.state === 'manual') {
+      if (u.page) window.open(u.page, '_blank')
+      return
+    }
+    await this.try(() => Messenger.ApplyUpdate())
+  }
+
   // ---- local passcode (desktop/passcode.go) ----
   locked = $state(false)
   passcode = $state<{ enabled: boolean; autoLock: number }>({ enabled: false, autoLock: 0 })
@@ -887,6 +905,9 @@ class AppState {
       case 'message_updated':
         if (e.chatId && e.detail) await this.refreshMessage(e.chatId, e.detail)
         if (e.chatId && this.pinned[e.chatId]) await this.loadPinned(e.chatId)
+        break
+      case 'update':
+        await this.loadUpdate()
         break
       case 'locked':
         this.locked = true

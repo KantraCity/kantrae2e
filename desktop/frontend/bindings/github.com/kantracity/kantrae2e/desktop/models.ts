@@ -458,6 +458,33 @@ export interface UIEvent {
 }
 
 /**
+ * UpdateState for the UI.
+ */
+export interface UpdateState {
+    "current": string;
+    "build": number;
+
+    /**
+     * "off" (local build), "none", "checking", "downloading", "ready"
+     * (installed on restart / tap to install), "manual" (iPhone: AltStore),
+     * "failed".
+     */
+    "state": string;
+    "latest"?: string;
+    "error"?: string;
+
+    /**
+     * the release page
+     */
+    "page"?: string;
+
+    /**
+     * "restart", "installer" or "altstore"
+     */
+    "install": string;
+}
+
+/**
  * UserHit is a global search result.
  */
 export interface UserHit {

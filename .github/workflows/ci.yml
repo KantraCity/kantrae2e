@@ -4,6 +4,14 @@ on:
   push:
   pull_request:
 
+# Every build is versioned 1.0.<run number>; the apps trust update manifests
+# signed with the key whose public part is the repository variable
+# UPDATE_PUBLIC_KEY (create the keys with deploy/release-keys.sh).
+env:
+  KANTRA_BUILD: ${{ github.run_number }}
+  KANTRA_VERSION: 1.0.${{ github.run_number }}
+  UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -59,9 +67,15 @@ jobs:
       - name: Type-check frontend
         working-directory: desktop/frontend
         run: npm ci && npx svelte-check --tsconfig ./tsconfig.json
+      - name: Version and update key
+        run: .github/preset-version.sh
       - name: Build web (server mode) and desktop
         working-directory: desktop
         run: wails3 task build:server && wails3 task build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kantra-linux-amd64
+          path: desktop/bin/kantra-desktop
 
   windows:
     runs-on: windows-latest
@@ -98,6 +112,9 @@ jobs:
         if: ${{ vars.KANTRA_SERVER != '' }}
         shell: bash
         run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
+      - name: Version and update key
+        shell: bash
+        run: .github/preset-version.sh
       - name: Build desktop exe
         env:
           CGO_ENABLED: "1"
@@ -136,8 +153,28 @@ jobs:
         if: ${{ vars.KANTRA_SERVER != '' }}
         shell: bash
         run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
+      - name: Version and update key
+        shell: bash
+        run: .github/preset-version.sh
       # The runner ships the Android SDK and NDK (ANDROID_HOME, ANDROID_NDK_HOME).
-      - name: Build APK (arm64, release, debug-signed)
+      # Release key from the secrets (deploy/release-keys.sh); without them
+      # the public test key signs the APK (and it is left out of releases).
+      - name: Android release key
+        shell: bash
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/kantra-release.p12"
+            { echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/kantra-release.p12"
+              echo "ANDROID_KEYSTORE_PASSWORD=$KS_PASS"
+              echo "ANDROID_KEY_PASSWORD=$KS_PASS"
+              echo "ANDROID_KEY_ALIAS=kantra"; } >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: the APK is signed with the public test key"
+          fi
+      - name: Build APK (arm64, release)
         run: make android
       - uses: actions/upload-artifact@v4
         with:
@@ -166,6 +203,9 @@ jobs:
         if: ${{ vars.KANTRA_SERVER != '' }}
         shell: bash
         run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
+      - name: Version and update key
+        shell: bash
+        run: .github/preset-version.sh
       - name: Build Kantra.app (arm64, ad-hoc signed)
         run: |
           set -o pipefail
@@ -201,6 +241,9 @@ jobs:
         if: ${{ vars.KANTRA_SERVER != '' }}
         shell: bash
         run: printf 'package main\n\nfunc init() { buildServer = "%s" }\n' "${{ vars.KANTRA_SERVER }}" > desktop/server_preset_ci.go
+      - name: Version and update key
+        shell: bash
+        run: .github/preset-version.sh
       # Unsigned device build: re-signed on install with your Apple ID
       # (Sideloadly / AltStore) — see DEPLOY.md. Signing in CI would need
       # your Apple certificate and provisioning profile as secrets.
@@ -221,3 +264,59 @@ jobs:
         run: |
           make mls-ffi-ios IOS_PLATFORM=simulator
           cd desktop && "$(go env GOPATH)/bin/wails3" task ios:package IOS_PLATFORM=simulator
+
+  # Every push to the default branch becomes a release the apps update
+  # from (desktop/update.go): the files, latest.json signed with the update
+  # key, and the AltStore / SideStore source for the iPhone app.
+  release:
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    needs: [test, desktop, windows, android, macos, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+      HAS_ANDROID_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Keys present?
+        id: keys
+        run: |
+          if [ -z "$UPDATE_SIGNING_KEY" ] || [ -z "$UPDATE_PUBLIC_KEY" ]; then
+            echo "::warning::No release: set the secret UPDATE_SIGNING_KEY and the variable UPDATE_PUBLIC_KEY (deploy/release-keys.sh)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.keys.outputs.ok == 'true'
+        with:
+          path: artifacts
+      - name: Collect the apps
+        if: steps.keys.outputs.ok == 'true'
+        run: |
+          mkdir dist
+          cp artifacts/kantra-windows-amd64/kantra-desktop.exe dist/Kantra-windows-amd64.exe
+          cp artifacts/kantra-linux-amd64/kantra-desktop dist/Kantra-linux-amd64
+          cp artifacts/kantra-macos-arm64/Kantra-macos-arm64.zip dist/
+          cp artifacts/kantra-ios/Kantra.ipa dist/
+          if [ "$HAS_ANDROID_KEY" = "true" ]; then
+            cp artifacts/kantra-android-arm64/kantra-desktop.apk dist/Kantra-android-arm64.apk
+          else
+            echo "::warning::Android left out: no release key (ANDROID_KEYSTORE_BASE64)"
+          fi
+          ls -l dist
+      - name: Sign latest.json
+        if: steps.keys.outputs.ok == 'true'
+        run: go run ./tools/release -dir dist -version "$KANTRA_VERSION" -build "$KANTRA_BUILD" -repo "$GITHUB_REPOSITORY"
+      - name: Publish
+        if: steps.keys.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          printf '%s\n' "$NOTES" > notes.md
+          gh release create "v$KANTRA_VERSION" dist/* --title "Kantra $KANTRA_VERSION" --notes-file notes.md --target "$GITHUB_SHA" --latest

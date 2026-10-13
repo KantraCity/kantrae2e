@@ -249,6 +249,47 @@ public final class KantraNative {
         for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
     }
 
+    /**
+     * Installs a downloaded, signature-checked update (update.go) with the
+     * system installer. Returns "" when the install started, else what to
+     * do. Android asks the user to confirm; from Android 12 on, once Kantra
+     * itself installed the running version, it updates without asking.
+     */
+    public static String installUpdate(String path) {
+        try {
+            if (Build.VERSION.SDK_INT >= 26 && !app.getPackageManager().canRequestPackageInstalls()) {
+                Intent i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + app.getPackageName()));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                app.startActivity(i);
+                return "Разрешите Kantra устанавливать приложения и нажмите «Установить» ещё раз";
+            }
+            android.content.pm.PackageInstaller pi = app.getPackageManager().getPackageInstaller();
+            android.content.pm.PackageInstaller.SessionParams params =
+                    new android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            params.setAppPackageName(app.getPackageName());
+            if (Build.VERSION.SDK_INT >= 31) {
+                params.setRequireUserAction(android.content.pm.PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
+            }
+            int id = pi.createSession(params);
+            try (android.content.pm.PackageInstaller.Session session = pi.openSession(id)) {
+                File apk = new File(path);
+                try (InputStream in = new FileInputStream(apk);
+                     OutputStream out = session.openWrite("kantra.apk", 0, apk.length())) {
+                    copy(in, out);
+                    session.fsync(out);
+                }
+                Intent done = new Intent(app, KantraUpdateReceiver.class);
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
+                PendingIntent pending = PendingIntent.getBroadcast(app, id, done, flags);
+                session.commit(pending.getIntentSender());
+            }
+            return "";
+        } catch (Exception e) {
+            Log.w(TAG, "install update", e);
+            return "Не удалось установить обновление: " + e.getMessage();
+        }
+    }
+
     /** {"notificationsAllowed","batteryUnrestricted","background"} */
     public static String status(String ignored) {
         try {

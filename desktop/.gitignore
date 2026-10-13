@@ -14,3 +14,4 @@ build/android/gen/
 # Gateway address preset by CI (KANTRA_SERVER repository variable)
 server_preset_ci.go
 
+version_ci.go
