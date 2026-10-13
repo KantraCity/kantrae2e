@@ -1,5 +1,6 @@
 import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type LinkView, type Message, type State, type UIEvent, type UpdateState, type UserHit, type UserProfile } from './api'
 import { plural } from './util'
+import { logClient } from './diag'
 import { MAX_FILE, prepareFile, prepareSticker, type Prepared } from './media'
 import { restoreOpenChat, saveOpenChat } from './persist'
 
@@ -293,6 +294,7 @@ class AppState {
         this.modal = { kind: 'relogin' }
       } else {
         this.toast(msg, 'error', 6000)
+        logClient('error: ' + msg)
       }
       return undefined
     }
@@ -702,6 +704,27 @@ class AppState {
    * never navigates away. Web mode: a new browser tab. */
   openUrl(href: string) {
     Messenger.OpenURL(href).catch(() => window.open(href, '_blank', 'noopener,noreferrer'))
+  }
+
+  // ---- error report (desktop/diaglog.go) ----
+  async copyReport() {
+    const text = Messenger.DiagnosticReport()
+    try {
+      // Safari / iPhone allow writing only within the tap: hand the
+      // clipboard a promise instead of awaiting the report first.
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then((t) => new Blob([t], { type: 'text/plain' })) })])
+      } else {
+        await navigator.clipboard.writeText(await text)
+      }
+      this.toast('Отчёт скопирован — пришлите его разработчику')
+    } catch {
+      this.toast('Не удалось скопировать — сохраните отчёт файлом', 'error')
+    }
+  }
+  async saveReport() {
+    const text = await this.try(() => Messenger.DiagnosticReport())
+    if (text !== undefined) await this.saveText(`kantra-report-${new Date().toISOString().slice(0, 10)}.txt`, text)
   }
 
   // ---- app updates (desktop/update.go) ----

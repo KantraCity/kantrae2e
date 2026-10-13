@@ -154,6 +154,15 @@ export function Devices(): $CancellablePromise<$models.Device[] | null> {
 }
 
 /**
+ * DiagnosticReport: the text the person can copy or save and send to the
+ * developers. It holds the app version, platform, connection state, the
+ * recent log and crash traces; no messages, contacts or keys.
+ */
+export function DiagnosticReport(): $CancellablePromise<string> {
+    return $Call.ByID(1358076084);
+}
+
+/**
  * DownloadFile returns a received file (decrypted) as base64.
  */
 export function DownloadFile(chatID: string, seq: number): $CancellablePromise<$models.FileData | null> {
@@ -278,6 +287,14 @@ export function LinkPreview(url: string): $CancellablePromise<$models.LinkView |
  */
 export function Lock(): $CancellablePromise<void> {
     return $Call.ByID(2680016874);
+}
+
+/**
+ * LogClient records an error of the UI (uncaught script error, failed
+ * call). Only the error text and where it happened, never message content.
+ */
+export function LogClient(text: string): $CancellablePromise<void> {
+    return $Call.ByID(1506081426, text);
 }
 
 /**

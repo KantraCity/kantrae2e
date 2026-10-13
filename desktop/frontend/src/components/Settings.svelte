@@ -265,6 +265,11 @@
           <button class="btn flat" onclick={() => Messenger.CheckForUpdate()}>Проверить обновления</button>
         {/if}
       {/if}
+      <p class="muted small">Что-то работает не так? Отчёт об ошибках — версия, устройство и журнал работы приложения, без сообщений и контактов.</p>
+      <div class="row-btns">
+        <button class="btn flat" onclick={() => app.copyReport()}>Скопировать отчёт</button>
+        <button class="btn flat" onclick={() => app.saveReport()}>Сохранить файлом</button>
+      </div>
     </div>
 
     <div class="section">
@@ -362,4 +367,5 @@
   .small-select { width: auto; padding: 6px 10px; background: var(--bg-input); }
   .sublabel { margin: 12px 0 4px; font-size: 13px; color: var(--text-muted); }
   .who-row { display: flex; align-items: center; gap: 10px; }
+  .row-btns { display: flex; flex-wrap: wrap; gap: 4px; }
 </style>

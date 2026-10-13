@@ -1,10 +1,12 @@
 import { mount } from 'svelte'
 import './app.css'
 import { applyTheme } from './lib/theme'
+import { watchErrors } from './lib/diag'
 import App from './App.svelte'
 import { app } from './lib/app.svelte'
 
 applyTheme()
+watchErrors()
 
 // No zooming of the interface: Ctrl/⌘ + wheel or +/-/0 in desktop
 // webviews, pinch gestures where the viewport meta is ignored (Safari).
