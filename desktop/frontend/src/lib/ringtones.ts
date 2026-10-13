@@ -16,7 +16,6 @@ export const RINGTONES: { id: RingtoneId; name: string }[] = [
 const KEY = 'kantra.ringtone'
 const FILE_KEY = 'kantra.ringtone.file'
 const NAME_KEY = 'kantra.ringtone.name'
-export const MAX_RINGTONE_FILE = 2 << 20
 
 function get(k: string): string | null {
   try { return localStorage.getItem(k) } catch { return null }
@@ -33,20 +32,50 @@ export function ringtoneChoice(): RingtoneId {
 export function setRingtone(id: RingtoneId) { set(KEY, id) }
 export function customRingtoneName(): string { return get(NAME_KEY) ?? '' }
 
-/** Keeps the person's own melody (as a data: URL). */
-export async function setCustomRingtone(file: File): Promise<void> {
-  if (file.size > MAX_RINGTONE_FILE) throw new Error('Файл больше 2 МБ — выберите покороче')
-  if (!file.type.startsWith('audio/')) throw new Error('Это не аудиофайл')
-  const url = await new Promise<string>((resolve, reject) => {
+/** Keeps the person's own melody: a short trimmed piece (RingtoneTrim). */
+export function setCustomRingtone(dataUrl: string, name: string) {
+  set(FILE_KEY, dataUrl)
+  if (get(FILE_KEY) !== dataUrl) throw new Error('Не хватает места на устройстве — выберите отрезок покороче')
+  set(NAME_KEY, name)
+  set(KEY, 'custom')
+}
+
+/** The longest piece kept as a ringtone (seconds). */
+export const MAX_RING_SECONDS = 30
+const RATE = 22050
+
+/** Cuts [start, end) out of the decoded audio (mono, 22 kHz, short fades)
+ * and returns it as a WAV data: URL — under 1.4 MB for 30 s. */
+export async function trimToWav(buf: AudioBuffer, start: number, end: number): Promise<string> {
+  const dur = Math.max(0.5, Math.min(end - start, MAX_RING_SECONDS))
+  const frames = Math.ceil(dur * RATE)
+  const ctx = new OfflineAudioContext(1, frames, RATE)
+  const src = ctx.createBufferSource()
+  src.buffer = buf
+  const g = ctx.createGain()
+  const fade = Math.min(0.25, dur / 6)
+  g.gain.setValueAtTime(0, 0)
+  g.gain.linearRampToValueAtTime(1, fade)
+  g.gain.setValueAtTime(1, dur - fade)
+  g.gain.linearRampToValueAtTime(0, dur)
+  src.connect(g).connect(ctx.destination)
+  src.start(0, start, dur)
+  const out = await ctx.startRendering()
+  const pcm = out.getChannelData(0)
+  const bytes = new ArrayBuffer(44 + pcm.length * 2)
+  const v = new DataView(bytes)
+  const str = (o: number, t: string) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)) }
+  str(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVEfmt ')
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true)
+  v.setUint32(24, RATE, true); v.setUint32(28, RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true)
+  str(36, 'data'); v.setUint32(40, pcm.length * 2, true)
+  for (let i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true)
+  return await new Promise<string>((resolve, reject) => {
     const r = new FileReader()
     r.onload = () => resolve(String(r.result))
     r.onerror = () => reject(r.error)
-    r.readAsDataURL(file)
+    r.readAsDataURL(new Blob([bytes], { type: 'audio/wav' }))
   })
-  set(FILE_KEY, url)
-  if (get(FILE_KEY) !== url) throw new Error('Не хватает места для файла')
-  set(NAME_KEY, file.name)
-  set(KEY, 'custom')
 }
 
 type Note = [at: number, freq: number, dur: number, kind?: OscillatorType, decay?: boolean]

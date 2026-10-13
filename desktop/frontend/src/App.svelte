@@ -6,6 +6,7 @@
   import ChatInfo from './components/ChatInfo.svelte'
   import UserCard from './components/UserCard.svelte'
   import Dialog from './components/Dialog.svelte'
+  import RingtoneTrim from './components/RingtoneTrim.svelte'
   import ChatView from './components/ChatView.svelte'
   import ApproveLink from './components/ApproveLink.svelte'
   import DeleteMessages from './components/DeleteMessages.svelte'
@@ -150,6 +151,7 @@
 {:else if app.modal?.kind === 'approveLink'}<ApproveLink deviceId={app.modal.deviceId} />
 {:else if app.modal?.kind === 'recovery'}<RecoveryPhrase phrase={app.modal.phrase} />
 {:else if app.modal?.kind === 'chatInfo'}<ChatInfo chatId={app.modal.chatId} />
+{:else if app.modal?.kind === 'ringtoneTrim'}<RingtoneTrim file={app.modal.file} />
 {:else if app.modal?.kind === 'user'}<UserCard userId={app.modal.userId} name={app.modal.name} photo={app.modal.photo} />
 {:else if app.modal?.kind === 'verify'}<Verify username={app.modal.username} />
 {:else if app.modal?.kind === 'settings'}<Settings />

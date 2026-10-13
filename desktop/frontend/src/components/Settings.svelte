@@ -7,7 +7,7 @@
   import Modal from './Modal.svelte'
   import { checkCalls, type CallCheck } from '../lib/call.svelte'
   import { setThemePref, themePref, type ThemePref } from '../lib/theme'
-  import { RINGTONES, customRingtoneName, playRingtone, ringtoneChoice, setCustomRingtone, setRingtone, type RingtoneId } from '../lib/ringtones'
+  import { RINGTONES, customRingtoneName, playRingtone, ringtoneChoice, setRingtone, type RingtoneId } from '../lib/ringtones'
 
   // ---- privacy: last seen, block list ----
   let seen = $state('')
@@ -43,17 +43,12 @@
     setRingtone(id)
     listen(id)
   }
-  async function ownRing(f: File | undefined) {
-    if (!f) return
-    try {
-      await setCustomRingtone(f)
-      ring = 'custom'
-      ringFile = f.name
-      listen('custom')
-    } catch (e) {
-      app.toast(e instanceof Error ? e.message : String(e), 'error')
-    }
+  // Any size: the trimming window keeps only the chosen piece.
+  function ownRing(f: File | undefined) {
     if (ringInput) ringInput.value = ''
+    if (!f) return
+    preview?.stop()
+    app.modal = { kind: 'ringtoneTrim', file: f }
   }
   $effect(() => () => preview?.stop())
 
@@ -374,7 +369,7 @@
         <button class="btn flat" onclick={() => listen()} disabled={ring === 'silent'}>Прослушать</button>
         <button class="btn flat" onclick={() => ringInput?.click()}>Свой файл…</button>
       </div>
-      <input type="file" accept="audio/*" hidden bind:this={ringInput} onchange={(e) => ownRing(e.currentTarget.files?.[0])} />
+      <input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" hidden bind:this={ringInput} onchange={(e) => ownRing(e.currentTarget.files?.[0])} />
       <p class="muted small">Проверка связи с сервером звонков (STUN/TURN). Занимает несколько секунд.</p>
       <button class="btn flat" disabled={checking} onclick={runCheck}>{checking ? 'Проверка…' : 'Проверить звонки'}</button>
       {#if check}

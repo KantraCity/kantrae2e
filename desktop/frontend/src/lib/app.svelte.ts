@@ -24,6 +24,7 @@ export type Modal =
   | { kind: 'logout' }
   | { kind: 'chatInfo'; chatId: string }
   | { kind: 'user'; userId: string; name: string; photo?: string }
+  | { kind: 'ringtoneTrim'; file: File }
   | { kind: 'verify'; username: string }
   | { kind: 'settings' }
   | { kind: 'relogin' }
