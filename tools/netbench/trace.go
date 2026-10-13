@@ -18,6 +18,17 @@ func (t traceRT) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	t0 := time.Now()
 	resp, err := t.next.RoundTrip(r)
-	fmt.Printf("    %-60s %s\n", r.URL.Path, time.Since(t0).Round(time.Millisecond))
+	proto := ""
+	if resp != nil {
+		proto = resp.Proto
+	}
+	fmt.Printf("    %-60s %-9s %s %v\n", r.URL.Path, proto, time.Since(t0).Round(time.Millisecond), err)
 	return resp, err
+}
+
+// NetworkChanged passes the notice on to the wrapped transport.
+func (t traceRT) NetworkChanged() {
+	if nc, ok := t.next.(interface{ NetworkChanged() }); ok {
+		nc.NetworkChanged()
+	}
 }

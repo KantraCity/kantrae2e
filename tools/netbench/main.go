@@ -28,13 +28,19 @@ import (
 )
 
 var (
-	server    = flag.String("server", "localhost:443", "server host:port (TCP and UDP)")
-	caFile    = flag.String("ca", "", "extra root CA (Caddy's local CA)")
-	rtts      = flag.String("rtt", "0,50,150", "round-trip times to simulate, ms")
-	loss      = flag.Int("loss", 0, "UDP loss, per mille")
-	transport = flag.String("transport", "h2", "client transport: h2 (HTTP/2 + WebSocket) or h3 (QUIC)")
-	samples   = flag.Int("n", 15, "delivery samples per RTT")
-	verbose   = flag.Bool("v", false, "details")
+	server        = flag.String("server", "localhost:443", "server host:port (TCP and UDP)")
+	caFile        = flag.String("ca", "", "extra root CA (Caddy's local CA)")
+	rtts          = flag.String("rtt", "0,50,150", "round-trip times to simulate, ms")
+	loss          = flag.Int("loss", 0, "UDP loss, per mille")
+	transportFlag = flag.String("transport", "h2", "requests: h2 (TCP), h3 (QUIC with TCP fallback), quic (QUIC only)")
+	samples       = flag.Int("n", 15, "delivery samples per RTT")
+	realtime      = flag.String("realtime", "ws", "realtime connection: ws (WebSocket) or wt (WebTransport, falls back to ws)")
+	wtServer      = flag.String("wt", "localhost:4433", "WebTransport host:port (UDP)")
+	nudge         = flag.Bool("nudge", true, "tell the transports about the network change")
+	rounds        = flag.Int("rounds", 1, "migration test: address changes")
+	idle          = flag.Duration("idle", 0, "migration test: idle time before the change")
+	migrate       = flag.Int("migrate", -1, "only test QUIC connection migration at this RTT (ms)")
+	verbose       = flag.Bool("v", false, "details")
 )
 
 type user struct {
@@ -61,7 +67,20 @@ func main() {
 	}
 	go sim.serveTCP(ln, *server)
 	go sim.serveUDP(pc, *server)
+	wtPC, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go sim.serveUDP(wtPC, *wtServer)
+	if *realtime == "wt" {
+		wtAddr = fmt.Sprintf("localhost:%d", wtPC.LocalAddr().(*net.UDPAddr).Port)
+	}
 	base := fmt.Sprintf("https://localhost:%d", port)
+	if *migrate >= 0 {
+		sim.delay.Store(int64(time.Duration(*migrate) * time.Millisecond / 2))
+		migrationTest(base)
+		return
+	}
 	dir, _ := os.MkdirTemp("", "netbench")
 	defer os.RemoveAll(dir)
 	ctx := context.Background()
@@ -79,7 +98,7 @@ func main() {
 	alice.waitFor(core.EventConnected, 10*time.Second)
 	bob.waitFor(core.EventConnected, 10*time.Second)
 
-	fmt.Printf("transport %s, UDP loss %d‰\n\n", *transport, *loss)
+	fmt.Printf("requests %s, realtime %s, UDP loss %d‰\n\n", *transportFlag, *realtime, *loss)
 	fmt.Printf("%-8s %12s %12s %14s %16s %16s\n", "RTT", "start", "deliver p50", "deliver p90", "after net change", "first contact")
 	for _, s := range strings.Split(*rtts, ",") {
 		ms, _ := strconv.Atoi(strings.TrimSpace(s))
@@ -113,7 +132,9 @@ func main() {
 		alice.Reconnect()
 		bob.Reconnect()
 		t1 := time.Now()
+		tracing.Store(*verbose)
 		_, err := alice.SendText(ctx, dm, "after change")
+		tracing.Store(false)
 		tries := 1
 		for err != nil && time.Since(t1) < time.Minute {
 			tries++
@@ -172,7 +193,9 @@ func deliver(ctx context.Context, from, to *user, gid, text string) time.Duratio
 	return time.Since(t)
 }
 
-func httpClient() *http.Client {
+var wtAddr string
+
+func tlsConfig() *tls.Config {
 	cfg := &tls.Config{}
 	if *caFile != "" {
 		pem, err := os.ReadFile(*caFile)
@@ -184,12 +207,20 @@ func httpClient() *http.Client {
 		pool.AppendCertsFromPEM(pem)
 		cfg.RootCAs = pool
 	}
-	return newTransport(cfg)
+	return cfg
 }
+
+func httpClient() *http.Client { return newTransport(tlsConfig()) }
 
 func open(ctx context.Context, base, dir, name string) *user {
 	u := &user{name: name, db: filepath.Join(dir, name+".db"), events: make(chan core.Event, 1024)}
 	c, err := core.Open(ctx, core.Options{ServerURL: base, DBPath: u.db, HTTPClient: httpClient(), DisableAutoBackup: true,
+		WebTransport: wtAddr != "", WebTransportAddr: wtAddr,
+		Logf: func(f string, a ...any) {
+			if *verbose {
+				fmt.Printf("    ["+name+"] "+f+"\n", a...)
+			}
+		},
 		OnEvent: func(e core.Event) {
 			select {
 			case u.events <- e:

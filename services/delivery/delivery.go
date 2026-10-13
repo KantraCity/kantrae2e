@@ -94,6 +94,7 @@ const (
 )
 
 type Service struct {
+	wtCerts  *wtCert // WebTransport certificate (wt.go)
 	pool     *pgxpool.Pool
 	secret   []byte
 	hub      *Hub
@@ -104,7 +105,7 @@ type Service struct {
 }
 
 func New(pool *pgxpool.Pool, secret []byte, log zerolog.Logger) *Service {
-	return &Service{pool: pool, secret: secret, hub: NewHub(), log: log}
+	return &Service{pool: pool, secret: secret, hub: NewHub(), log: log, wtCerts: &wtCert{}}
 }
 
 // WithDevices makes the service reject revoked devices (nil disables it).

@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/kantracity/kantrae2e/client/mls"
@@ -335,6 +333,11 @@ const minKeepAlive = time.Minute
 // Reconnect drops the realtime connection (if any) and connects again right
 // away, skipping the backoff: call it when the network comes back.
 func (c *Client) Reconnect() {
+	// HTTP/3 connections migrate to the new network once they send from
+	// it (client/transport); TCP connections are dead.
+	if nc, ok := c.hc.Transport.(interface{ NetworkChanged() }); ok {
+		nc.NetworkChanged()
+	}
 	select {
 	case c.kick <- struct{}{}:
 	default:
@@ -353,12 +356,20 @@ func (c *Client) Listen(ctx context.Context) error {
 		// cost a full backoff second).
 		kicked := make(chan bool, 1)
 		go func() {
-			select {
-			case <-c.kick:
-				cancel()
-				kicked <- true
-			case <-connCtx.Done():
-				kicked <- false
+			for {
+				select {
+				case <-c.kick:
+					// A QUIC connection may well have survived the network
+					// change (migration): check it before starting over.
+					if c.pingAlive(connCtx) {
+						continue
+					}
+					cancel()
+					kicked <- true
+				case <-connCtx.Done():
+					kicked <- false
+				}
+				return
 			}
 		}()
 		start := time.Now()
@@ -397,16 +408,23 @@ func (c *Client) listenOnce(ctx context.Context) error {
 	if err := c.refreshToken(ctx); err != nil {
 		return err
 	}
-	conn, _, err := websocket.Dial(ctx, c.wsURL(), &websocket.DialOptions{
-		HTTPClient: c.hc,
-		HTTPHeader: http.Header{"Authorization": {"Bearer " + c.currentToken()}},
-	})
+	conn, err := c.dialRealtime(ctx)
 	if err != nil {
 		return err
 	}
-	defer conn.CloseNow()
-	conn.SetReadLimit(4 << 20)
-	c.emit(Event{Type: EventConnected})
+	defer conn.Close()
+	c.rtMu.Lock()
+	c.rt = conn
+	c.rtMu.Unlock()
+	defer func() {
+		c.rtMu.Lock()
+		if c.rt == conn {
+			c.rt = nil
+		}
+		c.rtMu.Unlock()
+	}()
+	c.logf("realtime connected via %s", conn.Via())
+	c.emit(Event{Type: EventConnected, Detail: conn.Via()})
 	go func() {
 		if err := c.EnsureKeyPackages(ctx); err != nil {
 			c.logf("key package refill: %v", err)
@@ -419,7 +437,7 @@ func (c *Client) listenOnce(ctx context.Context) error {
 		if ka > 0 {
 			readCtx, cancel = context.WithTimeout(ctx, 2*ka+30*time.Second)
 		}
-		_, data, err := conn.Read(readCtx)
+		data, err := conn.Read(readCtx)
 		silent := ka > 0 && readCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
 		cancel()
 		if silent {
@@ -433,6 +451,10 @@ func (c *Client) listenOnce(ctx context.Context) error {
 		}
 		if err != nil {
 			return err
+		}
+		select { // for pingAlive
+		case c.rtRecv <- struct{}{}:
+		default:
 		}
 		var e deliveryv1.Envelope
 		if err := proto.Unmarshal(data, &e); err != nil {
@@ -454,7 +476,7 @@ func (c *Client) listenOnce(ctx context.Context) error {
 			return err
 		}
 		ack, _ := proto.Marshal(&deliveryv1.ClientFrame{Frame: &deliveryv1.ClientFrame_Ack{Ack: &deliveryv1.Ack{Ids: []int64{e.Id}}}})
-		if err := conn.Write(ctx, websocket.MessageBinary, ack); err != nil {
+		if err := conn.Write(ctx, ack); err != nil {
 			return err
 		}
 		c.flushDeferred()

@@ -336,10 +336,20 @@ func (e eventNotifier) Clear(string) {}
 
 // reconnect reopens the realtime connection now (network came back).
 func (m *Messenger) reconnect() {
-	if c, err := m.client(); err == nil {
-		c.Reconnect()
+	m.mu.Lock()
+	slots := append([]*slot(nil), m.slots...)
+	m.mu.Unlock()
+	for _, s := range slots {
+		if s.c != nil {
+			s.c.Reconnect()
+		}
 	}
 }
+
+// NetworkChanged: the device switched networks or came back online (the
+// browser / WebView noticed). QUIC connections move to the new network;
+// TCP connections are replaced at once instead of after a timeout.
+func (m *Messenger) NetworkChanged() { m.reconnect() }
 
 // mentions reports whether a text mentions the slot's account (@username).
 var (

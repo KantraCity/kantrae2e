@@ -252,6 +252,7 @@ type ClientFrame struct {
 	// Types that are valid to be assigned to Frame:
 	//
 	//	*ClientFrame_Ack
+	//	*ClientFrame_Ping
 	Frame         isClientFrame_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -303,6 +304,15 @@ func (x *ClientFrame) GetAck() *Ack {
 	return nil
 }
 
+func (x *ClientFrame) GetPing() *Ping {
+	if x != nil {
+		if x, ok := x.Frame.(*ClientFrame_Ping); ok {
+			return x.Ping
+		}
+	}
+	return nil
+}
+
 type isClientFrame_Frame interface {
 	isClientFrame_Frame()
 }
@@ -311,7 +321,51 @@ type ClientFrame_Ack struct {
 	Ack *Ack `protobuf:"bytes,1,opt,name=ack,proto3,oneof"`
 }
 
+type ClientFrame_Ping struct {
+	// Answered with a heartbeat (an empty frame) at once: lets the client
+	// check that a connection survived a network change.
+	Ping *Ping `protobuf:"bytes,2,opt,name=ping,proto3,oneof"`
+}
+
 func (*ClientFrame_Ack) isClientFrame_Frame() {}
+
+func (*ClientFrame_Ping) isClientFrame_Frame() {}
+
+type Ping struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Ping) Reset() {
+	*x = Ping{}
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Ping) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Ping) ProtoMessage() {}
+
+func (x *Ping) ProtoReflect() protoreflect.Message {
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Ping.ProtoReflect.Descriptor instead.
+func (*Ping) Descriptor() ([]byte, []int) {
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{2}
+}
 
 type Ack struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -322,7 +376,7 @@ type Ack struct {
 
 func (x *Ack) Reset() {
 	*x = Ack{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[2]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -334,7 +388,7 @@ func (x *Ack) String() string {
 func (*Ack) ProtoMessage() {}
 
 func (x *Ack) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[2]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -347,7 +401,7 @@ func (x *Ack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ack.ProtoReflect.Descriptor instead.
 func (*Ack) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{2}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Ack) GetIds() []int64 {
@@ -368,7 +422,7 @@ type CreateGroupRequest struct {
 
 func (x *CreateGroupRequest) Reset() {
 	*x = CreateGroupRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[3]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -380,7 +434,7 @@ func (x *CreateGroupRequest) String() string {
 func (*CreateGroupRequest) ProtoMessage() {}
 
 func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[3]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -393,7 +447,7 @@ func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateGroupRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{3}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateGroupRequest) GetGroupId() string {
@@ -418,7 +472,7 @@ type CreateGroupResponse struct {
 
 func (x *CreateGroupResponse) Reset() {
 	*x = CreateGroupResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[4]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -430,7 +484,7 @@ func (x *CreateGroupResponse) String() string {
 func (*CreateGroupResponse) ProtoMessage() {}
 
 func (x *CreateGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[4]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -443,7 +497,7 @@ func (x *CreateGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupResponse.ProtoReflect.Descriptor instead.
 func (*CreateGroupResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{4}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{5}
 }
 
 type SendCommitRequest struct {
@@ -467,7 +521,7 @@ type SendCommitRequest struct {
 
 func (x *SendCommitRequest) Reset() {
 	*x = SendCommitRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[5]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -479,7 +533,7 @@ func (x *SendCommitRequest) String() string {
 func (*SendCommitRequest) ProtoMessage() {}
 
 func (x *SendCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[5]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -492,7 +546,7 @@ func (x *SendCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendCommitRequest.ProtoReflect.Descriptor instead.
 func (*SendCommitRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{5}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SendCommitRequest) GetGroupId() string {
@@ -560,7 +614,7 @@ type SendCommitResponse struct {
 
 func (x *SendCommitResponse) Reset() {
 	*x = SendCommitResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[6]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -572,7 +626,7 @@ func (x *SendCommitResponse) String() string {
 func (*SendCommitResponse) ProtoMessage() {}
 
 func (x *SendCommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[6]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -585,7 +639,7 @@ func (x *SendCommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendCommitResponse.ProtoReflect.Descriptor instead.
 func (*SendCommitResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{6}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SendCommitResponse) GetNewEpoch() uint64 {
@@ -606,7 +660,7 @@ type SendApplicationRequest struct {
 
 func (x *SendApplicationRequest) Reset() {
 	*x = SendApplicationRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[7]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +672,7 @@ func (x *SendApplicationRequest) String() string {
 func (*SendApplicationRequest) ProtoMessage() {}
 
 func (x *SendApplicationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[7]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +685,7 @@ func (x *SendApplicationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendApplicationRequest.ProtoReflect.Descriptor instead.
 func (*SendApplicationRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{7}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SendApplicationRequest) GetGroupId() string {
@@ -664,7 +718,7 @@ type SendApplicationResponse struct {
 
 func (x *SendApplicationResponse) Reset() {
 	*x = SendApplicationResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[8]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -676,7 +730,7 @@ func (x *SendApplicationResponse) String() string {
 func (*SendApplicationResponse) ProtoMessage() {}
 
 func (x *SendApplicationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[8]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -689,7 +743,7 @@ func (x *SendApplicationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendApplicationResponse.ProtoReflect.Descriptor instead.
 func (*SendApplicationResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{8}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SendApplicationResponse) GetMessageId() int64 {
@@ -709,7 +763,7 @@ type FetchWelcomeRequest struct {
 
 func (x *FetchWelcomeRequest) Reset() {
 	*x = FetchWelcomeRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[9]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -721,7 +775,7 @@ func (x *FetchWelcomeRequest) String() string {
 func (*FetchWelcomeRequest) ProtoMessage() {}
 
 func (x *FetchWelcomeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[9]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -734,7 +788,7 @@ func (x *FetchWelcomeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchWelcomeRequest.ProtoReflect.Descriptor instead.
 func (*FetchWelcomeRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{9}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *FetchWelcomeRequest) GetGroupId() string {
@@ -760,7 +814,7 @@ type FetchWelcomeResponse struct {
 
 func (x *FetchWelcomeResponse) Reset() {
 	*x = FetchWelcomeResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[10]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -772,7 +826,7 @@ func (x *FetchWelcomeResponse) String() string {
 func (*FetchWelcomeResponse) ProtoMessage() {}
 
 func (x *FetchWelcomeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[10]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -785,7 +839,7 @@ func (x *FetchWelcomeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchWelcomeResponse.ProtoReflect.Descriptor instead.
 func (*FetchWelcomeResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{10}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *FetchWelcomeResponse) GetWelcome() []byte {
@@ -804,7 +858,7 @@ type FetchPendingRequest struct {
 
 func (x *FetchPendingRequest) Reset() {
 	*x = FetchPendingRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[11]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -816,7 +870,7 @@ func (x *FetchPendingRequest) String() string {
 func (*FetchPendingRequest) ProtoMessage() {}
 
 func (x *FetchPendingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[11]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -829,7 +883,7 @@ func (x *FetchPendingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchPendingRequest.ProtoReflect.Descriptor instead.
 func (*FetchPendingRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{11}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *FetchPendingRequest) GetLimit() int32 {
@@ -848,7 +902,7 @@ type FetchPendingResponse struct {
 
 func (x *FetchPendingResponse) Reset() {
 	*x = FetchPendingResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[12]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -860,7 +914,7 @@ func (x *FetchPendingResponse) String() string {
 func (*FetchPendingResponse) ProtoMessage() {}
 
 func (x *FetchPendingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[12]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -873,7 +927,7 @@ func (x *FetchPendingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchPendingResponse.ProtoReflect.Descriptor instead.
 func (*FetchPendingResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{12}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *FetchPendingResponse) GetEnvelopes() []*Envelope {
@@ -892,7 +946,7 @@ type AckRequest struct {
 
 func (x *AckRequest) Reset() {
 	*x = AckRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[13]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -904,7 +958,7 @@ func (x *AckRequest) String() string {
 func (*AckRequest) ProtoMessage() {}
 
 func (x *AckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[13]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -917,7 +971,7 @@ func (x *AckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckRequest.ProtoReflect.Descriptor instead.
 func (*AckRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{13}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AckRequest) GetIds() []int64 {
@@ -935,7 +989,7 @@ type AckResponse struct {
 
 func (x *AckResponse) Reset() {
 	*x = AckResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[14]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -947,7 +1001,7 @@ func (x *AckResponse) String() string {
 func (*AckResponse) ProtoMessage() {}
 
 func (x *AckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[14]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -960,7 +1014,7 @@ func (x *AckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckResponse.ProtoReflect.Descriptor instead.
 func (*AckResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{14}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{15}
 }
 
 type GetGroupRequest struct {
@@ -972,7 +1026,7 @@ type GetGroupRequest struct {
 
 func (x *GetGroupRequest) Reset() {
 	*x = GetGroupRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[15]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -984,7 +1038,7 @@ func (x *GetGroupRequest) String() string {
 func (*GetGroupRequest) ProtoMessage() {}
 
 func (x *GetGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[15]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -997,7 +1051,7 @@ func (x *GetGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGroupRequest.ProtoReflect.Descriptor instead.
 func (*GetGroupRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{15}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetGroupRequest) GetGroupId() string {
@@ -1017,7 +1071,7 @@ type GetGroupResponse struct {
 
 func (x *GetGroupResponse) Reset() {
 	*x = GetGroupResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[16]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1029,7 +1083,7 @@ func (x *GetGroupResponse) String() string {
 func (*GetGroupResponse) ProtoMessage() {}
 
 func (x *GetGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[16]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1042,7 +1096,7 @@ func (x *GetGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGroupResponse.ProtoReflect.Descriptor instead.
 func (*GetGroupResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{16}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetGroupResponse) GetCurrentEpoch() uint64 {
@@ -1067,7 +1121,7 @@ type ListMyGroupsRequest struct {
 
 func (x *ListMyGroupsRequest) Reset() {
 	*x = ListMyGroupsRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[17]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1079,7 +1133,7 @@ func (x *ListMyGroupsRequest) String() string {
 func (*ListMyGroupsRequest) ProtoMessage() {}
 
 func (x *ListMyGroupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[17]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1092,7 +1146,7 @@ func (x *ListMyGroupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyGroupsRequest.ProtoReflect.Descriptor instead.
 func (*ListMyGroupsRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{17}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{18}
 }
 
 type MyGroup struct {
@@ -1107,7 +1161,7 @@ type MyGroup struct {
 
 func (x *MyGroup) Reset() {
 	*x = MyGroup{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[18]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1119,7 +1173,7 @@ func (x *MyGroup) String() string {
 func (*MyGroup) ProtoMessage() {}
 
 func (x *MyGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[18]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1132,7 +1186,7 @@ func (x *MyGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MyGroup.ProtoReflect.Descriptor instead.
 func (*MyGroup) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{18}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *MyGroup) GetGroupId() string {
@@ -1165,7 +1219,7 @@ type ListMyGroupsResponse struct {
 
 func (x *ListMyGroupsResponse) Reset() {
 	*x = ListMyGroupsResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[19]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1177,7 +1231,7 @@ func (x *ListMyGroupsResponse) String() string {
 func (*ListMyGroupsResponse) ProtoMessage() {}
 
 func (x *ListMyGroupsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[19]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1190,7 +1244,7 @@ func (x *ListMyGroupsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyGroupsResponse.ProtoReflect.Descriptor instead.
 func (*ListMyGroupsResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{19}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListMyGroupsResponse) GetGroups() []*MyGroup {
@@ -1209,7 +1263,7 @@ type GetGroupInfoRequest struct {
 
 func (x *GetGroupInfoRequest) Reset() {
 	*x = GetGroupInfoRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[20]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1221,7 +1275,7 @@ func (x *GetGroupInfoRequest) String() string {
 func (*GetGroupInfoRequest) ProtoMessage() {}
 
 func (x *GetGroupInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[20]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1234,7 +1288,7 @@ func (x *GetGroupInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGroupInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetGroupInfoRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{20}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetGroupInfoRequest) GetGroupId() string {
@@ -1254,7 +1308,7 @@ type GetGroupInfoResponse struct {
 
 func (x *GetGroupInfoResponse) Reset() {
 	*x = GetGroupInfoResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[21]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1266,7 +1320,7 @@ func (x *GetGroupInfoResponse) String() string {
 func (*GetGroupInfoResponse) ProtoMessage() {}
 
 func (x *GetGroupInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[21]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1279,7 +1333,7 @@ func (x *GetGroupInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGroupInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetGroupInfoResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{21}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetGroupInfoResponse) GetGroupInfo() []byte {
@@ -1310,7 +1364,7 @@ type ExternalJoinRequest struct {
 
 func (x *ExternalJoinRequest) Reset() {
 	*x = ExternalJoinRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[22]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1322,7 +1376,7 @@ func (x *ExternalJoinRequest) String() string {
 func (*ExternalJoinRequest) ProtoMessage() {}
 
 func (x *ExternalJoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[22]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1335,7 +1389,7 @@ func (x *ExternalJoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExternalJoinRequest.ProtoReflect.Descriptor instead.
 func (*ExternalJoinRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{22}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ExternalJoinRequest) GetGroupId() string {
@@ -1375,7 +1429,7 @@ type ExternalJoinResponse struct {
 
 func (x *ExternalJoinResponse) Reset() {
 	*x = ExternalJoinResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[23]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1387,7 +1441,7 @@ func (x *ExternalJoinResponse) String() string {
 func (*ExternalJoinResponse) ProtoMessage() {}
 
 func (x *ExternalJoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[23]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1400,7 +1454,7 @@ func (x *ExternalJoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExternalJoinResponse.ProtoReflect.Descriptor instead.
 func (*ExternalJoinResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{23}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ExternalJoinResponse) GetNewEpoch() uint64 {
@@ -1424,7 +1478,7 @@ type RequestJoinRequest struct {
 
 func (x *RequestJoinRequest) Reset() {
 	*x = RequestJoinRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[24]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1436,7 +1490,7 @@ func (x *RequestJoinRequest) String() string {
 func (*RequestJoinRequest) ProtoMessage() {}
 
 func (x *RequestJoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[24]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1449,7 +1503,7 @@ func (x *RequestJoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestJoinRequest.ProtoReflect.Descriptor instead.
 func (*RequestJoinRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{24}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *RequestJoinRequest) GetGroupId() string {
@@ -1481,7 +1535,7 @@ type RequestJoinResponse struct {
 
 func (x *RequestJoinResponse) Reset() {
 	*x = RequestJoinResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[25]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1493,7 +1547,7 @@ func (x *RequestJoinResponse) String() string {
 func (*RequestJoinResponse) ProtoMessage() {}
 
 func (x *RequestJoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[25]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1506,7 +1560,7 @@ func (x *RequestJoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestJoinResponse.ProtoReflect.Descriptor instead.
 func (*RequestJoinResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{25}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{26}
 }
 
 type TypingRequest struct {
@@ -1518,7 +1572,7 @@ type TypingRequest struct {
 
 func (x *TypingRequest) Reset() {
 	*x = TypingRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[26]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1530,7 +1584,7 @@ func (x *TypingRequest) String() string {
 func (*TypingRequest) ProtoMessage() {}
 
 func (x *TypingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[26]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1543,7 +1597,7 @@ func (x *TypingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TypingRequest.ProtoReflect.Descriptor instead.
 func (*TypingRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{26}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *TypingRequest) GetGroupId() string {
@@ -1561,7 +1615,7 @@ type TypingResponse struct {
 
 func (x *TypingResponse) Reset() {
 	*x = TypingResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[27]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1573,7 +1627,7 @@ func (x *TypingResponse) String() string {
 func (*TypingResponse) ProtoMessage() {}
 
 func (x *TypingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[27]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1586,7 +1640,7 @@ func (x *TypingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TypingResponse.ProtoReflect.Descriptor instead.
 func (*TypingResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{27}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{28}
 }
 
 type GetPresenceRequest struct {
@@ -1598,7 +1652,7 @@ type GetPresenceRequest struct {
 
 func (x *GetPresenceRequest) Reset() {
 	*x = GetPresenceRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[28]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1610,7 +1664,7 @@ func (x *GetPresenceRequest) String() string {
 func (*GetPresenceRequest) ProtoMessage() {}
 
 func (x *GetPresenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[28]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1623,7 +1677,7 @@ func (x *GetPresenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPresenceRequest.ProtoReflect.Descriptor instead.
 func (*GetPresenceRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{28}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetPresenceRequest) GetUserIds() []string {
@@ -1647,7 +1701,7 @@ type Presence struct {
 
 func (x *Presence) Reset() {
 	*x = Presence{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[29]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1659,7 +1713,7 @@ func (x *Presence) String() string {
 func (*Presence) ProtoMessage() {}
 
 func (x *Presence) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[29]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1672,7 +1726,7 @@ func (x *Presence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Presence.ProtoReflect.Descriptor instead.
 func (*Presence) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{29}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Presence) GetUserId() string {
@@ -1712,7 +1766,7 @@ type GetPresenceResponse struct {
 
 func (x *GetPresenceResponse) Reset() {
 	*x = GetPresenceResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[30]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1724,7 +1778,7 @@ func (x *GetPresenceResponse) String() string {
 func (*GetPresenceResponse) ProtoMessage() {}
 
 func (x *GetPresenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[30]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1737,7 +1791,7 @@ func (x *GetPresenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPresenceResponse.ProtoReflect.Descriptor instead.
 func (*GetPresenceResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{30}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetPresenceResponse) GetPresence() []*Presence {
@@ -1756,7 +1810,7 @@ type SetPresencePrivacyRequest struct {
 
 func (x *SetPresencePrivacyRequest) Reset() {
 	*x = SetPresencePrivacyRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[31]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1768,7 +1822,7 @@ func (x *SetPresencePrivacyRequest) String() string {
 func (*SetPresencePrivacyRequest) ProtoMessage() {}
 
 func (x *SetPresencePrivacyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[31]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1781,7 +1835,7 @@ func (x *SetPresencePrivacyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPresencePrivacyRequest.ProtoReflect.Descriptor instead.
 func (*SetPresencePrivacyRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{31}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetPresencePrivacyRequest) GetVisibility() PresenceVisibility {
@@ -1799,7 +1853,7 @@ type SetPresencePrivacyResponse struct {
 
 func (x *SetPresencePrivacyResponse) Reset() {
 	*x = SetPresencePrivacyResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[32]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1811,7 +1865,7 @@ func (x *SetPresencePrivacyResponse) String() string {
 func (*SetPresencePrivacyResponse) ProtoMessage() {}
 
 func (x *SetPresencePrivacyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[32]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1824,7 +1878,7 @@ func (x *SetPresencePrivacyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPresencePrivacyResponse.ProtoReflect.Descriptor instead.
 func (*SetPresencePrivacyResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{32}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{33}
 }
 
 type GetPresencePrivacyRequest struct {
@@ -1835,7 +1889,7 @@ type GetPresencePrivacyRequest struct {
 
 func (x *GetPresencePrivacyRequest) Reset() {
 	*x = GetPresencePrivacyRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[33]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1847,7 +1901,7 @@ func (x *GetPresencePrivacyRequest) String() string {
 func (*GetPresencePrivacyRequest) ProtoMessage() {}
 
 func (x *GetPresencePrivacyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[33]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1860,7 +1914,7 @@ func (x *GetPresencePrivacyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPresencePrivacyRequest.ProtoReflect.Descriptor instead.
 func (*GetPresencePrivacyRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{33}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{34}
 }
 
 type GetPresencePrivacyResponse struct {
@@ -1872,7 +1926,7 @@ type GetPresencePrivacyResponse struct {
 
 func (x *GetPresencePrivacyResponse) Reset() {
 	*x = GetPresencePrivacyResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[34]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1884,7 +1938,7 @@ func (x *GetPresencePrivacyResponse) String() string {
 func (*GetPresencePrivacyResponse) ProtoMessage() {}
 
 func (x *GetPresencePrivacyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[34]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1897,7 +1951,7 @@ func (x *GetPresencePrivacyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPresencePrivacyResponse.ProtoReflect.Descriptor instead.
 func (*GetPresencePrivacyResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{34}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetPresencePrivacyResponse) GetVisibility() PresenceVisibility {
@@ -1918,7 +1972,7 @@ type SetGroupInviteRequest struct {
 
 func (x *SetGroupInviteRequest) Reset() {
 	*x = SetGroupInviteRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[35]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1930,7 +1984,7 @@ func (x *SetGroupInviteRequest) String() string {
 func (*SetGroupInviteRequest) ProtoMessage() {}
 
 func (x *SetGroupInviteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[35]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1943,7 +1997,7 @@ func (x *SetGroupInviteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetGroupInviteRequest.ProtoReflect.Descriptor instead.
 func (*SetGroupInviteRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{35}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SetGroupInviteRequest) GetGroupId() string {
@@ -1968,7 +2022,7 @@ type SetGroupInviteResponse struct {
 
 func (x *SetGroupInviteResponse) Reset() {
 	*x = SetGroupInviteResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[36]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1980,7 +2034,7 @@ func (x *SetGroupInviteResponse) String() string {
 func (*SetGroupInviteResponse) ProtoMessage() {}
 
 func (x *SetGroupInviteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[36]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1993,7 +2047,7 @@ func (x *SetGroupInviteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetGroupInviteResponse.ProtoReflect.Descriptor instead.
 func (*SetGroupInviteResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{36}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{37}
 }
 
 type SetActiveRequest struct {
@@ -2005,7 +2059,7 @@ type SetActiveRequest struct {
 
 func (x *SetActiveRequest) Reset() {
 	*x = SetActiveRequest{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[37]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2017,7 +2071,7 @@ func (x *SetActiveRequest) String() string {
 func (*SetActiveRequest) ProtoMessage() {}
 
 func (x *SetActiveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[37]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2030,7 +2084,7 @@ func (x *SetActiveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetActiveRequest.ProtoReflect.Descriptor instead.
 func (*SetActiveRequest) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{37}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *SetActiveRequest) GetActive() bool {
@@ -2048,7 +2102,7 @@ type SetActiveResponse struct {
 
 func (x *SetActiveResponse) Reset() {
 	*x = SetActiveResponse{}
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[38]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2060,7 +2114,7 @@ func (x *SetActiveResponse) String() string {
 func (*SetActiveResponse) ProtoMessage() {}
 
 func (x *SetActiveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[38]
+	mi := &file_kantra_delivery_v1_delivery_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2073,7 +2127,7 @@ func (x *SetActiveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetActiveResponse.ProtoReflect.Descriptor instead.
 func (*SetActiveResponse) Descriptor() ([]byte, []int) {
-	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{38}
+	return file_kantra_delivery_v1_delivery_proto_rawDescGZIP(), []int{39}
 }
 
 var File_kantra_delivery_v1_delivery_proto protoreflect.FileDescriptor
@@ -2091,10 +2145,12 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\x03R\tcreatedAt\x12$\n" +
 	"\x0esender_user_id\x18\b \x01(\tR\fsenderUserId\x12\x1c\n" +
-	"\tephemeral\x18\t \x01(\bR\tephemeral\"C\n" +
+	"\tephemeral\x18\t \x01(\bR\tephemeral\"s\n" +
 	"\vClientFrame\x12+\n" +
-	"\x03ack\x18\x01 \x01(\v2\x17.kantra.delivery.v1.AckH\x00R\x03ackB\a\n" +
-	"\x05frame\"\x17\n" +
+	"\x03ack\x18\x01 \x01(\v2\x17.kantra.delivery.v1.AckH\x00R\x03ack\x12.\n" +
+	"\x04ping\x18\x02 \x01(\v2\x18.kantra.delivery.v1.PingH\x00R\x04pingB\a\n" +
+	"\x05frame\"\x06\n" +
+	"\x04Ping\"\x17\n" +
 	"\x03Ack\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\x03R\x03ids\"N\n" +
 	"\x12CreateGroupRequest\x12\x19\n" +
@@ -2242,97 +2298,99 @@ func file_kantra_delivery_v1_delivery_proto_rawDescGZIP() []byte {
 }
 
 var file_kantra_delivery_v1_delivery_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_kantra_delivery_v1_delivery_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_kantra_delivery_v1_delivery_proto_goTypes = []any{
 	(MessageType)(0),                   // 0: kantra.delivery.v1.MessageType
 	(PresenceVisibility)(0),            // 1: kantra.delivery.v1.PresenceVisibility
 	(*Envelope)(nil),                   // 2: kantra.delivery.v1.Envelope
 	(*ClientFrame)(nil),                // 3: kantra.delivery.v1.ClientFrame
-	(*Ack)(nil),                        // 4: kantra.delivery.v1.Ack
-	(*CreateGroupRequest)(nil),         // 5: kantra.delivery.v1.CreateGroupRequest
-	(*CreateGroupResponse)(nil),        // 6: kantra.delivery.v1.CreateGroupResponse
-	(*SendCommitRequest)(nil),          // 7: kantra.delivery.v1.SendCommitRequest
-	(*SendCommitResponse)(nil),         // 8: kantra.delivery.v1.SendCommitResponse
-	(*SendApplicationRequest)(nil),     // 9: kantra.delivery.v1.SendApplicationRequest
-	(*SendApplicationResponse)(nil),    // 10: kantra.delivery.v1.SendApplicationResponse
-	(*FetchWelcomeRequest)(nil),        // 11: kantra.delivery.v1.FetchWelcomeRequest
-	(*FetchWelcomeResponse)(nil),       // 12: kantra.delivery.v1.FetchWelcomeResponse
-	(*FetchPendingRequest)(nil),        // 13: kantra.delivery.v1.FetchPendingRequest
-	(*FetchPendingResponse)(nil),       // 14: kantra.delivery.v1.FetchPendingResponse
-	(*AckRequest)(nil),                 // 15: kantra.delivery.v1.AckRequest
-	(*AckResponse)(nil),                // 16: kantra.delivery.v1.AckResponse
-	(*GetGroupRequest)(nil),            // 17: kantra.delivery.v1.GetGroupRequest
-	(*GetGroupResponse)(nil),           // 18: kantra.delivery.v1.GetGroupResponse
-	(*ListMyGroupsRequest)(nil),        // 19: kantra.delivery.v1.ListMyGroupsRequest
-	(*MyGroup)(nil),                    // 20: kantra.delivery.v1.MyGroup
-	(*ListMyGroupsResponse)(nil),       // 21: kantra.delivery.v1.ListMyGroupsResponse
-	(*GetGroupInfoRequest)(nil),        // 22: kantra.delivery.v1.GetGroupInfoRequest
-	(*GetGroupInfoResponse)(nil),       // 23: kantra.delivery.v1.GetGroupInfoResponse
-	(*ExternalJoinRequest)(nil),        // 24: kantra.delivery.v1.ExternalJoinRequest
-	(*ExternalJoinResponse)(nil),       // 25: kantra.delivery.v1.ExternalJoinResponse
-	(*RequestJoinRequest)(nil),         // 26: kantra.delivery.v1.RequestJoinRequest
-	(*RequestJoinResponse)(nil),        // 27: kantra.delivery.v1.RequestJoinResponse
-	(*TypingRequest)(nil),              // 28: kantra.delivery.v1.TypingRequest
-	(*TypingResponse)(nil),             // 29: kantra.delivery.v1.TypingResponse
-	(*GetPresenceRequest)(nil),         // 30: kantra.delivery.v1.GetPresenceRequest
-	(*Presence)(nil),                   // 31: kantra.delivery.v1.Presence
-	(*GetPresenceResponse)(nil),        // 32: kantra.delivery.v1.GetPresenceResponse
-	(*SetPresencePrivacyRequest)(nil),  // 33: kantra.delivery.v1.SetPresencePrivacyRequest
-	(*SetPresencePrivacyResponse)(nil), // 34: kantra.delivery.v1.SetPresencePrivacyResponse
-	(*GetPresencePrivacyRequest)(nil),  // 35: kantra.delivery.v1.GetPresencePrivacyRequest
-	(*GetPresencePrivacyResponse)(nil), // 36: kantra.delivery.v1.GetPresencePrivacyResponse
-	(*SetGroupInviteRequest)(nil),      // 37: kantra.delivery.v1.SetGroupInviteRequest
-	(*SetGroupInviteResponse)(nil),     // 38: kantra.delivery.v1.SetGroupInviteResponse
-	(*SetActiveRequest)(nil),           // 39: kantra.delivery.v1.SetActiveRequest
-	(*SetActiveResponse)(nil),          // 40: kantra.delivery.v1.SetActiveResponse
+	(*Ping)(nil),                       // 4: kantra.delivery.v1.Ping
+	(*Ack)(nil),                        // 5: kantra.delivery.v1.Ack
+	(*CreateGroupRequest)(nil),         // 6: kantra.delivery.v1.CreateGroupRequest
+	(*CreateGroupResponse)(nil),        // 7: kantra.delivery.v1.CreateGroupResponse
+	(*SendCommitRequest)(nil),          // 8: kantra.delivery.v1.SendCommitRequest
+	(*SendCommitResponse)(nil),         // 9: kantra.delivery.v1.SendCommitResponse
+	(*SendApplicationRequest)(nil),     // 10: kantra.delivery.v1.SendApplicationRequest
+	(*SendApplicationResponse)(nil),    // 11: kantra.delivery.v1.SendApplicationResponse
+	(*FetchWelcomeRequest)(nil),        // 12: kantra.delivery.v1.FetchWelcomeRequest
+	(*FetchWelcomeResponse)(nil),       // 13: kantra.delivery.v1.FetchWelcomeResponse
+	(*FetchPendingRequest)(nil),        // 14: kantra.delivery.v1.FetchPendingRequest
+	(*FetchPendingResponse)(nil),       // 15: kantra.delivery.v1.FetchPendingResponse
+	(*AckRequest)(nil),                 // 16: kantra.delivery.v1.AckRequest
+	(*AckResponse)(nil),                // 17: kantra.delivery.v1.AckResponse
+	(*GetGroupRequest)(nil),            // 18: kantra.delivery.v1.GetGroupRequest
+	(*GetGroupResponse)(nil),           // 19: kantra.delivery.v1.GetGroupResponse
+	(*ListMyGroupsRequest)(nil),        // 20: kantra.delivery.v1.ListMyGroupsRequest
+	(*MyGroup)(nil),                    // 21: kantra.delivery.v1.MyGroup
+	(*ListMyGroupsResponse)(nil),       // 22: kantra.delivery.v1.ListMyGroupsResponse
+	(*GetGroupInfoRequest)(nil),        // 23: kantra.delivery.v1.GetGroupInfoRequest
+	(*GetGroupInfoResponse)(nil),       // 24: kantra.delivery.v1.GetGroupInfoResponse
+	(*ExternalJoinRequest)(nil),        // 25: kantra.delivery.v1.ExternalJoinRequest
+	(*ExternalJoinResponse)(nil),       // 26: kantra.delivery.v1.ExternalJoinResponse
+	(*RequestJoinRequest)(nil),         // 27: kantra.delivery.v1.RequestJoinRequest
+	(*RequestJoinResponse)(nil),        // 28: kantra.delivery.v1.RequestJoinResponse
+	(*TypingRequest)(nil),              // 29: kantra.delivery.v1.TypingRequest
+	(*TypingResponse)(nil),             // 30: kantra.delivery.v1.TypingResponse
+	(*GetPresenceRequest)(nil),         // 31: kantra.delivery.v1.GetPresenceRequest
+	(*Presence)(nil),                   // 32: kantra.delivery.v1.Presence
+	(*GetPresenceResponse)(nil),        // 33: kantra.delivery.v1.GetPresenceResponse
+	(*SetPresencePrivacyRequest)(nil),  // 34: kantra.delivery.v1.SetPresencePrivacyRequest
+	(*SetPresencePrivacyResponse)(nil), // 35: kantra.delivery.v1.SetPresencePrivacyResponse
+	(*GetPresencePrivacyRequest)(nil),  // 36: kantra.delivery.v1.GetPresencePrivacyRequest
+	(*GetPresencePrivacyResponse)(nil), // 37: kantra.delivery.v1.GetPresencePrivacyResponse
+	(*SetGroupInviteRequest)(nil),      // 38: kantra.delivery.v1.SetGroupInviteRequest
+	(*SetGroupInviteResponse)(nil),     // 39: kantra.delivery.v1.SetGroupInviteResponse
+	(*SetActiveRequest)(nil),           // 40: kantra.delivery.v1.SetActiveRequest
+	(*SetActiveResponse)(nil),          // 41: kantra.delivery.v1.SetActiveResponse
 }
 var file_kantra_delivery_v1_delivery_proto_depIdxs = []int32{
 	0,  // 0: kantra.delivery.v1.Envelope.type:type_name -> kantra.delivery.v1.MessageType
-	4,  // 1: kantra.delivery.v1.ClientFrame.ack:type_name -> kantra.delivery.v1.Ack
-	2,  // 2: kantra.delivery.v1.FetchPendingResponse.envelopes:type_name -> kantra.delivery.v1.Envelope
-	20, // 3: kantra.delivery.v1.ListMyGroupsResponse.groups:type_name -> kantra.delivery.v1.MyGroup
-	31, // 4: kantra.delivery.v1.GetPresenceResponse.presence:type_name -> kantra.delivery.v1.Presence
-	1,  // 5: kantra.delivery.v1.SetPresencePrivacyRequest.visibility:type_name -> kantra.delivery.v1.PresenceVisibility
-	1,  // 6: kantra.delivery.v1.GetPresencePrivacyResponse.visibility:type_name -> kantra.delivery.v1.PresenceVisibility
-	5,  // 7: kantra.delivery.v1.DeliveryService.CreateGroup:input_type -> kantra.delivery.v1.CreateGroupRequest
-	7,  // 8: kantra.delivery.v1.DeliveryService.SendCommit:input_type -> kantra.delivery.v1.SendCommitRequest
-	9,  // 9: kantra.delivery.v1.DeliveryService.SendApplication:input_type -> kantra.delivery.v1.SendApplicationRequest
-	11, // 10: kantra.delivery.v1.DeliveryService.FetchWelcome:input_type -> kantra.delivery.v1.FetchWelcomeRequest
-	13, // 11: kantra.delivery.v1.DeliveryService.FetchPending:input_type -> kantra.delivery.v1.FetchPendingRequest
-	15, // 12: kantra.delivery.v1.DeliveryService.Ack:input_type -> kantra.delivery.v1.AckRequest
-	17, // 13: kantra.delivery.v1.DeliveryService.GetGroup:input_type -> kantra.delivery.v1.GetGroupRequest
-	19, // 14: kantra.delivery.v1.DeliveryService.ListMyGroups:input_type -> kantra.delivery.v1.ListMyGroupsRequest
-	22, // 15: kantra.delivery.v1.DeliveryService.GetGroupInfo:input_type -> kantra.delivery.v1.GetGroupInfoRequest
-	24, // 16: kantra.delivery.v1.DeliveryService.ExternalJoin:input_type -> kantra.delivery.v1.ExternalJoinRequest
-	26, // 17: kantra.delivery.v1.DeliveryService.RequestJoin:input_type -> kantra.delivery.v1.RequestJoinRequest
-	28, // 18: kantra.delivery.v1.DeliveryService.Typing:input_type -> kantra.delivery.v1.TypingRequest
-	30, // 19: kantra.delivery.v1.DeliveryService.GetPresence:input_type -> kantra.delivery.v1.GetPresenceRequest
-	39, // 20: kantra.delivery.v1.DeliveryService.SetActive:input_type -> kantra.delivery.v1.SetActiveRequest
-	33, // 21: kantra.delivery.v1.DeliveryService.SetPresencePrivacy:input_type -> kantra.delivery.v1.SetPresencePrivacyRequest
-	35, // 22: kantra.delivery.v1.DeliveryService.GetPresencePrivacy:input_type -> kantra.delivery.v1.GetPresencePrivacyRequest
-	37, // 23: kantra.delivery.v1.DeliveryService.SetGroupInvite:input_type -> kantra.delivery.v1.SetGroupInviteRequest
-	6,  // 24: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
-	8,  // 25: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
-	10, // 26: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
-	12, // 27: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
-	14, // 28: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
-	16, // 29: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
-	18, // 30: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
-	21, // 31: kantra.delivery.v1.DeliveryService.ListMyGroups:output_type -> kantra.delivery.v1.ListMyGroupsResponse
-	23, // 32: kantra.delivery.v1.DeliveryService.GetGroupInfo:output_type -> kantra.delivery.v1.GetGroupInfoResponse
-	25, // 33: kantra.delivery.v1.DeliveryService.ExternalJoin:output_type -> kantra.delivery.v1.ExternalJoinResponse
-	27, // 34: kantra.delivery.v1.DeliveryService.RequestJoin:output_type -> kantra.delivery.v1.RequestJoinResponse
-	29, // 35: kantra.delivery.v1.DeliveryService.Typing:output_type -> kantra.delivery.v1.TypingResponse
-	32, // 36: kantra.delivery.v1.DeliveryService.GetPresence:output_type -> kantra.delivery.v1.GetPresenceResponse
-	40, // 37: kantra.delivery.v1.DeliveryService.SetActive:output_type -> kantra.delivery.v1.SetActiveResponse
-	34, // 38: kantra.delivery.v1.DeliveryService.SetPresencePrivacy:output_type -> kantra.delivery.v1.SetPresencePrivacyResponse
-	36, // 39: kantra.delivery.v1.DeliveryService.GetPresencePrivacy:output_type -> kantra.delivery.v1.GetPresencePrivacyResponse
-	38, // 40: kantra.delivery.v1.DeliveryService.SetGroupInvite:output_type -> kantra.delivery.v1.SetGroupInviteResponse
-	24, // [24:41] is the sub-list for method output_type
-	7,  // [7:24] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	5,  // 1: kantra.delivery.v1.ClientFrame.ack:type_name -> kantra.delivery.v1.Ack
+	4,  // 2: kantra.delivery.v1.ClientFrame.ping:type_name -> kantra.delivery.v1.Ping
+	2,  // 3: kantra.delivery.v1.FetchPendingResponse.envelopes:type_name -> kantra.delivery.v1.Envelope
+	21, // 4: kantra.delivery.v1.ListMyGroupsResponse.groups:type_name -> kantra.delivery.v1.MyGroup
+	32, // 5: kantra.delivery.v1.GetPresenceResponse.presence:type_name -> kantra.delivery.v1.Presence
+	1,  // 6: kantra.delivery.v1.SetPresencePrivacyRequest.visibility:type_name -> kantra.delivery.v1.PresenceVisibility
+	1,  // 7: kantra.delivery.v1.GetPresencePrivacyResponse.visibility:type_name -> kantra.delivery.v1.PresenceVisibility
+	6,  // 8: kantra.delivery.v1.DeliveryService.CreateGroup:input_type -> kantra.delivery.v1.CreateGroupRequest
+	8,  // 9: kantra.delivery.v1.DeliveryService.SendCommit:input_type -> kantra.delivery.v1.SendCommitRequest
+	10, // 10: kantra.delivery.v1.DeliveryService.SendApplication:input_type -> kantra.delivery.v1.SendApplicationRequest
+	12, // 11: kantra.delivery.v1.DeliveryService.FetchWelcome:input_type -> kantra.delivery.v1.FetchWelcomeRequest
+	14, // 12: kantra.delivery.v1.DeliveryService.FetchPending:input_type -> kantra.delivery.v1.FetchPendingRequest
+	16, // 13: kantra.delivery.v1.DeliveryService.Ack:input_type -> kantra.delivery.v1.AckRequest
+	18, // 14: kantra.delivery.v1.DeliveryService.GetGroup:input_type -> kantra.delivery.v1.GetGroupRequest
+	20, // 15: kantra.delivery.v1.DeliveryService.ListMyGroups:input_type -> kantra.delivery.v1.ListMyGroupsRequest
+	23, // 16: kantra.delivery.v1.DeliveryService.GetGroupInfo:input_type -> kantra.delivery.v1.GetGroupInfoRequest
+	25, // 17: kantra.delivery.v1.DeliveryService.ExternalJoin:input_type -> kantra.delivery.v1.ExternalJoinRequest
+	27, // 18: kantra.delivery.v1.DeliveryService.RequestJoin:input_type -> kantra.delivery.v1.RequestJoinRequest
+	29, // 19: kantra.delivery.v1.DeliveryService.Typing:input_type -> kantra.delivery.v1.TypingRequest
+	31, // 20: kantra.delivery.v1.DeliveryService.GetPresence:input_type -> kantra.delivery.v1.GetPresenceRequest
+	40, // 21: kantra.delivery.v1.DeliveryService.SetActive:input_type -> kantra.delivery.v1.SetActiveRequest
+	34, // 22: kantra.delivery.v1.DeliveryService.SetPresencePrivacy:input_type -> kantra.delivery.v1.SetPresencePrivacyRequest
+	36, // 23: kantra.delivery.v1.DeliveryService.GetPresencePrivacy:input_type -> kantra.delivery.v1.GetPresencePrivacyRequest
+	38, // 24: kantra.delivery.v1.DeliveryService.SetGroupInvite:input_type -> kantra.delivery.v1.SetGroupInviteRequest
+	7,  // 25: kantra.delivery.v1.DeliveryService.CreateGroup:output_type -> kantra.delivery.v1.CreateGroupResponse
+	9,  // 26: kantra.delivery.v1.DeliveryService.SendCommit:output_type -> kantra.delivery.v1.SendCommitResponse
+	11, // 27: kantra.delivery.v1.DeliveryService.SendApplication:output_type -> kantra.delivery.v1.SendApplicationResponse
+	13, // 28: kantra.delivery.v1.DeliveryService.FetchWelcome:output_type -> kantra.delivery.v1.FetchWelcomeResponse
+	15, // 29: kantra.delivery.v1.DeliveryService.FetchPending:output_type -> kantra.delivery.v1.FetchPendingResponse
+	17, // 30: kantra.delivery.v1.DeliveryService.Ack:output_type -> kantra.delivery.v1.AckResponse
+	19, // 31: kantra.delivery.v1.DeliveryService.GetGroup:output_type -> kantra.delivery.v1.GetGroupResponse
+	22, // 32: kantra.delivery.v1.DeliveryService.ListMyGroups:output_type -> kantra.delivery.v1.ListMyGroupsResponse
+	24, // 33: kantra.delivery.v1.DeliveryService.GetGroupInfo:output_type -> kantra.delivery.v1.GetGroupInfoResponse
+	26, // 34: kantra.delivery.v1.DeliveryService.ExternalJoin:output_type -> kantra.delivery.v1.ExternalJoinResponse
+	28, // 35: kantra.delivery.v1.DeliveryService.RequestJoin:output_type -> kantra.delivery.v1.RequestJoinResponse
+	30, // 36: kantra.delivery.v1.DeliveryService.Typing:output_type -> kantra.delivery.v1.TypingResponse
+	33, // 37: kantra.delivery.v1.DeliveryService.GetPresence:output_type -> kantra.delivery.v1.GetPresenceResponse
+	41, // 38: kantra.delivery.v1.DeliveryService.SetActive:output_type -> kantra.delivery.v1.SetActiveResponse
+	35, // 39: kantra.delivery.v1.DeliveryService.SetPresencePrivacy:output_type -> kantra.delivery.v1.SetPresencePrivacyResponse
+	37, // 40: kantra.delivery.v1.DeliveryService.GetPresencePrivacy:output_type -> kantra.delivery.v1.GetPresencePrivacyResponse
+	39, // 41: kantra.delivery.v1.DeliveryService.SetGroupInvite:output_type -> kantra.delivery.v1.SetGroupInviteResponse
+	25, // [25:42] is the sub-list for method output_type
+	8,  // [8:25] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_kantra_delivery_v1_delivery_proto_init() }
@@ -2342,6 +2400,7 @@ func file_kantra_delivery_v1_delivery_proto_init() {
 	}
 	file_kantra_delivery_v1_delivery_proto_msgTypes[1].OneofWrappers = []any{
 		(*ClientFrame_Ack)(nil),
+		(*ClientFrame_Ping)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2349,7 +2408,7 @@ func file_kantra_delivery_v1_delivery_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kantra_delivery_v1_delivery_proto_rawDesc), len(file_kantra_delivery_v1_delivery_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   39,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

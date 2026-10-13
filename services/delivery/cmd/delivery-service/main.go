@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/kantracity/kantrae2e/pkg/db"
 	"github.com/kantracity/kantrae2e/pkg/devicestatus"
@@ -28,5 +30,20 @@ func main() {
 	mux.Handle(svc.Handler())
 	mux.Handle(delivery.WSPath, svc.WSHandler())
 	mux.Handle("GET /healthz", server.Health(pool.Ping))
+	// Realtime over WebTransport (QUIC) on its own UDP port; clients find
+	// it (port, certificate hash) at RealtimeInfoPath.
+	wtPort := 0
+	if addr := os.Getenv("WT_ADDR"); addr != "" {
+		_, p, _ := net.SplitHostPort(addr)
+		wtPort, _ = strconv.Atoi(server.Env("WT_PUBLIC_PORT", p))
+		wt := svc.WebTransportServer(addr)
+		go func() {
+			l.Info().Str("addr", addr).Msg("webtransport listening")
+			if err := wt.ListenAndServe(); err != nil {
+				l.Error().Err(err).Msg("webtransport stopped")
+			}
+		}()
+	}
+	mux.Handle("GET "+delivery.RealtimeInfoPath, svc.RealtimeInfoHandler(wtPort))
 	server.Run(l, server.Env("LISTEN_ADDR", ":8082"), mux)
 }

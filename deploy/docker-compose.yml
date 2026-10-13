@@ -98,6 +98,10 @@ services:
     environment:
       <<: *env
       LISTEN_ADDR: ":8082"
+      # Realtime over WebTransport (QUIC); clients fall back to the WebSocket.
+      WT_ADDR: ":4433"
+    ports:
+      - "4433:4433/udp"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
       <<: *health
@@ -138,6 +142,7 @@ services:
     command: caddy run --config /etc/caddy/Caddyfile.dev --adapter caddyfile
     ports:
       - "443:443"
+      - "443:443/udp" # HTTP/3
       - "127.0.0.1:8080:8080" # Android over USB (adb reverse), see README
     volumes:
       - ./Caddyfile.dev:/etc/caddy/Caddyfile.dev:ro

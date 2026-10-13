@@ -26,8 +26,8 @@ ssh root@<IP>
 curl -fsSL https://get.docker.com | sh
 
 # Файрвол (если включён ufw)
-ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp \
-  && ufw allow 3478 && ufw allow 49160:49200/udp && ufw --force enable   # 3478 и 49160-49200 — звонки
+ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp && ufw allow 4433/udp \
+  && ufw allow 3478 && ufw allow 49160:49200/udp && ufw --force enable   # 443/udp — HTTP/3, 4433/udp — WebTransport, 3478 и 49160-49200 — звонки
 # У облачных провайдеров (Hetzner, Timeweb, Yandex Cloud…) те же порты откройте и в их файрволе/группе безопасности.
 
 # Мало памяти? Добавьте swap на время сборки
@@ -143,3 +143,16 @@ deploy/backup.sh
 - логи: `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --tail=50 coturn`. Групповые звонки — «каждый
 с каждым», комфортно до 5–6 участников. Если звонки соединяются только в одной сети (Wi-Fi), а через
 мобильный интернет — нет, проверьте, что порты 3478 и 49160–49200/udp открыты.
+
+### Быстрый транспорт (QUIC)
+
+Приложения сами выбирают самый быстрый путь до сервера:
+- запросы — HTTP/3 (QUIC, `UDP 443`), иначе HTTP/2 по TCP;
+- сообщения в реальном времени — WebTransport (QUIC, `UDP 4433`), иначе WebSocket.
+
+QUIC подключается быстрее и не рвётся при смене сети (Wi-Fi ↔ мобильный интернет). Если провайдер
+режет UDP, приложение за полсекунды переходит на TCP — ничего настраивать не нужно. Чтобы QUIC
+работал, откройте `443/udp` и `4433/udp` в `ufw` **и** в группе безопасности облака. Проверка
+с сервера: `curl -s https://<домен>/v1/realtime-info` — должен вернуть `wtPort` и отпечаток сертификата.
+Отключить WebTransport на сервере: `WT_ADDR=` в `deploy/.env`; в приложении — переменная
+окружения `KANTRA_WT=0`, весь QUIC — `KANTRA_TRANSPORT=tcp`.

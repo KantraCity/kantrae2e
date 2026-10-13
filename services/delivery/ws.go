@@ -125,22 +125,57 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 	conn.SetReadLimit(1 << 20)
+	s.serveFrames(r.Context(), did, keepAliveFrom(r), "ws", wsFrames{conn})
+}
 
-	ctx, cancel := context.WithCancel(r.Context())
+// wsFrames: one WebSocket binary message per frame.
+type wsFrames struct{ c *websocket.Conn }
+
+func (f wsFrames) ReadFrame(ctx context.Context) ([]byte, error) {
+	for {
+		typ, data, err := f.c.Read(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if typ == websocket.MessageBinary {
+			return data, nil
+		}
+	}
+}
+
+func (f wsFrames) WriteFrame(ctx context.Context, b []byte) error {
+	return f.c.Write(ctx, websocket.MessageBinary, b)
+}
+
+func (f wsFrames) Fail(reason string) { f.c.Close(websocket.StatusInternalError, reason) }
+
+// frameConn is a realtime connection carrying binary frames: Envelopes to
+// the device (an empty frame is a heartbeat), ClientFrames (acks) back.
+// WebSocket (TCP) and WebTransport (QUIC) both implement it.
+type frameConn interface {
+	ReadFrame(ctx context.Context) ([]byte, error)
+	WriteFrame(ctx context.Context, b []byte) error
+	Fail(reason string)
+}
+
+// serveFrames streams queued Envelopes to the device and marks them
+// delivered when the client acks them (ClientFrame.ack). Unacked entries
+// are re-sent on the next connection: at-least-once delivery, clients
+// de-duplicate by Envelope.id.
+func (s *Service) serveFrames(parent context.Context, did string, keepAlive time.Duration, kind string, conn frameConn) {
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	sb, unsubscribe := s.hub.subscribe(did)
 	defer unsubscribe()
 
-	// Reader: acks from the client.
+	// Reader: acks (and pings) from the client.
+	pings := make(chan struct{}, 1)
 	go func() {
 		defer cancel()
 		for {
-			typ, data, err := conn.Read(ctx)
+			data, err := conn.ReadFrame(ctx)
 			if err != nil {
 				return
-			}
-			if typ != websocket.MessageBinary {
-				continue
 			}
 			var f deliveryv1.ClientFrame
 			if proto.Unmarshal(data, &f) != nil {
@@ -151,16 +186,21 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 					s.log.Warn().Err(err).Msg("ack failed")
 				}
 			}
+			if f.GetPing() != nil {
+				select {
+				case pings <- struct{}{}:
+				default:
+				}
+			}
 		}
 	}()
 
-	s.log.Info().Str("device", did).Msg("ws connected")
-	defer s.log.Info().Str("device", did).Msg("ws disconnected")
+	s.log.Info().Str("device", did).Str("via", kind).Msg("realtime connected")
+	defer s.log.Info().Str("device", did).Str("via", kind).Msg("realtime disconnected")
 
 	var lastSent int64
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
-	keepAlive := keepAliveFrom(r)
 	var heartbeat <-chan time.Time
 	if keepAlive > 0 {
 		t := time.NewTicker(keepAlive)
@@ -171,7 +211,7 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 	write := func(b []byte) bool {
 		wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer wcancel()
-		if conn.Write(wctx, websocket.MessageBinary, b) != nil {
+		if conn.WriteFrame(wctx, b) != nil {
 			return false
 		}
 		lastWrite = time.Now()
@@ -183,7 +223,7 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				if ctx.Err() == nil {
 					s.log.Error().Err(err).Msg("queue read failed")
-					conn.Close(websocket.StatusInternalError, "queue error")
+					conn.Fail("queue error")
 				}
 				return
 			}
@@ -207,6 +247,11 @@ func (s *Service) serveWS(w http.ResponseWriter, r *http.Request) {
 		case e := <-sb.eph:
 			b, _ := proto.Marshal(e)
 			if !write(b) {
+				return
+			}
+			goto wait
+		case <-pings:
+			if !write(nil) {
 				return
 			}
 			goto wait

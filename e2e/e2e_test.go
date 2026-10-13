@@ -34,6 +34,7 @@ import (
 	"github.com/kantracity/kantrae2e/services/directory"
 	"github.com/kantracity/kantrae2e/services/history"
 	"github.com/kantracity/kantrae2e/services/media"
+	"net"
 	"net/http"
 )
 
@@ -44,6 +45,9 @@ type cluster struct {
 	deliveryDB  *pgxpool.Pool
 	historyBlob blobstore.Store
 	dir         string
+	// wtAddr: the WebTransport endpoint (UDP); clients use it when wt is set.
+	wtAddr string
+	wt     bool
 }
 
 func blobs(t *testing.T, bucket string) blobstore.Store {
@@ -81,6 +85,16 @@ func newCluster(t *testing.T) *cluster {
 	del := delivery.New(c.deliveryDB, secret, zerolog.Nop()).WithDevices(devices)
 	add(del.Handler())
 	add(delivery.WSPath, del.WSHandler())
+	// WebTransport on a UDP port of its own, like in production.
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := del.WebTransportServer("")
+	go func() { _ = wt.Serve(pc) }()
+	t.Cleanup(func() { wt.Close(); pc.Close() })
+	c.wtAddr = pc.LocalAddr().String()
+	add(delivery.RealtimeInfoPath, del.RealtimeInfoHandler(pc.LocalAddr().(*net.UDPAddr).Port))
 	c.historyBlob = blobs(t, history.Bucket)
 	add(history.New(testutil.Pool(t, dsn, history.Schema, history.Migrations()), c.historyBlob, secret).Handler())
 	add(media.New(testutil.Pool(t, dsn, media.Schema, media.Migrations()), blobs(t, media.Bucket), secret).Handler())
@@ -126,6 +140,11 @@ func (u *user) eventsOf(t core.EventType) []core.Event {
 var autoBackup = false
 
 func (c *cluster) open(name, db string) *user {
+	return c.openWith(name, db, core.Options{WebTransport: c.wt})
+}
+
+// openWith opens a client; opts may set the realtime options.
+func (c *cluster) openWith(name, db string, opts core.Options) *user {
 	c.t.Helper()
 	u := &user{name: name, db: filepath.Join(c.dir, db)}
 	cl, err := core.Open(context.Background(), core.Options{
@@ -134,6 +153,8 @@ func (c *cluster) open(name, db string) *user {
 		Logf:              func(f string, a ...any) { c.t.Logf(name+": "+f, a...) },
 		DisableAutoBackup: !autoBackup,
 		BackupDelay:       20 * time.Millisecond,
+		WebTransport:      opts.WebTransport,
+		WebTransportAddr:  opts.WebTransportAddr,
 	})
 	if err != nil {
 		c.t.Fatal(err)

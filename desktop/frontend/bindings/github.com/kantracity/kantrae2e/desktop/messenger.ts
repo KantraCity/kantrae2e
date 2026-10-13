@@ -309,6 +309,15 @@ export function MyProfile(): $CancellablePromise<$models.UserProfile | null> {
 }
 
 /**
+ * NetworkChanged: the device switched networks or came back online (the
+ * browser / WebView noticed). QUIC connections move to the new network;
+ * TCP connections are replaced at once instead of after a timeout.
+ */
+export function NetworkChanged(): $CancellablePromise<void> {
+    return $Call.ByID(320849347);
+}
+
+/**
  * OpenDirect opens (or starts) the direct chat with a user.
  */
 export function OpenDirect(username: string): $CancellablePromise<$models.Chat | null> {

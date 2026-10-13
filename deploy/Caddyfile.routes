@@ -96,6 +96,10 @@ handle /kantra.delivery.v1.DeliveryService/* {
 handle /v1/ws {
 	reverse_proxy delivery-service:8082
 }
+# Where the WebTransport (QUIC) endpoint is: UDP port and certificate hash.
+handle /v1/realtime-info {
+	reverse_proxy delivery-service:8082
+}
 
 # --- history-service ---
 handle /kantra.history.v1.HistoryService/* {

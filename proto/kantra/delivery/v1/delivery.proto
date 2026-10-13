@@ -83,8 +83,13 @@ message Envelope {
 message ClientFrame {
   oneof frame {
     Ack ack = 1;
+    // Answered with a heartbeat (an empty frame) at once: lets the client
+    // check that a connection survived a network change.
+    Ping ping = 2;
   }
 }
+
+message Ping {}
 
 message Ack {
   repeated int64 ids = 1;

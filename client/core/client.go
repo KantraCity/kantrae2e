@@ -6,6 +6,7 @@ package core
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -66,6 +67,11 @@ type Options struct {
 	// (each packet wakes the radio); the interval is halved after a dead
 	// connection, down to a minute, to find what the network tolerates.
 	KeepAlive time.Duration
+	// WebTransport enables the realtime connection over QUIC when the
+	// server offers it (/v1/realtime-info); the WebSocket stays the fallback.
+	WebTransport bool
+	// WebTransportAddr overrides the endpoint's host:port (tests, proxies).
+	WebTransportAddr string
 }
 
 // EventType enumerates Event kinds.
@@ -151,6 +157,13 @@ type Client struct {
 	// Realtime connection: current keep-alive and a "reconnect now" signal.
 	keepAlive atomic.Int64 // time.Duration
 	kick      chan struct{}
+	// The realtime connection (realtime.go).
+	rtMu          sync.Mutex
+	rt            rtConn
+	rtRecv        chan struct{}
+	wtBrokenUntil time.Time
+	wtInfo        *wtEndpoint
+	wtSessions    tls.ClientSessionCache
 	// Recent username lookups (resolveUser).
 	lookupMu sync.Mutex
 	lookups  map[string]lookupResult
@@ -193,7 +206,8 @@ func Open(ctx context.Context, opts Options) (*Client, error) {
 		opts.BackupDelay = 2 * time.Second
 	}
 	c := &Client{opts: opts, st: st, hc: opts.HTTPClient,
-		answered: map[string]bool{}, joinRequested: map[string]time.Time{}, links: map[string]*LinkRequest{}, kick: make(chan struct{}, 1)}
+		answered: map[string]bool{}, joinRequested: map[string]time.Time{}, links: map[string]*LinkRequest{}, kick: make(chan struct{}, 1), rtRecv: make(chan struct{}, 1)}
+	c.wtSessions = tls.NewLRUClientSessionCache(4)
 	c.keepAlive.Store(int64(opts.KeepAlive))
 	if c.hc == nil {
 		c.hc = http.DefaultClient

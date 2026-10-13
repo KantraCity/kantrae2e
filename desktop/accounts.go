@@ -142,6 +142,9 @@ func (m *Messenger) openSlot(s *slot, server string) error {
 		OnEvent:    func(e core.Event) { m.onCoreEvent(s, e) },
 		Logf:       log.Printf, // diagnostics only, never plaintext
 		KeepAlive:  keepAlive,
+		// Realtime over WebTransport (QUIC) when the server offers it;
+		// KANTRA_WT=0 keeps the WebSocket.
+		WebTransport: os.Getenv("KANTRA_WT") != "0",
 	})
 	if err != nil {
 		return err

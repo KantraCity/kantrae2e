@@ -20,6 +20,7 @@ type netsim struct {
 	loss  atomic.Int64 // UDP loss per mille
 	mu    sync.Mutex
 	conns map[net.Conn]struct{}
+	udp   map[*net.UDPConn]struct{} // upstream UDP sockets
 }
 
 func (n *netsim) oneWay() time.Duration { return time.Duration(n.delay.Load()) }
@@ -32,6 +33,12 @@ func (n *netsim) cut() {
 		c.Close()
 	}
 	n.conns = map[net.Conn]struct{}{}
+	// UDP flows get new source ports: the server sees the client at a new
+	// address (NAT rebinding / a new network). QUIC can migrate; TCP can't.
+	for c := range n.udp {
+		c.Close()
+	}
+	n.udp = map[*net.UDPConn]struct{}{}
 }
 
 func (n *netsim) track(c net.Conn) {
@@ -113,12 +120,25 @@ func (n *netsim) serveUDP(pc net.PacketConn, target string) {
 		}
 		mu.Lock()
 		up := peers[from.String()]
+		n.mu.Lock()
+		if up != nil {
+			if _, alive := n.udp[up]; !alive {
+				up = nil // cut: rebind
+			}
+		}
+		n.mu.Unlock()
 		if up == nil {
 			up, err = net.DialUDP("udp", nil, raddr)
 			if err != nil {
 				mu.Unlock()
 				continue
 			}
+			n.mu.Lock()
+			if n.udp == nil {
+				n.udp = map[*net.UDPConn]struct{}{}
+			}
+			n.udp[up] = struct{}{}
+			n.mu.Unlock()
 			peers[from.String()] = up
 			go func(from net.Addr, up *net.UDPConn) {
 				b := make([]byte, 64<<10)

@@ -116,6 +116,11 @@ class AppState {
     // Web mode: an open, visible tab is "online" (the desktop window and the
     // Android activity report focus themselves).
     if (this.state?.webMode) Messenger.SetForeground(!document.hidden).catch(() => {})
+    // Network changes (Wi-Fi ↔ mobile, back online): the realtime
+    // connection moves along (QUIC) or reconnects at once (TCP).
+    const changed = () => Messenger.NetworkChanged().catch(() => {})
+    window.addEventListener('online', changed)
+    ;(navigator as Navigator & { connection?: EventTarget }).connection?.addEventListener('change', changed)
   }
 
   /** (Re)loads everything for the active account (start, account switch). */

@@ -24,6 +24,7 @@ import (
 	"github.com/kantracity/kantrae2e/client/core"
 	"github.com/kantracity/kantrae2e/client/crypto"
 	"github.com/kantracity/kantrae2e/client/store"
+	"github.com/kantracity/kantrae2e/client/transport"
 )
 
 // EventName is the single event channel from Go to the frontend.
@@ -996,9 +997,10 @@ func (m *Messenger) Sync() error {
 
 // httpClientFromEnv honours KANTRA_CA (extra root CA, e.g. Caddy's dev CA)
 // and KANTRA_INSECURE=1 (development only).
+//
+// Requests go over HTTP/3 (QUIC) when the network lets UDP through and
+// over HTTP/2 otherwise (client/transport); KANTRA_TRANSPORT=tcp forces TCP.
 func httpClientFromEnv() (*http.Client, error) {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.ForceAttemptHTTP2 = true
 	cfg := &tls.Config{InsecureSkipVerify: os.Getenv("KANTRA_INSECURE") == "1"} //nolint:gosec // explicit dev switch
 	if ca := os.Getenv("KANTRA_CA"); ca != "" {
 		pem, err := os.ReadFile(ca)
@@ -1014,8 +1016,11 @@ func httpClientFromEnv() (*http.Client, error) {
 		}
 		cfg.RootCAs = pool
 	}
-	tr.TLSClientConfig = cfg
-	return &http.Client{Transport: tr, Timeout: 2 * time.Minute}, nil
+	mode := transport.Auto
+	if os.Getenv("KANTRA_TRANSPORT") == "tcp" {
+		mode = transport.OnlyTCP
+	}
+	return transport.New(cfg, mode).Client(2 * time.Minute), nil
 }
 
 func defaultDBPath() string {
