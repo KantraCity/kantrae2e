@@ -43,7 +43,7 @@
     await loadStorage()
   }
   async function clearCache() {
-    if (!confirm('Удалить загруженные фото, видео и файлы с этого устройства? Сообщения останутся, медиа загрузятся снова при открытии.')) return
+    if (!(await app.confirm('Удалить загруженные фото, видео и файлы с этого устройства? Сообщения останутся, медиа загрузятся снова при открытии.', { ok: 'Очистить', danger: true }))) return
     await app.try(() => Messenger.ClearCache())
     await loadStorage()
     app.toast('Кэш очищен')
@@ -97,7 +97,7 @@
   }
 
   async function createRecovery() {
-    if (hasRecovery && !confirm('Создать новый ключ восстановления? Старый перестанет работать.')) return
+    if (hasRecovery && !(await app.confirm('Создать новый ключ восстановления? Старый перестанет работать.', { ok: 'Создать' }))) return
     creating = true
     const phrase = await app.try(() => Messenger.SetupRecovery())
     creating = false
@@ -106,7 +106,7 @@
   $effect(() => { load() })
 
   async function revoke(d: Device) {
-    if (!confirm(`Отключить устройство «${d.name}»? Оно будет удалено из всех групп и не сможет вернуться.`)) return
+    if (!(await app.confirm(`Отключить устройство «${d.name}»? Оно будет удалено из всех групп и не сможет вернуться.`, { ok: 'Отключить', danger: true }))) return
     const n = await app.try(() => Messenger.RevokeDevice(d.id))
     if (n !== undefined) {
       app.toast(`Устройство отключено и удалено из ${n} ${plural(n, 'группы', 'групп', 'групп')}`)

@@ -5,6 +5,7 @@
   import Auth from './components/Auth.svelte'
   import ChatInfo from './components/ChatInfo.svelte'
   import UserCard from './components/UserCard.svelte'
+  import Dialog from './components/Dialog.svelte'
   import ChatView from './components/ChatView.svelte'
   import ApproveLink from './components/ApproveLink.svelte'
   import DeleteMessages from './components/DeleteMessages.svelte'
@@ -142,6 +143,8 @@
 {#if app.chatMenu}<ChatMenu />{/if}
 
 <CallView />
+
+{#if app.dialog}<Dialog />{/if}
 
 <Toasts />
 

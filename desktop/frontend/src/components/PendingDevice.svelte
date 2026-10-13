@@ -45,7 +45,7 @@
   }
 
   async function cancel() {
-    if (!confirm('Отменить вход на этом устройстве?')) return
+    if (!(await app.confirm('Отменить вход на этом устройстве?', { ok: 'Отменить вход', danger: true }))) return
     await app.try(() => Messenger.CancelPending())
     app.state = await Messenger.GetState()
   }

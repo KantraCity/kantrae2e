@@ -30,7 +30,7 @@
   })
   async function toggleBlock() {
     if (!chat?.peerId) return
-    if (!blocked && !confirm(`Заблокировать ${chat.name}? Он(а) не сможет писать и звонить вам.`)) return
+    if (!blocked && !(await app.confirm(`Заблокировать ${chat.name}? Он(а) не сможет писать и звонить вам.`, { ok: 'Заблокировать', danger: true }))) return
     if (await app.setBlocked(chat.peerId, !blocked)) app.toast(blocked ? 'Пользователь заблокирован' : 'Пользователь разблокирован')
   }
 
@@ -74,7 +74,7 @@
   }
   let link = $state('')
   async function showLink(reset = false) {
-    if (reset && !confirm('Старая ссылка перестанет работать. Создать новую?')) return
+    if (reset && !(await app.confirm('Старая ссылка перестанет работать. Создать новую?', { ok: 'Создать' }))) return
     const l = await app.try(() => Messenger.InviteLink(chatId, reset))
     if (l) {
       link = l
@@ -88,7 +88,7 @@
     } catch { app.toast('Не удалось скопировать', 'error') }
   }
   async function revokeLink() {
-    if (!confirm('Отключить ссылку-приглашение?')) return
+    if (!(await app.confirm('Отключить ссылку-приглашение?', { ok: 'Отключить', danger: true }))) return
     const ok = await app.try(() => Messenger.RevokeInviteLink(chatId))
     if (ok !== undefined) {
       link = ''
@@ -131,7 +131,7 @@
   }
 
   async function remove(username: string) {
-    if (!confirm(`Удалить ${username} из группы?`)) return
+    if (!(await app.confirm(`Удалить ${username} из группы?`, { ok: 'Удалить', danger: true }))) return
     const ok = await app.try(() => Messenger.Remove(chatId, username))
     if (ok !== undefined) await load()
   }

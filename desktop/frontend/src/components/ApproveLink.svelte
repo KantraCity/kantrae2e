@@ -20,7 +20,7 @@
   }
 
   async function reject() {
-    if (!confirm('Отклонить вход? Устройство будет отключено от аккаунта.')) return
+    if (!(await app.confirm('Отклонить вход? Устройство будет отключено от аккаунта.', { ok: 'Отклонить', danger: true }))) return
     busy = true
     const ok = await app.try(() => Messenger.RejectLink(deviceId))
     busy = false

@@ -159,11 +159,12 @@
     text = r.text
     tick().then(() => { input?.focus(); input?.setSelectionRange(r.start, r.end); checkSel() })
   }
-  function fmtLink() {
+  async function fmtLink() {
     if (!input) return
-    const url = prompt('Ссылка (https://…)', 'https://')
-    if (!url || !/^https?:\/\/\S+$/.test(url.trim())) return
+    // The dialog takes the focus: remember the selection first.
     const s0 = input.selectionStart ?? 0, e0 = input.selectionEnd ?? 0
+    const url = await app.prompt('Ссылка (https://…)', 'https://')
+    if (!url || !/^https?:\/\/\S+$/.test(url.trim()) || !input) return
     const label = text.slice(s0, e0) || url.trim()
     text = text.slice(0, s0) + `[${label}](${url.trim()})` + text.slice(e0)
     tick().then(() => input?.focus())

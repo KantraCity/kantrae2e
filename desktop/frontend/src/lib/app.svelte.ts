@@ -412,6 +412,20 @@ class AppState {
     return Promise.resolve(true)
   }
 
+  // ---- confirm / prompt (components/Dialog.svelte) ----
+  dialog = $state<{ kind: 'confirm' | 'prompt'; text: string; ok?: string; danger?: boolean; value?: string; resolve: (v: any) => void } | null>(null)
+  /** Asks for a yes/no answer in the app's own box (window.confirm never
+   * shows on iPhone). */
+  confirm(text: string, opts: { ok?: string; danger?: boolean } = {}): Promise<boolean> {
+    this.dialog?.resolve(false)
+    return new Promise((resolve) => (this.dialog = { kind: 'confirm', text, ...opts, resolve }))
+  }
+  /** Asks for a line of text; null when cancelled. */
+  prompt(text: string, value = ''): Promise<string | null> {
+    this.dialog?.resolve(null)
+    return new Promise((resolve) => (this.dialog = { kind: 'prompt', text, value, resolve }))
+  }
+
   /** Opens a person's profile (a tap on their avatar or name in a chat). */
   openUser(userId: string, name: string, photo?: string) {
     if (!userId) return
