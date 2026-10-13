@@ -33,6 +33,7 @@ export type {
     SendOpts,
     Settings,
     State,
+    StorageInfo,
     UIEvent,
     UpdateState,
     UserHit,

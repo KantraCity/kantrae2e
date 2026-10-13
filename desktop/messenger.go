@@ -23,6 +23,7 @@ import (
 
 	"github.com/kantracity/kantrae2e/client/core"
 	"github.com/kantracity/kantrae2e/client/crypto"
+	"github.com/kantracity/kantrae2e/client/mediacache"
 	"github.com/kantracity/kantrae2e/client/store"
 	"github.com/kantracity/kantrae2e/client/transport"
 )
@@ -229,8 +230,10 @@ type Messenger struct {
 	hc     *http.Client
 	web    bool
 
-	mu            sync.Mutex
-	slots         []*slot
+	mu    sync.Mutex
+	slots []*slot
+	// cache: downloaded media on disk (storage.go).
+	cache         *mediacache.Cache
 	active        *slot
 	defaultServer string
 

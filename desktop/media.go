@@ -72,7 +72,21 @@ func (c *mediaCache) put(e *mediaEntry) {
 	}
 }
 
-var decrypted = newMediaCache(192 << 20)
+// Phones keep less in memory.
+var decrypted = newMediaCache(func() int {
+	if platformName == "android" || platformName == "ios" {
+		return 64 << 20
+	}
+	return 192 << 20
+}())
+
+func (c *mediaCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ll.Init()
+	c.items = map[string]*list.Element{}
+	c.size = 0
+}
 
 // mediaExt picks the URL extension from the media's type or name.
 func mediaExt(ref *core.MediaRef) string {

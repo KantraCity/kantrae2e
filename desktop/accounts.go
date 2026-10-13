@@ -93,6 +93,7 @@ func (m *Messenger) start() error {
 			return
 		}
 		diag.open(m.dir)
+		m.openMediaCache()
 		m.loadPasscode() // the app starts locked when a passcode is set
 		var af accountsFile
 		if b, err := os.ReadFile(m.accountsPath()); err == nil {
@@ -143,6 +144,7 @@ func (m *Messenger) openSlot(s *slot, server string) error {
 		OnEvent:    func(e core.Event) { m.onCoreEvent(s, e) },
 		Logf:       log.Printf, // diagnostics only, never plaintext
 		KeepAlive:  keepAlive,
+		MediaCache: m.cache,
 		// Realtime over WebTransport (QUIC) when the server offers it;
 		// KANTRA_WT=0 keeps the WebSocket.
 		WebTransport:     os.Getenv("KANTRA_WT") != "0",

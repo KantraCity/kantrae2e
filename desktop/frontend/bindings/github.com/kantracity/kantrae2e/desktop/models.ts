@@ -430,6 +430,21 @@ export interface State {
     "accounts": number;
 }
 
+export interface StorageInfo {
+    /**
+     * Downloaded media on this device; CacheLimit 0 = no limit.
+     */
+    "cacheBytes": number;
+    "cacheFiles": number;
+    "cacheLimit": number;
+
+    /**
+     * Messages and keys of the accounts (databases), and the diagnostics log.
+     */
+    "dataBytes": number;
+    "logBytes": number;
+}
+
 /**
  * UIEvent is pushed to the frontend for everything that happens in the
  * background (new messages, joins, security warnings, connection state).

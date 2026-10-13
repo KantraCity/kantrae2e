@@ -120,6 +120,14 @@ export function CheckForUpdate(): $CancellablePromise<void> {
 }
 
 /**
+ * ClearCache deletes the downloaded media (they download again when
+ * opened) and the decrypted copies in memory.
+ */
+export function ClearCache(): $CancellablePromise<void> {
+    return $Call.ByID(9263256);
+}
+
+/**
  * ClearHistory deletes all messages of a chat; forAll (direct chats) also
  * for the other person.
  */
@@ -653,6 +661,14 @@ export function SetAvatar(imageBase64: string): $CancellablePromise<$models.User
 }
 
 /**
+ * SetCacheLimit sets the media cache limit in bytes (0: no limit) and
+ * trims the cache to it.
+ */
+export function SetCacheLimit(limit: number): $CancellablePromise<void> {
+    return $Call.ByID(1303636714, limit);
+}
+
+/**
  * SetForeground tells whether the user is looking at the app (window
  * focused / activity resumed / browser tab visible).
  */
@@ -714,6 +730,13 @@ export function SetupRecovery(): $CancellablePromise<string> {
  */
 export function SharedMedia(chatID: string, kind: string): $CancellablePromise<$models.Message[] | null> {
     return $Call.ByID(555600688, chatID, kind);
+}
+
+/**
+ * StorageInfo reports how much this device keeps.
+ */
+export function StorageInfo(): $CancellablePromise<$models.StorageInfo> {
+    return $Call.ByID(3600664606);
 }
 
 /**

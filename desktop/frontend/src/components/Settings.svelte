@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte'
-  import { Messenger, type Device, type Settings as Prefs, type UserHit } from '../lib/api'
+  import { Messenger, type Device, type Settings as Prefs, type StorageInfo, type UserHit } from '../lib/api'
   import { plural } from '../lib/util'
   import Avatar from './Avatar.svelte'
   import Icon from './Icon.svelte'
@@ -27,6 +27,27 @@
 
   // ---- appearance, passcode ----
   let theme = $state<ThemePref>(themePref())
+
+  // ---- data and storage ----
+  let storage = $state<StorageInfo | null>(null)
+  const loadStorage = async () => (storage = await Messenger.StorageInfo().catch(() => null))
+  loadStorage()
+  const LIMITS: [number, string][] = [[512 << 20, '512 МБ'], [1 << 30, '1 ГБ'], [2 << 30, '2 ГБ'], [5 * 2 ** 30, '5 ГБ'], [0, 'Без ограничения']]
+  function size(n: number) {
+    if (n < 1 << 20) return `${Math.max(0, Math.round(n / 1024))} КБ`
+    if (n < 1 << 30) return `${(n / 2 ** 20).toFixed(n < 10 * 2 ** 20 ? 1 : 0)} МБ`
+    return `${(n / 2 ** 30).toFixed(1)} ГБ`
+  }
+  async function setLimit(v: number) {
+    await app.try(() => Messenger.SetCacheLimit(v))
+    await loadStorage()
+  }
+  async function clearCache() {
+    if (!confirm('Удалить загруженные фото, видео и файлы с этого устройства? Сообщения останутся, медиа загрузятся снова при открытии.')) return
+    await app.try(() => Messenger.ClearCache())
+    await loadStorage()
+    app.toast('Кэш очищен')
+  }
   function pickTheme(v: ThemePref) {
     theme = v
     setThemePref(v)
@@ -247,6 +268,22 @@
       </div>
     </div>
 
+    {#if storage}
+      <div class="section">
+        <div class="label"><Icon name="file" size={18} /> Данные и память</div>
+        <div class="kv"><span>Загруженные медиа</span><span class="muted">{size(storage.cacheBytes)}</span></div>
+        <div class="kv"><span>Сообщения и ключи</span><span class="muted">{size(storage.dataBytes)}</span></div>
+        <label class="kv">
+          <span>Хранить медиа не больше</span>
+          <select class="limit" value={storage.cacheLimit} onchange={(e) => setLimit(Number(e.currentTarget.value))}>
+            {#each LIMITS as [v, label]}<option value={v}>{label}</option>{/each}
+          </select>
+        </label>
+        <p class="muted small">Старые медиа удаляются с устройства первыми и снова загружаются при открытии.</p>
+        <button class="btn flat" onclick={clearCache} disabled={!storage.cacheBytes}>Очистить кэш</button>
+      </div>
+    {/if}
+
     <div class="section">
       <div class="label"><Icon name="download" size={18} /> Версия и обновления</div>
       {#if app.update}
@@ -371,4 +408,6 @@
   .sublabel { margin: 12px 0 4px; font-size: 13px; color: var(--text-muted); }
   .who-row { display: flex; align-items: center; gap: 10px; }
   .row-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+  .kv { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; }
+  .limit { background: var(--bg-input); color: var(--text); border: 1px solid var(--field-border); border-radius: 8px; padding: 6px 8px; font: inherit; }
 </style>
