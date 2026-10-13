@@ -394,15 +394,12 @@ class AppState {
           this.toast(errorText(e), 'error', 5000)
         }
         delete this.sending[tmp]
-        const list = this.messages[chatId]
-        const i = list?.findIndex((x) => x.id === tmp) ?? -1
         if (!msg) {
           this.failed[tmp] = attempt // tap the red mark to retry
           return
         }
         // Replace in place: no jump, the clock turns into a check mark.
-        if (list && i >= 0) list[i] = msg
-        else this.addMessage(msg)
+        this.settleSent(chatId, tmp, msg)
         this.touchChat(msg)
       })
       this.sendQueue = p
@@ -649,8 +646,7 @@ class AppState {
         return
       }
       this.localUrls[msg.id] = p.localUrl
-      if (list && i >= 0) list.splice(i, 1)
-      this.addMessage(msg)
+      this.settleSent(chatId, tmp, msg)
     })
     this.sendQueue = run
     return run
@@ -931,10 +927,11 @@ class AppState {
     this.touchChat(temp)
     try {
       const msg = await Messenger.SendSavedGIF(chatId, g.id, replyTo)
-      const list = this.messages[chatId]
-      const i = list?.findIndex((x) => x.id === tmp) ?? -1
-      if (list && i >= 0 && msg) list[i] = msg
-      else if (msg) this.addMessage(msg)
+      if (msg) {
+        // Keep showing the already loaded file (no reload flash).
+        if (temp.file?.url) this.localUrls[msg.id] = temp.file.url
+        this.settleSent(chatId, tmp, msg)
+      }
     } catch (e) {
       const list = this.messages[chatId]
       const i = list?.findIndex((x) => x.id === tmp) ?? -1
@@ -942,6 +939,22 @@ class AppState {
       this.toast(errorText(e), 'error')
     } finally {
       delete this.sending[tmp]
+    }
+  }
+
+  /** Puts the server's copy of a just-sent message in place of its
+   * temporary one, keeping its spot and its on-screen key (localKey), so the
+   * row is not re-created (the send animation would play again and media
+   * would reload). */
+  private settleSent(chatId: string, tmp: string, msg: Message) {
+    ;(msg as Message & { localKey?: string }).localKey = tmp
+    const list = this.messages[chatId]
+    const i = list?.findIndex((x) => x.id === tmp) ?? -1
+    if (list && i >= 0) {
+      if (list.some((x) => x.id === msg.id)) list.splice(i, 1) // the realtime echo came first
+      else list[i] = { ...msg, sentAt: list[i].sentAt }
+    } else {
+      this.addMessage(msg)
     }
   }
 

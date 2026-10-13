@@ -57,7 +57,9 @@
     for (let i = ms.length - 1; i >= 0; i--) {
       const m = ms[i]
       const album = albums.get(m.id)
-      out.push({ kind: 'msg', m, first: !same(ms[i - 1], m), last: !same(m, ms[i + 1]), key: m.id,
+      // A sent message keeps the key of its temporary copy (app.settleSent):
+      // the row is not re-created when the server's copy replaces it.
+      out.push({ kind: 'msg', m, first: !same(ms[i - 1], m), last: !same(m, ms[i + 1]), key: (m as Message & { localKey?: string }).localKey ?? m.id,
         animate: m.sentAt > openedAt, album: album && album.length > 1 ? album : undefined })
       const day = new Date(m.sentAt).toDateString()
       if (i === 0 || new Date(ms[i - 1].sentAt).toDateString() !== day) {
@@ -67,15 +69,20 @@
     return out
   })
 
-  // A new message grows in from the bottom: the list above slides up
-  // smoothly instead of jumping (the scroller is anchored at the bottom).
-  function grow(node: HTMLElement) {
+  // A new message comes in from the bottom: the list above slides up
+  // smoothly (its height grows) while the bubble flies in — one's own from
+  // the message box (bottom right), others' from below on the left.
+  function grow(node: HTMLElement, out: boolean) {
     const h = node.offsetHeight
+    const origin = out ? 'bottom right' : 'bottom left'
     return {
-      duration: 260,
+      duration: 340,
       easing: cubicOut,
-      css: (t: number) => `height:${t * h}px;opacity:${Math.min(1, t * 1.6)};transform:translateY(${(1 - t) * 12}px) scale(${0.96 + 0.04 * t});` +
-        'overflow:visible;transform-origin:bottom',
+      css: (t: number, u: number) => {
+        const hh = Math.min(1, t * 1.5) * h // room opens first, then the bubble lands
+        return `height:${hh}px;opacity:${Math.min(1, t * 2)};overflow:visible;transform-origin:${origin};` +
+          `transform:translate(${out ? u * 24 : 0}px, ${u * 56}px) scale(${0.82 + 0.18 * t});`
+      },
     }
   }
 
@@ -201,7 +208,7 @@
     {:else if r.m.kind === 'system'}
       <div class="day sys" id={'msg-' + r.m.id} in:fly={{ y: 8, duration: r.animate ? 200 : 0 }}><span>{r.m.text}</span></div>
     {:else if r.animate}
-      <div class="row" id={'row-' + r.m.id} in:grow use:swipe={replySwipe(r.m)}>
+      <div class="row" id={'row-' + r.m.id} in:grow={r.m.outgoing} use:swipe={replySwipe(r.m)}>
         <Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} />
         <span class="reply-hint"><Icon name="reply" size={18} /></span>
       </div>
