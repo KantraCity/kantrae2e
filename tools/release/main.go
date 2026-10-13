@@ -90,23 +90,46 @@ func main() {
 	// AltStore / SideStore source: add this URL there once, then it offers
 	// every new build (and re-signs the app).
 	if ipa, ok := man.Assets["ios"]; ok {
+		// Both source formats: AltStore 2 ("versions", "appPermissions")
+		// and AltStore 1.x, on which SideStore is based (app-level
+		// "version", "downloadURL", "permissions"; "news"). SideStore
+		// rejects a source without the old fields as "not valid JSON".
+		ipaURL := "https://github.com/" + *repo + "/releases/download/v" + *version + "/" + ipa.Name
+		desc := "Kantra — мессенджер со сквозным шифрованием (MLS) на вашем сервере."
 		src := map[string]any{
 			"name":       "Kantra",
 			"identifier": "city.kantra.source",
+			"subtitle":   "Мессенджер со сквозным шифрованием",
 			"sourceURL":  "https://github.com/" + *repo + "/releases/latest/download/altstore.json",
+			"iconURL":    "https://raw.githubusercontent.com/" + *repo + "/HEAD/desktop/build/appicon.png",
+			"tintColor":  "#5288c1",
+			"news":       []any{},
 			"apps": []map[string]any{{
 				"name":                 "Kantra",
 				"bundleIdentifier":     "city.kantra.app",
 				"developerName":        "Kantra",
 				"subtitle":             "Мессенджер со сквозным шифрованием",
-				"localizedDescription": "Kantra — мессенджер со сквозным шифрованием (MLS) на вашем сервере.",
+				"localizedDescription": desc,
 				"iconURL":              "https://raw.githubusercontent.com/" + *repo + "/HEAD/desktop/build/appicon.png",
+				"tintColor":            "#5288c1",
+				"screenshotURLs":       []string{},
+				// AltStore 1.x / SideStore
+				"version":            *version,
+				"versionDate":        man.Date,
+				"versionDescription": "Kantra " + *version,
+				"downloadURL":        ipaURL,
+				"size":               ipa.Size,
+				"permissions":        []any{},
+				// AltStore 2
+				"appPermissions": map[string]any{"entitlements": []any{}, "privacy": map[string]any{}},
 				"versions": []map[string]any{{
-					"version":      *version,
-					"buildVersion": *version, // = CFBundleVersion (.github/preset-version.sh)
-					"date":         man.Date,
-					"downloadURL":  "https://github.com/" + *repo + "/releases/download/v" + *version + "/" + ipa.Name,
-					"size":         ipa.Size,
+					"version":              *version,
+					"buildVersion":         *version, // = CFBundleVersion (.github/preset-version.sh)
+					"date":                 man.Date,
+					"localizedDescription": "Kantra " + *version,
+					"downloadURL":          ipaURL,
+					"size":                 ipa.Size,
+					"minOSVersion":         "15.0",
 				}},
 			}},
 		}
