@@ -115,6 +115,10 @@
       {timeHM(m.sentAt)}
       {#if app.failed[m.id]}
         <button class="failed" title="Не отправлено — нажмите, чтобы повторить" onclick={() => app.failed[m.id]?.()}>!</button>
+      {:else if m.pending === 2}
+        <button class="failed" title="Не отправлено — нажмите, чтобы повторить" onclick={(e) => { e.stopPropagation(); app.retryPending(m) }}>!</button>
+      {:else if m.pending === 1}
+        <span class="check pending" title="Ждёт сети — уйдёт, когда появится соединение"><Icon name="clock" size={14} /></span>
       {:else if app.sending[m.id]}
         <span class="check pending" title="Отправляется"><Icon name="clock" size={14} /></span>
       {:else if m.outgoing}

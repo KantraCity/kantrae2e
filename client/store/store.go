@@ -147,6 +147,18 @@ var migrations = []string{
 	     options  TEXT NOT NULL,
 	     PRIMARY KEY (group_id, msg_uid, user_id)
 	 );`,
+	// Outbox: messages written without a connection. pending: 1 waiting to
+	// be sent, 2 failed for good (the person may retry or delete it); the
+	// outbox row keeps the plaintext payload to encrypt when sending.
+	`ALTER TABLE messages ADD COLUMN pending INTEGER NOT NULL DEFAULT 0;
+	 CREATE TABLE outbox (
+	     group_id   TEXT NOT NULL,
+	     uid        TEXT NOT NULL,
+	     payload    TEXT NOT NULL,
+	     created_at INTEGER NOT NULL,
+	     failed     TEXT NOT NULL DEFAULT '',
+	     PRIMARY KEY (group_id, uid)
+	 );`,
 }
 
 func migrate(db *sql.DB) error {
@@ -400,7 +412,14 @@ type Message struct {
 	FwdFrom      string `json:",omitempty"` // forwarded: name of the original author
 	Extra        string `json:",omitempty"` // JSON: link preview, poll, silent (core/extras.go)
 	PinnedAt     int64  `json:",omitempty"` // pinned in the chat at (unix ms), 0 = not pinned
+	Pending      int    `json:"-"`          // outgoing, not sent yet: PendingWaiting / PendingFailed
 }
+
+// Pending states of an outgoing message (Message.Pending).
+const (
+	PendingWaiting = 1 // in the outbox, sent when the connection is back
+	PendingFailed  = 2 // the server refused it; retry or delete
+)
 
 // InsertMessage stores a message; duplicates (group_id, uid) are ignored.
 func (t *Tx) InsertMessage(m Message) error {
@@ -408,6 +427,68 @@ func (t *Tx) InsertMessage(m Message) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
 		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.FwdFrom, m.Extra)
 	return err
+}
+
+// QueueMessage stores an outgoing message that could not be sent yet
+// (pending) together with the payload to send later.
+func (t *Tx) QueueMessage(m Message, payload string) error {
+	if _, err := t.tx.Exec(`INSERT INTO messages (uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, reply_to, fwd_from, extra, pending)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(group_id, uid) DO NOTHING`,
+		m.UID, m.GroupID, m.SenderUser, m.SenderDevice, m.Kind, m.Body, m.SentAt, m.Outgoing, m.ReplyTo, m.FwdFrom, m.Extra, PendingWaiting); err != nil {
+		return err
+	}
+	_, err := t.tx.Exec(`INSERT INTO outbox (group_id, uid, payload, created_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(group_id, uid) DO NOTHING`, m.GroupID, m.UID, payload, m.SentAt)
+	return err
+}
+
+// OutboxSent: the queued message left; it is an ordinary message now.
+func (t *Tx) OutboxSent(groupID, uid string) error {
+	if _, err := t.tx.Exec(`DELETE FROM outbox WHERE group_id=? AND uid=?`, groupID, uid); err != nil {
+		return err
+	}
+	_, err := t.tx.Exec(`UPDATE messages SET pending=0 WHERE group_id=? AND uid=?`, groupID, uid)
+	return err
+}
+
+// OutboxFailed: the server refused the message for good.
+func (t *Tx) OutboxFailed(groupID, uid, reason string) error {
+	if reason == "" {
+		reason = "failed"
+	}
+	if _, err := t.tx.Exec(`UPDATE outbox SET failed=? WHERE group_id=? AND uid=?`, reason, groupID, uid); err != nil {
+		return err
+	}
+	_, err := t.tx.Exec(`UPDATE messages SET pending=? WHERE group_id=? AND uid=?`, PendingFailed, groupID, uid)
+	return err
+}
+
+// OutboxRetry puts a failed message back in the queue; false if it is not
+// in the outbox.
+func (t *Tx) OutboxRetry(groupID, uid string) (bool, error) {
+	r, err := t.tx.Exec(`UPDATE outbox SET failed='' WHERE group_id=? AND uid=?`, groupID, uid)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	_, err = t.tx.Exec(`UPDATE messages SET pending=? WHERE group_id=? AND uid=?`, PendingWaiting, groupID, uid)
+	return true, err
+}
+
+// OutboxCancel removes an unsent message (and its outbox row) entirely;
+// false if it was not unsent.
+func (t *Tx) OutboxCancel(groupID, uid string) (bool, error) {
+	r, err := t.tx.Exec(`DELETE FROM outbox WHERE group_id=? AND uid=?`, groupID, uid)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	_, err = t.tx.Exec(`DELETE FROM messages WHERE group_id=? AND uid=? AND pending>0`, groupID, uid)
+	return true, err
 }
 
 // FixOutgoing marks the account's own messages as outgoing (earlier
@@ -657,7 +738,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		if err := rows.Scan(&m.Seq, &m.UID, &m.GroupID, &m.SenderUser, &m.SenderDevice, &m.Kind, &m.Body, &m.SentAt, &m.Outgoing, &m.Origin, &m.SharedBy,
-			&m.ReplyTo, &m.EditedAt, &m.Deleted, &m.FwdFrom, &m.Extra, &m.PinnedAt); err != nil {
+			&m.ReplyTo, &m.EditedAt, &m.Deleted, &m.FwdFrom, &m.Extra, &m.PinnedAt, &m.Pending); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -666,7 +747,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 }
 
 const msgCols = `seq, uid, group_id, sender_user, sender_device, kind, body, sent_at, outgoing, origin, shared_by,
-	reply_to, edited_at, deleted, fwd_from, extra, pinned_at`
+	reply_to, edited_at, deleted, fwd_from, extra, pinned_at, pending`
 
 // Messages returns the last `limit` messages of a group, oldest first.
 func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Message, error) {
@@ -676,6 +757,29 @@ func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Mess
 		return nil, err
 	}
 	return scanMessages(rows)
+}
+
+// OutboxItem is a queued outgoing message.
+type OutboxItem struct {
+	GroupID, UID, Payload string
+}
+
+// Outbox lists the messages waiting to be sent, oldest first.
+func (s *Store) Outbox(ctx context.Context) ([]OutboxItem, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT group_id, uid, payload FROM outbox WHERE failed='' ORDER BY created_at, rowid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OutboxItem
+	for rows.Next() {
+		var it OutboxItem
+		if err := rows.Scan(&it.GroupID, &it.UID, &it.Payload); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
 }
 
 // MessagesBefore returns up to limit messages older than (sentAt, seq),
@@ -761,7 +865,7 @@ func (s *Store) Votes(ctx context.Context, groupID, uid string) (map[string]stri
 // MessagesSince returns up to limit messages of a group with sent_at >= from,
 // oldest first.
 func (s *Store) MessagesSince(ctx context.Context, groupID string, from int64, limit int) ([]Message, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND sent_at >= ? AND deleted=0
+	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE group_id=? AND sent_at >= ? AND deleted=0 AND pending=0
 		ORDER BY sent_at, seq LIMIT ?`, groupID, from, limit)
 	if err != nil {
 		return nil, err
@@ -778,7 +882,7 @@ func (s *Store) LastMessageTime(ctx context.Context, groupID string) (int64, err
 
 // NotBackedUp returns up to limit messages not yet in the history backup.
 func (s *Store) NotBackedUp(ctx context.Context, limit int) ([]Message, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE backed_up=0 ORDER BY seq LIMIT ?`, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+msgCols+` FROM messages WHERE backed_up=0 AND pending=0 ORDER BY seq LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}

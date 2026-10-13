@@ -132,7 +132,7 @@ func (c *Client) AddSaved(ctx context.Context, in MediaInput) (*store.Message, e
 }
 
 func (c *Client) sendMediaRef(ctx context.Context, groupID string, ref *MediaRef, opt SendOptions) (*store.Message, error) {
-	if err := c.refreshToken(ctx); err != nil {
+	if err := c.refreshForSend(ctx); err != nil {
 		return nil, err
 	}
 	c.mu.Lock()

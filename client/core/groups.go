@@ -389,7 +389,7 @@ func (c *Client) SendMessage(ctx context.Context, groupID, text string, opt Send
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("empty message")
 	}
-	if err := c.refreshToken(ctx); err != nil {
+	if err := c.refreshForSend(ctx); err != nil {
 		return nil, err
 	}
 	c.mu.Lock()
@@ -409,38 +409,12 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 	if err != nil {
 		return nil, err
 	}
-	gid := []byte(groupID)
-	if conflict, err := c.conflictInGroupLocked(ctx, groupID); err == nil && conflict {
-		return nil, ErrKeyConflict
-	}
-	for attempt := 0; ; attempt++ {
-		epoch, _, err := c.m.GroupInfo(gid)
-		if errors.Is(err, mls.ErrNotFound) {
-			return nil, ErrNotMember
+	if err := c.deliverLocked(ctx, groupID, plain); err != nil {
+		// No connection: a person's message waits in the outbox.
+		if queueable(p.Type) && transient(err) {
+			return c.queueLocked(ctx, groupID, p, plain)
 		}
-		if err != nil {
-			return nil, err
-		}
-		ct, err := c.m.Encrypt(gid, plain)
-		if err != nil {
-			return nil, err
-		}
-		// The sender ratchet advanced: persist before the message leaves.
-		if err := c.persistLocked(ctx, nil); err != nil {
-			return nil, err
-		}
-		_, err = c.del.SendApplication(ctx, &deliveryv1.SendApplicationRequest{GroupId: groupID, Epoch: epoch, Payload: ct})
-		if connect.CodeOf(err) == connect.CodeFailedPrecondition && attempt == 0 {
-			// Our epoch is too old: catch up and re-encrypt once.
-			if err := c.syncLocked(ctx); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		break
+		return nil, err
 	}
 	msg := c.localMessage(groupID, p)
 	if !storable(p.Type) {
@@ -451,6 +425,42 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 	}
 	c.scheduleBackup()
 	return msg, nil
+}
+
+// deliverLocked encrypts plain for the group and hands it to the server.
+func (c *Client) deliverLocked(ctx context.Context, groupID string, plain []byte) error {
+	gid := []byte(groupID)
+	if conflict, err := c.conflictInGroupLocked(ctx, groupID); err == nil && conflict {
+		return ErrKeyConflict
+	}
+	for attempt := 0; ; attempt++ {
+		epoch, _, err := c.m.GroupInfo(gid)
+		if errors.Is(err, mls.ErrNotFound) {
+			return ErrNotMember
+		}
+		if err != nil {
+			return err
+		}
+		ct, err := c.m.Encrypt(gid, plain)
+		if err != nil {
+			return err
+		}
+		// The sender ratchet advanced: persist before the message leaves.
+		if err := c.persistLocked(ctx, nil); err != nil {
+			return err
+		}
+		sctx, cancel := context.WithTimeout(ctx, sendTimeout)
+		_, err = c.del.SendApplication(sctx, &deliveryv1.SendApplicationRequest{GroupId: groupID, Epoch: epoch, Payload: ct})
+		cancel()
+		if connect.CodeOf(err) == connect.CodeFailedPrecondition && attempt == 0 {
+			// Our epoch is too old: catch up and re-encrypt once.
+			if err := c.syncLocked(ctx); err != nil {
+				return err
+			}
+			continue
+		}
+		return err
+	}
 }
 
 // localMessage converts an outgoing payload to a stored message.

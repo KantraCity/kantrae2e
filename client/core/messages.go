@@ -117,6 +117,11 @@ func (c *Client) DeleteMessage(ctx context.Context, groupID, uid string, forAll 
 	if err != nil {
 		return err
 	}
+	// Never sent: it only exists here.
+	if m.Pending != 0 {
+		_, err := c.cancelUnsent(ctx, groupID, uid)
+		return err
+	}
 	if !forAll {
 		return c.st.Update(ctx, func(tx *store.Tx) error {
 			_, err := tx.DeleteMessage(groupID, uid, "")
@@ -171,7 +176,7 @@ func (c *Client) Forward(ctx context.Context, fromGroup, uid, toGroup string) (*
 	} else {
 		p.Body = m.Body
 	}
-	if err := c.refreshToken(ctx); err != nil {
+	if err := c.refreshForSend(ctx); err != nil {
 		return nil, err
 	}
 	c.mu.Lock()

@@ -144,6 +144,9 @@ type Message struct {
 	Reactions []ReactionInfo `json:"reactions,omitempty"`
 	// Read: an outgoing message someone else has read (✓✓).
 	Read bool `json:"read,omitempty"`
+	// Pending: written without a connection; 1 waits to be sent (clock),
+	// 2 the server refused it (retry or delete).
+	Pending int `json:"pending,omitempty"`
 	// Extras (extras.go): pinned in the chat, sent silently, link preview, poll.
 	Pinned bool      `json:"pinned,omitempty"`
 	Silent bool      `json:"silent,omitempty"`
@@ -329,6 +332,7 @@ func (m *Messenger) startListening(s *slot) {
 	}()
 	// Scheduled messages go out from whichever device of the account runs.
 	go c.RunScheduler(ctx)
+	go c.RunOutbox(ctx)
 	// A pending device keeps asking for approval and notices it even when
 	// the approving device could not send the history key.
 	go func() {

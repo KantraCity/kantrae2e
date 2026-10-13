@@ -147,8 +147,12 @@ func (c *cluster) open(name, db string) *user {
 func (c *cluster) openWith(name, db string, opts core.Options) *user {
 	c.t.Helper()
 	u := &user{name: name, db: filepath.Join(c.dir, db)}
+	hc := c.hc
+	if opts.HTTPClient != nil {
+		hc = opts.HTTPClient
+	}
 	cl, err := core.Open(context.Background(), core.Options{
-		ServerURL: c.url, DBPath: u.db, HTTPClient: c.hc,
+		ServerURL: c.url, DBPath: u.db, HTTPClient: hc,
 		OnEvent:           func(e core.Event) { u.mu.Lock(); u.events = append(u.events, e); u.mu.Unlock() },
 		Logf:              func(f string, a ...any) { c.t.Logf(name+": "+f, a...) },
 		DisableAutoBackup: !autoBackup,

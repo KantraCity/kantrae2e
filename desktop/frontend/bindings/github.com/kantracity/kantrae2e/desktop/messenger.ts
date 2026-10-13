@@ -488,6 +488,13 @@ export function RequestLink(): $CancellablePromise<void> {
     return $Call.ByID(442657138);
 }
 
+/**
+ * RetryMessage sends a message the server refused once more.
+ */
+export function RetryMessage(chatID: string, id: string): $CancellablePromise<void> {
+    return $Call.ByID(19570376, chatID, id);
+}
+
 export function RevokeDevice(deviceID: string): $CancellablePromise<number> {
     return $Call.ByID(2532478977, deviceID);
 }

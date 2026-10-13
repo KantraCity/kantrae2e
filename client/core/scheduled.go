@@ -109,7 +109,7 @@ func (c *Client) sendScheduled(ctx context.Context, s Scheduled) (*store.Message
 		_ = c.CancelScheduled(ctx, s.ID)
 		return m, nil
 	}
-	if err := c.refreshToken(ctx); err != nil {
+	if err := c.refreshForSend(ctx); err != nil {
 		return nil, err
 	}
 	c.mu.Lock()

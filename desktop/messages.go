@@ -59,7 +59,7 @@ func (m *Messenger) toMessage(c *core.Client, s *store.Message) *Message {
 
 func (m *Messenger) toMessageView(c *core.Client, s *store.Message, v *chatView) *Message {
 	p := v.profile(c, s.SenderUser)
-	msg := &Message{Seq: s.Seq, ID: s.UID, ChatID: s.GroupID, SenderID: s.SenderUser,
+	msg := &Message{Seq: s.Seq, ID: s.UID, Pending: s.Pending, ChatID: s.GroupID, SenderID: s.SenderUser,
 		Sender: core.DisplayName(p), SenderAvatar: p.AvatarID, Kind: "text", Text: s.Body,
 		SentAt: s.SentAt, Outgoing: s.Outgoing, Origin: s.Origin, Edited: s.EditedAt > 0, Forwarded: s.FwdFrom}
 	if ref, err := core.ParseMedia(s); err == nil {
@@ -185,6 +185,15 @@ func (m *Messenger) MessagesBefore(chatID string, sentAt, seq int64, limit int) 
 		out = append(out, *m.toMessageView(c, &ms[i], v))
 	}
 	return out, nil
+}
+
+// RetryMessage sends a message the server refused once more.
+func (m *Messenger) RetryMessage(chatID, id string) error {
+	c, err := m.loggedIn()
+	if err != nil {
+		return err
+	}
+	return c.RetryMessage(context.Background(), chatID, id)
 }
 
 // GetMessage returns one message (nil if it was deleted).

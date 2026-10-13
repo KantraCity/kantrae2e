@@ -425,6 +425,7 @@ func (c *Client) listenOnce(ctx context.Context) error {
 	}()
 	c.logf("realtime connected via %s", conn.Via())
 	c.emit(Event{Type: EventConnected, Detail: conn.Via()})
+	c.KickOutbox() // messages written while offline leave now
 	go func() {
 		if err := c.EnsureKeyPackages(ctx); err != nil {
 			c.logf("key package refill: %v", err)

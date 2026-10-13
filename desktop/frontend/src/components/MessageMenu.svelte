@@ -16,7 +16,9 @@
   const menu = app.menu!
   const m = menu.m
   const chat = $derived(app.chats.find((c) => c.id === m.chatId))
-  const canEdit = $derived(m.outgoing && m.kind === 'text' && chat?.active)
+  // Not sent yet (outbox): it can be retried or deleted, not edited/reacted to/pinned.
+  const unsent = $derived(!!m.pending)
+  const canEdit = $derived(m.outgoing && m.kind === 'text' && chat?.active && !unsent)
   const canDeleteAll = $derived(m.outgoing || chat?.kind === 'direct')
   let el: HTMLDivElement | undefined = $state()
 
@@ -44,7 +46,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="backdrop" onclick={close} oncontextmenu={(e) => { e.preventDefault(); close() }}></div>
 <div class="menu" transition:scale|global={{ start: 0.9, duration: 140 }} bind:this={el} style="left:{pos.x}px;top:{pos.y}px" role="menu">
-  {#if chat?.active}
+  {#if m.pending === 2}<button onclick={() => act(() => app.retryPending(m))}><Icon name="send" size={20} /> Отправить ещё раз</button>{/if}
+  {#if chat?.active && !unsent}
     <div class="reactions">
       {#each QUICK as r}
         <button class="r" class:mine={m.reactions?.some((x) => x.mine && x.emoji === r)} onclick={() => act(() => { emojiPrefs.use(r); app.react(m, r) })}>{r}</button>
@@ -69,7 +72,7 @@
   {#if m.file && !app.sending[m.id] && m.file.kind !== 'sticker'}
     <button onclick={() => act(() => app.saveMedia(m))}><Icon name="download" size={20} /> {m.file.kind === 'photo' || m.file.kind === 'video' || m.file.kind === 'gif' ? 'Сохранить в галерею' : 'Сохранить файл'}</button>
   {/if}
-  {#if !m.id.startsWith('local-')}
+  {#if !m.id.startsWith('local-') && !unsent}
     <button onclick={() => act(() => (app.modal = { kind: 'pinMsg', m }))}><Icon name="pin" size={20} /> {m.pinned ? 'Открепить' : 'Закрепить'}</button>
   {/if}
   <button onclick={() => act(() => (app.modal = { kind: 'forward', chatId: m.chatId, ids: [m.id] }))}><Icon name="forward" size={20} /> Переслать</button>

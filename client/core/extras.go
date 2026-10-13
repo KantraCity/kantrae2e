@@ -108,7 +108,7 @@ func (c *Client) SendPoll(ctx context.Context, groupID string, p Poll) (*store.M
 	if p.Question == "" || len([]rune(p.Question)) > 255 || len(opts) < 2 || len(opts) > 10 {
 		return nil, ErrBadPoll
 	}
-	if err := c.refreshToken(ctx); err != nil {
+	if err := c.refreshForSend(ctx); err != nil {
 		return nil, err
 	}
 	c.mu.Lock()

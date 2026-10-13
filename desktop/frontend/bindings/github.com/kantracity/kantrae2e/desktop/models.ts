@@ -263,6 +263,12 @@ export interface Message {
     "read"?: boolean;
 
     /**
+     * Pending: written without a connection; 1 waits to be sent (clock),
+     * 2 the server refused it (retry or delete).
+     */
+    "pending"?: number;
+
+    /**
      * Extras (extras.go): pinned in the chat, sent silently, link preview, poll.
      */
     "pinned"?: boolean;

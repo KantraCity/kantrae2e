@@ -157,6 +157,8 @@ type Client struct {
 	// Realtime connection: current keep-alive and a "reconnect now" signal.
 	keepAlive atomic.Int64 // time.Duration
 	kick      chan struct{}
+	// outboxKick wakes RunOutbox (outbox.go).
+	outboxKick chan struct{}
 	// The realtime connection (realtime.go).
 	rtMu          sync.Mutex
 	rt            rtConn
@@ -206,7 +208,7 @@ func Open(ctx context.Context, opts Options) (*Client, error) {
 		opts.BackupDelay = 2 * time.Second
 	}
 	c := &Client{opts: opts, st: st, hc: opts.HTTPClient,
-		answered: map[string]bool{}, joinRequested: map[string]time.Time{}, links: map[string]*LinkRequest{}, kick: make(chan struct{}, 1), rtRecv: make(chan struct{}, 1)}
+		answered: map[string]bool{}, joinRequested: map[string]time.Time{}, links: map[string]*LinkRequest{}, kick: make(chan struct{}, 1), outboxKick: make(chan struct{}, 1), rtRecv: make(chan struct{}, 1)}
 	c.wtSessions = tls.NewLRUClientSessionCache(4)
 	c.keepAlive.Store(int64(opts.KeepAlive))
 	if c.hc == nil {

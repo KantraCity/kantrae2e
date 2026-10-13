@@ -411,6 +411,12 @@ class AppState {
     return Promise.resolve(true)
   }
 
+  /** Sends a message the server refused once more (outbox). */
+  async retryPending(m: Message) {
+    await this.try(() => Messenger.RetryMessage(m.chatId, m.id))
+    await this.refreshMessage(m.chatId, m.id)
+  }
+
   /** Moves the chat to the top of the list with its new last message. */
   private touchChat(m: Message) {
     const chat = this.chats.find((c) => c.id === m.chatId)
