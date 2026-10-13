@@ -111,7 +111,7 @@
   .root { height: 100%; display: flex; flex-direction: column; }
   .content { flex: 1; min-height: 0; position: relative; }
   .splash { height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-sidebar); }
-  .layout { height: 100%; display: grid; grid-template-columns: var(--sidebar-w) 0 1fr; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .layout { height: 100%; display: grid; grid-template-columns: var(--sidebar-w) 0 1fr; grid-template-rows: minmax(0, 1fr); overflow: hidden; overflow: clip; }
   .layout > :global(*) { min-height: 0; min-width: 0; }
   .layout.resizing { cursor: col-resize; user-select: none; }
   .resizer { position: relative; z-index: 4; width: 8px; margin-left: -4px; cursor: col-resize; height: 100%; }

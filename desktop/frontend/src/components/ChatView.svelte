@@ -581,7 +581,7 @@
 
 <style>
   .chat-view {
-    position: relative; display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; overflow: hidden;
+    position: relative; display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; overflow: hidden; overflow: clip;
     background-color: var(--bg-chat);
     background-image: var(--wallpaper);
   }
