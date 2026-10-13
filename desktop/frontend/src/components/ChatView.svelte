@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { app } from '../lib/app.svelte'
   import { Messenger } from '../lib/api'
   import { lastSeenText, plural } from '../lib/util'
@@ -87,7 +87,9 @@
     preview = null
     previewOff = ''
     if (id && active && chat?.kind === 'group') Messenger.Members(id).then((ms) => { members = ms ?? []; memberCount = new Set(members.map((x) => x.userId)).size }).catch(() => {})
-    input?.focus()
+    // A phone's keyboard opens only when the person taps the box (this
+    // effect also re-runs on chat updates and used to pop it up again).
+    if (!touchKeyboard()) untrack(() => input?.focus())
     return () => clearInterval(presenceTimer)
   })
 

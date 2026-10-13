@@ -79,6 +79,18 @@
     }
   }
 
+  // Phones: dragging the messages closes the keyboard (as in Telegram).
+  let touchY: number | null = null
+  function touchStartList(e: TouchEvent) { touchY = e.touches[0]?.clientY ?? null }
+  function touchMoveList(e: TouchEvent) {
+    if (touchY === null) return
+    const y = e.touches[0]?.clientY ?? touchY
+    if (Math.abs(y - touchY) < 10) return
+    touchY = null
+    const el = document.activeElement as HTMLElement | null
+    if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) el.blur()
+  }
+
   function onScroll() {
     if (!scroller) return
     // In a column-reverse scroller scrollTop is 0 at the bottom, negative above.
@@ -180,7 +192,8 @@
   })
 </script>
 
-<div class="messages" bind:this={scroller} onscroll={onScroll}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="messages" bind:this={scroller} onscroll={onScroll} ontouchstart={touchStartList} ontouchmove={touchMoveList}>
   <div class="spacer"></div>
   {#each rows as r (r.key)}
     {#if r.kind === 'day'}
