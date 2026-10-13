@@ -16,8 +16,8 @@ android {
         targetSdk 35
         // CI sets the build number: every release must have a higher one
         // to install over the previous.
-        versionCode (System.getenv("KANTRA_BUILD") ?: "1").toInteger()
-        versionName System.getenv("KANTRA_VERSION") ?: "dev"
+        versionCode = Integer.parseInt(System.getenv("KANTRA_BUILD") ?: "1")
+        versionName = (System.getenv("KANTRA_VERSION") ?: "dev")
 
         // Configure supported ABIs
         ndk {
