@@ -106,6 +106,9 @@ class CallStore {
   private tone: { stop: () => void } | null = null
   private screenTrack: MediaStreamTrack | null = null
   private camTrack: MediaStreamTrack | null = null
+  /** Front or back camera; whether the device has another one. */
+  facing = $state<'user' | 'environment'>('user')
+  canFlip = $state(false)
   private meters = new Map<string, () => void>()
   private aliveTimer: ReturnType<typeof setInterval> | undefined
   /** Candidates that arrived before the remote description was set. */
@@ -382,6 +385,8 @@ class CallStore {
       return false
     }
     this.camTrack = this.local.getVideoTracks()[0] ?? null
+    this.facing = 'user'
+    if (this.camTrack) this.checkFlip()
     this.mic = true
     this.cam = !!this.camTrack
     this.screen = false
@@ -647,8 +652,9 @@ class CallStore {
     if (!this.cam) {
       if (!this.camTrack || this.camTrack.readyState === 'ended') {
         try {
-          const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } })
+          const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: this.facing, width: { ideal: 1280 }, height: { ideal: 720 } } })
           this.camTrack = s.getVideoTracks()[0]
+          this.checkFlip()
           this.local?.addTrack(this.camTrack)
           this.local = new MediaStream(this.local?.getTracks() ?? [])
         } catch {
@@ -690,6 +696,41 @@ class CallStore {
     }
     this.replaceVideo()
     this.sendMedia()
+  }
+
+  /** Switches between the front and the back camera during a call. */
+  async flipCamera() {
+    if (!this.call || !this.cam) return
+    const next = this.facing === 'user' ? 'environment' : 'user'
+    let track: MediaStreamTrack
+    try {
+      // The old camera is released first: phones open only one at a time.
+      const old = this.camTrack
+      old?.stop()
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: next }, width: { ideal: 1280 }, height: { ideal: 720 } } })
+      track = s.getVideoTracks()[0]
+      if (old) this.local?.removeTrack(old)
+    } catch {
+      app.toast('Не удалось переключить камеру', 'error')
+      // Get the previous one back.
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: this.facing } } })
+        track = s.getVideoTracks()[0]
+      } catch {
+        return
+      }
+    }
+    if (this.camTrack) this.local?.removeTrack(this.camTrack)
+    this.camTrack = track
+    this.local?.addTrack(track)
+    this.local = new MediaStream(this.local?.getTracks() ?? [])
+    this.facing = (track.getSettings().facingMode as 'user' | 'environment' | undefined) ?? next
+    this.replaceVideo()
+  }
+
+  private async checkFlip() {
+    const ds = await navigator.mediaDevices.enumerateDevices().catch(() => [])
+    this.canFlip = ds.filter((d) => d.kind === 'videoinput').length > 1
   }
 
   /** What we show of ourselves: the screen while sharing, else the camera. */

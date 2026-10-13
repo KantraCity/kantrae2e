@@ -300,6 +300,14 @@
   let rec = $state<{ kind: 'voice' | 'round'; locked: boolean; startX: number; startY: number; t: number; level: number } | null>(null)
   let recorder: VoiceRecorder | RoundRecorder | null = null
   let roundPreview: HTMLVideoElement | undefined = $state()
+  // Round video: which camera, and whether there is another one to switch to.
+  let roundFacing = $state<'user' | 'environment'>('user')
+  let roundCanFlip = $state(false)
+  async function flipRound() {
+    if (!(recorder instanceof RoundRecorder)) return
+    await recorder.flip()
+    roundFacing = recorder.facing
+  }
   let holdTimer: ReturnType<typeof setTimeout> | undefined
   let tickTimer: ReturnType<typeof setInterval> | undefined
   let pressAt = 0
@@ -342,6 +350,8 @@
       if (r instanceof RoundRecorder) {
         await tick()
         if (roundPreview) { roundPreview.srcObject = r.stream; roundPreview.play().catch(() => {}) }
+        roundFacing = r.facing
+        setTimeout(() => (roundCanFlip = r.canFlip), 300)
       }
       tickTimer = setInterval(() => {
         if (!rec || !recorder) return
@@ -571,9 +581,12 @@
       <div class="round-backdrop" transition:fade={{ duration: 150 }}></div>
       <div class="round-rec" transition:scale={{ start: 0.6, duration: 200 }}>
         <!-- svelte-ignore a11y_media_has_caption -->
-        <video bind:this={roundPreview} muted playsinline></video>
+        <video bind:this={roundPreview} muted playsinline class:mirror={roundFacing === 'user'}></video>
         <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" pathLength="1" stroke-dasharray="1" stroke-dashoffset={1 - rec.t / 60} /></svg>
         <span class="round-time"><span class="recdot"></span>{duration(rec.t)}</span>
+        {#if roundCanFlip}
+          <button class="round-flip" aria-label="Сменить камеру" title="Сменить камеру" onclick={flipRound}><Icon name="flip" size={22} /></button>
+        {/if}
       </div>
     {/if}
 
@@ -672,7 +685,10 @@
   .round-rec { position: fixed; left: 0; right: 0; top: 0; bottom: 120px; margin: auto; width: min(300px, 72vw); height: min(300px, 72vw); z-index: 31; pointer-events: none; }
   .round-time { position: absolute; left: 50%; bottom: -36px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
     background: rgba(0, 0, 0, .5); color: #fff; padding: 4px 12px; border-radius: 14px; font-size: 14px; font-variant-numeric: tabular-nums; }
-  .round-rec video { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #000; box-shadow: var(--shadow); }
+  .round-rec video { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; background: #000; box-shadow: var(--shadow); }
+  .round-rec video.mirror { transform: scaleX(-1); }
+  .round-flip { position: absolute; left: 50%; bottom: -64px; translate: -50% 0; width: 48px; height: 48px; border-radius: 50%; pointer-events: auto;
+    display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0, 0, 0, .45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .round-rec svg { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); transform: rotate(-90deg); fill: none; stroke: var(--accent); stroke-width: 2; }
   .readonly { justify-content: center; padding: 18px; font-size: 14px; background: var(--bg-header); max-width: none; }
   .placeholder { align-items: center; justify-content: center; }

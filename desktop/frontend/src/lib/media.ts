@@ -178,46 +178,111 @@ export class VoiceRecorder {
   }
 }
 
-/** Round video message recorder (square, front camera, up to 60 s). */
+/** Round video message recorder (square, up to 60 s). The camera is drawn
+ * into a square canvas and the canvas is recorded, so the camera can be
+ * switched (front ↔ back) in the middle of a recording. */
 export class RoundRecorder {
+  /** Recorded and shown in the preview: the square picture and the mic. */
   stream!: MediaStream
   started = 0
+  facing: 'user' | 'environment' = 'user'
+  /** The device has more than one camera. */
+  canFlip = false
   private rec!: MediaRecorder
   private chunks: Blob[] = []
+  private cam: MediaStream | null = null
+  private mic: MediaStream | null = null
+  private video = document.createElement('video')
+  private canvas = document.createElement('canvas')
+  private raf = 0
+  private timer: ReturnType<typeof setInterval> | undefined
+
+  private async openCamera(facing: 'user' | 'environment') {
+    const s = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 640 }, height: { ideal: 640 } },
+    })
+    const old = this.cam
+    this.cam = s
+    this.facing = facing
+    this.video.muted = true
+    this.video.playsInline = true
+    this.video.srcObject = s
+    await this.video.play().catch(() => {})
+    old?.getTracks().forEach((t) => t.stop())
+  }
 
   async start() {
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
-      video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 }, aspectRatio: 1 },
-    })
+    this.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+    try {
+      await this.openCamera('user')
+    } catch (e) {
+      this.mic.getTracks().forEach((t) => t.stop())
+      throw e
+    }
+    const size = 480
+    this.canvas.width = this.canvas.height = size
+    const ctx = this.canvas.getContext('2d')!
+    const draw = () => {
+      const v = this.video, w = v.videoWidth, h = v.videoHeight
+      if (w && h) {
+        const s = Math.min(w, h)
+        ctx.drawImage(v, (w - s) / 2, (h - s) / 2, s, s, 0, 0, size, size)
+      }
+    }
+    // requestAnimationFrame for smoothness, a timer as a floor (rAF pauses
+    // when the page is hidden; the recording must not freeze then).
+    const loop = () => { draw(); this.raf = requestAnimationFrame(loop) }
+    loop()
+    this.timer = setInterval(draw, 66)
+    const pic = this.canvas.captureStream(30)
+    this.stream = new MediaStream([...pic.getVideoTracks(), ...this.mic.getAudioTracks()])
     const mime = pickMime(['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'])
     this.rec = new MediaRecorder(this.stream, mime ? { mimeType: mime, videoBitsPerSecond: 1_000_000 } : undefined)
     this.rec.ondataavailable = (e) => e.data.size && this.chunks.push(e.data)
     this.rec.start(250)
     this.started = Date.now()
+    navigator.mediaDevices.enumerateDevices()
+      .then((ds) => (this.canFlip = ds.filter((d) => d.kind === 'videoinput').length > 1))
+      .catch(() => {})
   }
 
-  cancel() {
-    if (this.rec?.state !== 'inactive') this.rec?.stop()
+  /** Front ↔ back camera; the recording goes on. */
+  async flip() {
+    const next = this.facing === 'user' ? 'environment' : 'user'
+    try {
+      await this.openCamera(next)
+    } catch {
+      /* the other camera is not available: keep this one */
+    }
+  }
+
+  private release() {
+    cancelAnimationFrame(this.raf)
+    clearInterval(this.timer)
+    this.cam?.getTracks().forEach((t) => t.stop())
+    this.mic?.getTracks().forEach((t) => t.stop())
     this.stream?.getTracks().forEach((t) => t.stop())
   }
 
-  async stop(preview: HTMLVideoElement | undefined): Promise<Prepared | null> {
+  cancel() {
+    if (this.rec && this.rec.state !== 'inactive') this.rec.stop()
+    this.release()
+  }
+
+  async stop(_preview?: HTMLVideoElement): Promise<Prepared | null> {
     const dur = (Date.now() - this.started) / 1000
-    // The preview frame (centre square) is the thumbnail.
+    // The current square picture is the thumbnail.
     let th = ''
-    if (preview && preview.videoWidth) {
-      try { th = await thumb(preview, preview.videoWidth, preview.videoHeight, true) } catch { /* none */ }
-    }
-    const w = preview?.videoWidth ?? 0, h = preview?.videoHeight ?? 0
+    try { th = await thumb(this.canvas, this.canvas.width, this.canvas.height, true) } catch { /* none */ }
+    const side = this.canvas.width
     await new Promise<void>((r) => { this.rec.onstop = () => r(); this.rec.stop() })
-    this.stream.getTracks().forEach((t) => t.stop())
+    this.release()
     if (dur < 1) return null
     const type = this.rec.mimeType || 'video/webm'
     const blob = new Blob(this.chunks, { type })
     return {
       upload: { name: `round.${type.includes('mp4') ? 'mp4' : 'webm'}`, base64: await blobToBase64(blob), mime: type.split(';')[0],
-        kind: 'round', w: Math.min(w, h), h: Math.min(w, h), dur, thumb: th, wave: [], caption: '' },
+        kind: 'round', w: side, h: side, dur, thumb: th, wave: [], caption: '' },
       localUrl: URL.createObjectURL(blob), blob,
     }
   }

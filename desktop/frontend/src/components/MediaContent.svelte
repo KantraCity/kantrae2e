@@ -98,14 +98,12 @@
   </button>
 {:else if f.kind === 'gif' && f.mime?.startsWith('video/')}
   <button class="visual" style="width:{box.w}px;height:{box.h}px" onclick={() => (app.modal = { kind: 'viewer', m })} aria-label="GIF">
-    {#if f.thumb && !loaded}<img class="thumb sharp" src={f.thumb} alt="" />{/if}
     {#if url}<video class="full" class:show={loaded} src={url} autoplay loop muted playsinline onloadeddata={() => (loaded = true)}></video>{/if}
     <span class="badge">GIF</span>
   </button>
 {:else if f.kind === 'photo' || f.kind === 'gif'}
   <button class="visual" style="width:{box.w}px;height:{box.h}px" onclick={() => (app.modal = { kind: 'viewer', m })}
     aria-label={f.kind === 'gif' ? 'GIF' : 'Открыть фото'}>
-    {#if f.thumb && !loaded}<img class="thumb" src={f.thumb} alt="" />{/if}
     {#if url}<img class="full" class:show={loaded} src={url} alt={f.name} onload={() => (loaded = true)} />{/if}
     {#if f.kind === 'gif'}<span class="badge">GIF</span>{/if}
     {#if sending}<span class="center glass"><span class="spinner"></span></span>{/if}
@@ -119,7 +117,6 @@
   </button>
 {:else if f.kind === 'round'}
   <button class="round" class:playing={roundSound} onclick={toggleRound} aria-label="Видеосообщение">
-    {#if f.thumb && !loaded}<img class="thumb sharp" src={f.thumb} alt="" />{/if}
     {#if url}
       <video class="round-video" bind:this={round} src={url} autoplay muted loop playsinline class:show={loaded}
         onloadeddata={() => (loaded = true)} ontimeupdate={() => round && (roundPos = round.currentTime / (round.duration || f.dur || 1))}
@@ -174,7 +171,8 @@
 
 <style>
   /* ---- photos / GIFs / videos ---- */
-  .visual { position: relative; display: block; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,.25); max-width: 100%; }
+  /* Until the file is ready: a plain tinted box (no blurry/blocky preview). */
+  .visual { position: relative; display: block; border-radius: 12px; overflow: hidden; background: var(--tint-1); max-width: 100%; }
   .visual img, .visual video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .visual:hover .full.show { filter: brightness(1.04); }
   .thumb { filter: blur(12px); transform: scale(1.1); }

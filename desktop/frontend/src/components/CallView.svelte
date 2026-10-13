@@ -119,7 +119,7 @@
       {/if}
       {#if localVideo}
         <div class="self" class:speaking={calls.selfSpeaking} transition:scale={{ start: 0.8, duration: 200 }}>
-          <video autoplay playsinline muted class:mirror={!calls.screen} use:stream={localVideo}></video>
+          <video autoplay playsinline muted class:mirror={!calls.screen && calls.facing === 'user'} use:stream={localVideo}></video>
         </div>
       {/if}
     </div>
@@ -137,6 +137,14 @@
         </button>
         <span>Камера</span>
       </div>
+      {#if calls.cam && calls.canFlip && !calls.screen}
+        <div class="ctl">
+          <button class="round-btn" aria-label="Сменить камеру" onclick={() => calls.flipCamera()}>
+            <Icon name="flip" size={24} />
+          </button>
+          <span>Повернуть</span>
+        </div>
+      {/if}
       {#if calls.canShare}
         <div class="ctl">
           <button class="round-btn" class:on={calls.screen} aria-label="Демонстрация экрана" onclick={() => calls.toggleScreen()}>
