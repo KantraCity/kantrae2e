@@ -36,6 +36,7 @@ var (
 	samples       = flag.Int("n", 15, "delivery samples per RTT")
 	realtime      = flag.String("realtime", "ws", "realtime connection: ws (WebSocket) or wt (WebTransport, falls back to ws)")
 	wtServer      = flag.String("wt", "localhost:4433", "WebTransport host:port (UDP)")
+	proxyOnly     = flag.String("proxy", "", "only run the delay proxy: listen address for TCP+UDP (WebTransport on the next port)")
 	nudge         = flag.Bool("nudge", true, "tell the transports about the network change")
 	rounds        = flag.Int("rounds", 1, "migration test: address changes")
 	idle          = flag.Duration("idle", 0, "migration test: idle time before the change")
@@ -56,6 +57,10 @@ var sim = &netsim{conns: map[net.Conn]struct{}{}}
 
 func main() {
 	flag.Parse()
+	if *proxyOnly != "" {
+		runProxy()
+		return
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		log.Fatal(err)
@@ -300,4 +305,25 @@ func register(ctx context.Context, u *user, tag string) {
 		}
 		time.Sleep(10 * time.Second)
 	}
+}
+
+// runProxy keeps a delay proxy running for other programs (the app in web
+// mode): TCP+UDP at -proxy to -server, UDP at the next port to -wt.
+func runProxy() {
+	ms, _ := strconv.Atoi(strings.Split(*rtts, ",")[0])
+	sim.delay.Store(int64(time.Duration(ms) * time.Millisecond / 2))
+	sim.loss.Store(int64(*loss))
+	host, portS, _ := net.SplitHostPort(*proxyOnly)
+	port, _ := strconv.Atoi(portS)
+	ln, err := net.Listen("tcp", *proxyOnly)
+	must(err)
+	pc, err := net.ListenPacket("udp", *proxyOnly)
+	must(err)
+	wtPC, err := net.ListenPacket("udp", net.JoinHostPort(host, strconv.Itoa(port+1)))
+	must(err)
+	go sim.serveTCP(ln, *server)
+	go sim.serveUDP(pc, *server)
+	go sim.serveUDP(wtPC, *wtServer)
+	fmt.Printf("proxy %s (WebTransport %s:%d) → %s, RTT %d ms\n", *proxyOnly, host, port+1, *server, ms)
+	select {}
 }

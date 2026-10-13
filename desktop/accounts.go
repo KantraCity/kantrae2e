@@ -144,7 +144,8 @@ func (m *Messenger) openSlot(s *slot, server string) error {
 		KeepAlive:  keepAlive,
 		// Realtime over WebTransport (QUIC) when the server offers it;
 		// KANTRA_WT=0 keeps the WebSocket.
-		WebTransport: os.Getenv("KANTRA_WT") != "0",
+		WebTransport:     os.Getenv("KANTRA_WT") != "0",
+		WebTransportAddr: os.Getenv("KANTRA_WT_ADDR"), // tests: through a proxy
 	})
 	if err != nil {
 		return err
