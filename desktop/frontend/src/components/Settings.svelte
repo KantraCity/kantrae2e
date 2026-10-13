@@ -7,6 +7,7 @@
   import Modal from './Modal.svelte'
   import { checkCalls, type CallCheck } from '../lib/call.svelte'
   import { setThemePref, themePref, type ThemePref } from '../lib/theme'
+  import { RINGTONES, customRingtoneName, playRingtone, ringtoneChoice, setCustomRingtone, setRingtone, type RingtoneId } from '../lib/ringtones'
 
   // ---- privacy: last seen, block list ----
   let seen = $state('')
@@ -27,6 +28,34 @@
 
   // ---- appearance, passcode ----
   let theme = $state<ThemePref>(themePref())
+
+  // ---- incoming call melody ----
+  let ring = $state<RingtoneId>(ringtoneChoice())
+  let ringFile = $state(customRingtoneName())
+  let preview: { stop: () => void } | null = null
+  let ringInput: HTMLInputElement | undefined = $state()
+  function listen(id: RingtoneId = ring) {
+    preview?.stop()
+    preview = playRingtone(id, { once: true })
+  }
+  function pickRing(id: RingtoneId) {
+    ring = id
+    setRingtone(id)
+    listen(id)
+  }
+  async function ownRing(f: File | undefined) {
+    if (!f) return
+    try {
+      await setCustomRingtone(f)
+      ring = 'custom'
+      ringFile = f.name
+      listen('custom')
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : String(e), 'error')
+    }
+    if (ringInput) ringInput.value = ''
+  }
+  $effect(() => () => preview?.stop())
 
   // ---- data and storage ----
   let storage = $state<StorageInfo | null>(null)
@@ -333,6 +362,19 @@
 
     <div class="section">
       <div class="label"><Icon name="phone" size={18} /> Звонки</div>
+      <label class="kv">
+        <span>Мелодия звонка</span>
+        <select class="limit" value={ring} onchange={(e) => { const v = e.currentTarget.value; if (v === 'pick') { e.currentTarget.value = ring; ringInput?.click() } else pickRing(v as RingtoneId) }}>
+          {#each RINGTONES as r}<option value={r.id}>{r.name}</option>{/each}
+          {#if ringFile}<option value="custom">Свой: {ringFile}</option>{/if}
+          <option value="pick">Выбрать файл…</option>
+        </select>
+      </label>
+      <div class="row-btns">
+        <button class="btn flat" onclick={() => listen()} disabled={ring === 'silent'}>Прослушать</button>
+        <button class="btn flat" onclick={() => ringInput?.click()}>Свой файл…</button>
+      </div>
+      <input type="file" accept="audio/*" hidden bind:this={ringInput} onchange={(e) => ownRing(e.currentTarget.files?.[0])} />
       <p class="muted small">Проверка связи с сервером звонков (STUN/TURN). Занимает несколько секунд.</p>
       <button class="btn flat" disabled={checking} onclick={runCheck}>{checking ? 'Проверка…' : 'Проверить звонки'}</button>
       {#if check}

@@ -27,6 +27,7 @@
 // ringing, and a broken path is repaired by an ICE restart (keeping the
 // DTLS session) — at once when the network changes.
 import { logClient } from './diag'
+import { playRingtone } from './ringtones'
 import { Messenger, onEvent, type CallSignal } from './api'
 import { app } from './app.svelte'
 
@@ -279,7 +280,7 @@ class CallStore {
   private startRinging(r: Ringing) {
     this.ringing = r
     this.tone?.stop()
-    this.tone = ringtone('incoming')
+    this.tone = playRingtone() // the melody chosen in Settings
     clearTimeout(this.ringTimer)
     this.ringTimer = setTimeout(() => this.stopRinging('Пропущенный звонок'), RING_MS)
     navigator.vibrate?.([400, 300, 400])
@@ -864,7 +865,8 @@ function firstCandidates(pc: RTCPeerConnection): Promise<void> {
   })
 }
 
-/** Synthesized tones (no audio files): incoming ring, outgoing beeps, hang-up. */
+/** Synthesized tones (no audio files): outgoing beeps, hang-up (the
+ * incoming melody: ringtones.ts). */
 function ringtone(kind: 'incoming' | 'outgoing' | 'end'): { stop: () => void } {
   let ac: AudioContext
   try { ac = new AudioContext() } catch { return { stop() {} } }
