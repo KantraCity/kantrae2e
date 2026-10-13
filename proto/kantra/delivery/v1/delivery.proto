@@ -77,6 +77,9 @@ message Envelope {
   string sender_user_id = 8;
   // Not queued: do not ack or de-duplicate (id is 0).
   bool ephemeral = 9;
+  // When the server accepted the message (unix ms). Clients order messages
+  // by it: every device's clock is off by a little, the server's is one.
+  int64 created_at_ms = 10;
 }
 
 // Frames sent by the client over the WebSocket.
@@ -131,6 +134,8 @@ message SendApplicationRequest {
 
 message SendApplicationResponse {
   int64 message_id = 1;
+  // Server time of the message (unix ms), = Envelope.created_at_ms.
+  int64 created_at_ms = 2;
 }
 
 message FetchWelcomeRequest {

@@ -409,7 +409,8 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 	if err != nil {
 		return nil, err
 	}
-	if err := c.deliverLocked(ctx, groupID, plain); err != nil {
+	at, err := c.deliverLocked(ctx, groupID, plain)
+	if err != nil {
 		// No connection: a person's message waits in the outbox.
 		if queueable(p.Type) && transient(err) {
 			return c.queueLocked(ctx, groupID, p, plain)
@@ -417,6 +418,7 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 		return nil, err
 	}
 	msg := c.localMessage(groupID, p)
+	msg.SentAt = serverTime(at, p.TS)
 	if !storable(p.Type) {
 		return msg, nil
 	}
@@ -427,40 +429,56 @@ func (c *Client) sendLocked(ctx context.Context, groupID string, p payload) (*st
 	return msg, nil
 }
 
-// deliverLocked encrypts plain for the group and hands it to the server.
-func (c *Client) deliverLocked(ctx context.Context, groupID string, plain []byte) error {
+// deliverLocked encrypts plain for the group and hands it to the server;
+// it returns the server's time of the message (unix ms, 0 from an older
+// server).
+func (c *Client) deliverLocked(ctx context.Context, groupID string, plain []byte) (int64, error) {
 	gid := []byte(groupID)
 	if conflict, err := c.conflictInGroupLocked(ctx, groupID); err == nil && conflict {
-		return ErrKeyConflict
+		return 0, ErrKeyConflict
 	}
 	for attempt := 0; ; attempt++ {
 		epoch, _, err := c.m.GroupInfo(gid)
 		if errors.Is(err, mls.ErrNotFound) {
-			return ErrNotMember
+			return 0, ErrNotMember
 		}
 		if err != nil {
-			return err
+			return 0, err
 		}
 		ct, err := c.m.Encrypt(gid, plain)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		// The sender ratchet advanced: persist before the message leaves.
 		if err := c.persistLocked(ctx, nil); err != nil {
-			return err
+			return 0, err
 		}
 		sctx, cancel := context.WithTimeout(ctx, sendTimeout)
-		_, err = c.del.SendApplication(sctx, &deliveryv1.SendApplicationRequest{GroupId: groupID, Epoch: epoch, Payload: ct})
+		r, err := c.del.SendApplication(sctx, &deliveryv1.SendApplicationRequest{GroupId: groupID, Epoch: epoch, Payload: ct})
 		cancel()
 		if connect.CodeOf(err) == connect.CodeFailedPrecondition && attempt == 0 {
 			// Our epoch is too old: catch up and re-encrypt once.
 			if err := c.syncLocked(ctx); err != nil {
-				return err
+				return 0, err
 			}
 			continue
 		}
-		return err
+		if err != nil {
+			return 0, err
+		}
+		return r.CreatedAtMs, nil
 	}
+}
+
+// serverTime: messages are ordered (and timed) by the server's clock, the
+// same for every device; a device's own clock may be off by seconds or
+// minutes, which put replies above the messages they answer. Older servers
+// send no time: the sender's then.
+func serverTime(serverMs, senderMs int64) int64 {
+	if serverMs > 0 {
+		return serverMs
+	}
+	return senderMs
 }
 
 // localMessage converts an outgoing payload to a stored message.

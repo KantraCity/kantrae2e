@@ -156,8 +156,9 @@ func (c *Client) flushOutbox(ctx context.Context) bool {
 		}
 		c.mu.Lock()
 		err := c.requireLogin()
+		var at int64
 		if err == nil {
-			err = c.deliverLocked(ctx, it.GroupID, []byte(it.Payload))
+			at, err = c.deliverLocked(ctx, it.GroupID, []byte(it.Payload))
 		}
 		c.mu.Unlock()
 		switch {
@@ -167,7 +168,7 @@ func (c *Client) flushOutbox(ctx context.Context) bool {
 			c.logf("queued message in %s refused: %v", it.GroupID, err)
 			_ = c.st.Update(ctx, func(tx *store.Tx) error { return tx.OutboxFailed(it.GroupID, it.UID, err.Error()) })
 		default:
-			_ = c.st.Update(ctx, func(tx *store.Tx) error { return tx.OutboxSent(it.GroupID, it.UID) })
+			_ = c.st.Update(ctx, func(tx *store.Tx) error { return tx.OutboxSent(it.GroupID, it.UID, at) })
 			c.scheduleBackup()
 		}
 		c.emit(Event{Type: EventMessageUpdated, GroupID: it.GroupID, Detail: it.UID})

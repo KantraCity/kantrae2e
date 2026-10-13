@@ -271,7 +271,7 @@ func (c *Client) handleLocked(ctx context.Context, e *deliveryv1.Envelope) error
 				break // a kind of message this version does not know (or out of place): ignore
 			}
 			msg := store.Message{UID: pl.ID, GroupID: e.GroupId, SenderUser: uid, SenderDevice: did,
-				Kind: pl.Type, Body: pl.Body, SentAt: pl.TS, ReplyTo: pl.ReplyTo, FwdFrom: pl.Fwd, Extra: pl.Extra.json(),
+				Kind: pl.Type, Body: pl.Body, SentAt: serverTime(e.CreatedAtMs, pl.TS), ReplyTo: pl.ReplyTo, FwdFrom: pl.Fwd, Extra: pl.Extra.json(),
 				// Sent from another device of this account: ours.
 				Outgoing: uid == c.acct.UserID}
 			if pl.Media != nil {

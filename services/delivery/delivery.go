@@ -172,12 +172,19 @@ func requireMember(ctx context.Context, tx pgx.Tx, groupID, deviceID string) err
 }
 
 func insertMessage(ctx context.Context, tx pgx.Tx, groupID string, epoch uint64, typ deliveryv1.MessageType, payload []byte, senderUser, sender string) (int64, error) {
+	id, _, err := insertMessageAt(ctx, tx, groupID, epoch, typ, payload, senderUser, sender)
+	return id, err
+}
+
+// insertMessageAt also returns the server time the message was stored at.
+func insertMessageAt(ctx context.Context, tx pgx.Tx, groupID string, epoch uint64, typ deliveryv1.MessageType, payload []byte, senderUser, sender string) (int64, time.Time, error) {
 	var id int64
+	var at time.Time
 	err := tx.QueryRow(ctx,
 		`INSERT INTO group_messages (group_id, epoch, message_type, payload, sender_user_id, sender_device_id)
-		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-		groupID, int64(epoch), int16(typ), payload, senderUser, sender).Scan(&id)
-	return id, err
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
+		groupID, int64(epoch), int16(typ), payload, senderUser, sender).Scan(&id, &at)
+	return id, at, err
 }
 
 // storeGroupInfo remembers the GroupInfo of `epoch`, or forgets the stale one
@@ -378,6 +385,7 @@ func (s *Service) SendApplication(ctx context.Context, req *deliveryv1.SendAppli
 		return nil, errf(connect.CodeInvalidArgument, "bad payload size")
 	}
 	var msgID int64
+	var createdAt time.Time
 	var recipients []string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := requireMember(ctx, tx, req.GroupId, did); err != nil {
@@ -395,7 +403,7 @@ func (s *Service) SendApplication(ctx context.Context, req *deliveryv1.SendAppli
 		if int64(req.Epoch) > cur || int64(req.Epoch) < cur-EpochLag {
 			return errf(connect.CodeFailedPrecondition, "stale or future epoch %d (current %d)", req.Epoch, cur)
 		}
-		msgID, err = insertMessage(ctx, tx, req.GroupId, req.Epoch, deliveryv1.MessageType_MESSAGE_TYPE_APPLICATION, req.Payload, uid, did)
+		msgID, createdAt, err = insertMessageAt(ctx, tx, req.GroupId, req.Epoch, deliveryv1.MessageType_MESSAGE_TYPE_APPLICATION, req.Payload, uid, did)
 		if err != nil {
 			return err
 		}
@@ -406,7 +414,7 @@ func (s *Service) SendApplication(ctx context.Context, req *deliveryv1.SendAppli
 		return nil, asConnect(err)
 	}
 	s.hub.Notify(recipients...)
-	return &deliveryv1.SendApplicationResponse{MessageId: msgID}, nil
+	return &deliveryv1.SendApplicationResponse{MessageId: msgID, CreatedAtMs: createdAt.UnixMilli()}, nil
 }
 
 // Typing pushes an ephemeral "typing" signal to the other members' online
@@ -493,7 +501,7 @@ func (s *Service) pending(ctx context.Context, deviceID string, after int64, lim
 		if err := rows.Scan(&e.Id, &e.GroupId, &epoch, &typ, &e.Payload, &e.SenderDeviceId, &e.SenderUserId, &created); err != nil {
 			return nil, err
 		}
-		e.Epoch, e.Type, e.CreatedAt = uint64(epoch), deliveryv1.MessageType(typ), created.Unix()
+		e.Epoch, e.Type, e.CreatedAt, e.CreatedAtMs = uint64(epoch), deliveryv1.MessageType(typ), created.Unix(), created.UnixMilli()
 		out = append(out, &e)
 	}
 	return out, rows.Err()

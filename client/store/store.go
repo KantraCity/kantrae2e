@@ -442,12 +442,14 @@ func (t *Tx) QueueMessage(m Message, payload string) error {
 	return err
 }
 
-// OutboxSent: the queued message left; it is an ordinary message now.
-func (t *Tx) OutboxSent(groupID, uid string) error {
+// OutboxSent: the queued message left; it is an ordinary message now, at
+// the server's time (serverMs; 0 keeps the time it was written).
+func (t *Tx) OutboxSent(groupID, uid string, serverMs int64) error {
 	if _, err := t.tx.Exec(`DELETE FROM outbox WHERE group_id=? AND uid=?`, groupID, uid); err != nil {
 		return err
 	}
-	_, err := t.tx.Exec(`UPDATE messages SET pending=0 WHERE group_id=? AND uid=?`, groupID, uid)
+	_, err := t.tx.Exec(`UPDATE messages SET pending=0, sent_at=CASE WHEN ?>0 THEN ? ELSE sent_at END WHERE group_id=? AND uid=?`,
+		serverMs, serverMs, groupID, uid)
 	return err
 }
 

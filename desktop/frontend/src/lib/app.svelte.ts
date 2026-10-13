@@ -384,7 +384,7 @@ class AppState {
     const tmp = 'local-' + Math.random().toString(36).slice(2)
     const temp = {
       seq: 0, id: tmp, chatId, senderId: this.state?.account?.userId ?? '', sender: this.me?.name ?? '', kind: 'text', text,
-      sentAt: Date.now(), outgoing: true, origin: '', silent: opts.silent, link: opts.link ?? undefined,
+      sentAt: this.serverNow(), outgoing: true, origin: '', silent: opts.silent, link: opts.link ?? undefined,
       reply: reply ? { id: reply.id, sender: reply.sender, text: reply.text || reply.file?.caption || reply.file?.name || '' } : undefined,
     } as Message
     if (opts.from) this.flyFrom[tmp] = opts.from
@@ -634,7 +634,7 @@ class AppState {
     const u = p.upload
     const temp = {
       seq: 0, id: tmp, chatId, senderId: this.state?.account?.userId ?? '', sender: '', kind: 'file', text: '',
-      sentAt: Date.now(), outgoing: true, origin: '',
+      sentAt: this.serverNow(), outgoing: true, origin: '',
       file: { name: u.name, size: p.blob.size, kind: u.kind, mime: u.mime, w: u.w, h: u.h, dur: u.dur,
         thumb: u.thumb ? 'data:image/jpeg;base64,' + u.thumb : '', wave: u.wave, caption: u.caption, url: p.localUrl, album: u.album },
     } as Message
@@ -925,7 +925,7 @@ class AppState {
     const replyTo = this.reply?.id ?? ''
     this.reply = null
     const tmp = 'local-' + Math.random().toString(36).slice(2)
-    const temp: Message = { ...g, id: tmp, chatId, outgoing: true, sentAt: Date.now(), seq: 0, read: false, reactions: [],
+    const temp: Message = { ...g, id: tmp, chatId, outgoing: true, sentAt: this.serverNow(), seq: 0, read: false, reactions: [],
       forwarded: '', reply: undefined, origin: '' }
     this.sending[tmp] = true
     if (from) this.flyFrom[tmp] = from
@@ -952,13 +952,27 @@ class AppState {
    * temporary one, keeping its spot and its on-screen key (localKey), so the
    * row is not re-created (the send animation would play again and media
    * would reload). */
+  /** How far this device's clock is from the server's (learnt from sent
+   * messages): a message being sent is placed by server time at once. */
+  private clockOffset = 0
+  serverNow() { return Date.now() + this.clockOffset }
+
   private settleSent(chatId: string, tmp: string, msg: Message) {
+    if (msg.sentAt && !msg.pending) this.clockOffset = msg.sentAt - Date.now()
     ;(msg as Message & { localKey?: string }).localKey = tmp
     const list = this.messages[chatId]
     const i = list?.findIndex((x) => x.id === tmp) ?? -1
     if (list && i >= 0) {
       if (list.some((x) => x.id === msg.id)) list.splice(i, 1) // the realtime echo came first
-      else list[i] = { ...msg, sentAt: list[i].sentAt }
+      else {
+        // The server's time orders it among the others' messages (the
+        // device clock that timed the temporary copy may be off).
+        list[i] = msg
+        const prev = list[i - 1], next = list[i + 1]
+        if ((prev && prev.sentAt > msg.sentAt) || (next && next.sentAt < msg.sentAt && !next.id.startsWith('local-'))) {
+          list.sort((a, b) => a.sentAt - b.sentAt || a.seq - b.seq)
+        }
+      }
     } else {
       this.addMessage(msg)
     }

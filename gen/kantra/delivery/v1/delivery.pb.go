@@ -148,7 +148,10 @@ type Envelope struct {
 	CreatedAt      int64                  `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	SenderUserId   string                 `protobuf:"bytes,8,opt,name=sender_user_id,json=senderUserId,proto3" json:"sender_user_id,omitempty"`
 	// Not queued: do not ack or de-duplicate (id is 0).
-	Ephemeral     bool `protobuf:"varint,9,opt,name=ephemeral,proto3" json:"ephemeral,omitempty"`
+	Ephemeral bool `protobuf:"varint,9,opt,name=ephemeral,proto3" json:"ephemeral,omitempty"`
+	// When the server accepted the message (unix ms). Clients order messages
+	// by it: every device's clock is off by a little, the server's is one.
+	CreatedAtMs   int64 `protobuf:"varint,10,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -244,6 +247,13 @@ func (x *Envelope) GetEphemeral() bool {
 		return x.Ephemeral
 	}
 	return false
+}
+
+func (x *Envelope) GetCreatedAtMs() int64 {
+	if x != nil {
+		return x.CreatedAtMs
+	}
+	return 0
 }
 
 // Frames sent by the client over the WebSocket.
@@ -710,8 +720,10 @@ func (x *SendApplicationRequest) GetPayload() []byte {
 }
 
 type SendApplicationResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MessageId     int64                  `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	MessageId int64                  `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// Server time of the message (unix ms), = Envelope.created_at_ms.
+	CreatedAtMs   int64 `protobuf:"varint,2,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -749,6 +761,13 @@ func (*SendApplicationResponse) Descriptor() ([]byte, []int) {
 func (x *SendApplicationResponse) GetMessageId() int64 {
 	if x != nil {
 		return x.MessageId
+	}
+	return 0
+}
+
+func (x *SendApplicationResponse) GetCreatedAtMs() int64 {
+	if x != nil {
+		return x.CreatedAtMs
 	}
 	return 0
 }
@@ -2134,7 +2153,7 @@ var File_kantra_delivery_v1_delivery_proto protoreflect.FileDescriptor
 
 const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
-	"!kantra/delivery/v1/delivery.proto\x12\x12kantra.delivery.v1\"\xa7\x02\n" +
+	"!kantra/delivery/v1/delivery.proto\x12\x12kantra.delivery.v1\"\xcb\x02\n" +
 	"\bEnvelope\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x14\n" +
@@ -2145,7 +2164,9 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\x03R\tcreatedAt\x12$\n" +
 	"\x0esender_user_id\x18\b \x01(\tR\fsenderUserId\x12\x1c\n" +
-	"\tephemeral\x18\t \x01(\bR\tephemeral\"s\n" +
+	"\tephemeral\x18\t \x01(\bR\tephemeral\x12\"\n" +
+	"\rcreated_at_ms\x18\n" +
+	" \x01(\x03R\vcreatedAtMs\"s\n" +
 	"\vClientFrame\x12+\n" +
 	"\x03ack\x18\x01 \x01(\v2\x17.kantra.delivery.v1.AckH\x00R\x03ack\x12.\n" +
 	"\x04ping\x18\x02 \x01(\v2\x18.kantra.delivery.v1.PingH\x00R\x04pingB\a\n" +
@@ -2173,10 +2194,11 @@ const file_kantra_delivery_v1_delivery_proto_rawDesc = "" +
 	"\x16SendApplicationRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x14\n" +
 	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x18\n" +
-	"\apayload\x18\x03 \x01(\fR\apayload\"8\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\"\\\n" +
 	"\x17SendApplicationResponse\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\x03R\tmessageId\"M\n" +
+	"message_id\x18\x01 \x01(\x03R\tmessageId\x12\"\n" +
+	"\rcreated_at_ms\x18\x02 \x01(\x03R\vcreatedAtMs\"M\n" +
 	"\x13FetchWelcomeRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1b\n" +
 	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\"0\n" +
