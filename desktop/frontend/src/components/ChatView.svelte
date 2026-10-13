@@ -28,6 +28,7 @@
   let panelOpen = $state(false)
   let attachOpen = $state(false)
   const narrow = () => window.matchMedia('(max-width: 720px)').matches
+  const touchKeyboard = () => window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches
   function togglePanel() {
     if (panelOpen) {
       panelOpen = false
@@ -223,7 +224,9 @@
       if (f) { e.preventDefault(); fmt(f[0]); return }
       if (!e.shiftKey && k === 'KeyK') { e.preventDefault(); fmtLink(); return }
     }
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    // Phones (touch keyboard): Enter starts a new line, the arrow button
+    // sends — as in Telegram. With a physical keyboard Enter sends.
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touchKeyboard()) {
       e.preventDefault()
       send()
     } else if (e.key === 'Escape' && (app.reply || app.editing)) {
@@ -530,7 +533,7 @@
             </div>
           {:else}
             <button class="icon-btn" aria-label="Прикрепить файл" onclick={() => (attachOpen = !attachOpen)}><Icon name="clip" /></button>
-            <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" onkeydown={key} onpaste={paste}
+            <textarea bind:this={input} bind:value={text} rows="1" placeholder="Сообщение" enterkeyhint={touchKeyboard() ? 'enter' : 'send'} onkeydown={key} onpaste={paste}
               onfocus={() => { if (narrow()) panelOpen = false }} onselect={checkSel} onkeyup={() => { checkSel(); checkMention() }}
               onmouseup={checkSel} onblur={() => setTimeout(() => { hasSel = false; mention = null }, 150)} onclick={checkMention}
               oninput={() => { resize(); app.typingTick(); checkMention() }}></textarea>
