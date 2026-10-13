@@ -3,6 +3,7 @@
   import type { Message } from '../lib/api'
   import { app, type Modal } from '../lib/app.svelte'
   import Icon from './Icon.svelte'
+  import { swipe, swipe as swipeSide } from '../lib/gestures'
 
   let { m: start, list, back }: { m: Message; list?: Message[]; back?: Modal } = $props()
   // svelte-ignore state_referenced_locally
@@ -18,6 +19,26 @@
     const n = items[idx + d]
     if (n) m = n
   }
+  let viewerEl: HTMLDivElement | undefined = $state()
+  const media = () => viewerEl?.querySelector<HTMLElement>('img, video') ?? null
+  function set(tx: number, ty: number, fade = 1, anim = false) {
+    const el = media()
+    if (el) {
+      el.style.transition = anim ? 'transform .18s ease-out' : 'none'
+      el.style.transform = tx || ty ? `translate(${tx}px, ${ty}px)` : ''
+    }
+    if (viewerEl) viewerEl.style.background = `rgba(0, 0, 0, ${(0.92 * fade).toFixed(3)})`
+  }
+  const down = { dir: 'down' as const, ignore: 'header, .nav',
+    move: (d: number) => set(0, d, Math.max(0.2, 1 - d / 400)),
+    end: (d: number, v: number) => (d > 120 || v > 0.6 ? close() : set(0, 0, 1, true)) }
+  const side = { dir: 'horizontal' as const, ignore: 'header, .nav',
+    move: (d: number) => set(d, 0),
+    end: (d: number, v: number) => {
+      const n = d < -60 || v < -0.5 ? 1 : d > 60 || v > 0.5 ? -1 : 0
+      if (n && items[idx + n]) go(n)
+      set(0, 0, 1, true)
+    } }
   function key(e: KeyboardEvent) {
     if (e.key === 'Escape') close()
     else if (e.key === 'ArrowLeft') go(-1)
@@ -28,7 +49,7 @@
 <svelte:window onkeydown={key} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="viewer" onclick={(e) => e.target === e.currentTarget && close()}>
+<div class="viewer" bind:this={viewerEl} use:swipe={down} use:swipeSide={side} onclick={(e) => e.target === e.currentTarget && close()}>
   <header>
     <div class="who"><b>{m.outgoing ? 'Вы' : m.sender}</b><span>{new Date(m.sentAt).toLocaleString('ru-RU')}</span></div>
     <button class="icon-btn" aria-label="Сохранить" title="Сохранить" onclick={() => app.saveMedia(m)}><Icon name="download" /></button>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { swipe } from '../lib/gestures'
   // Telegram's side menu: profile, account switcher, main actions.
   import { app } from '../lib/app.svelte'
   import { fade, fly, slide } from 'svelte/transition'
@@ -12,6 +13,14 @@
   const name = $derived(app.me?.name || acc?.name || acc?.username || '')
 
   function close() { app.modal = null }
+  let drawerEl: HTMLElement | undefined = $state()
+  function dMove(d: number) { if (drawerEl) { drawerEl.style.transition = 'none'; drawerEl.style.transform = `translateX(${-d}px)` } }
+  function dEnd(d: number, v: number) {
+    if (!drawerEl) return
+    if (d > 80 || v > 0.4) { close(); return }
+    drawerEl.style.transition = 'transform .18s ease-out'
+    drawerEl.style.transform = ''
+  }
   function key(e: KeyboardEvent) { if (e.key === 'Escape') close() }
 </script>
 
@@ -19,7 +28,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="backdrop" onclick={close} transition:fade|global={{ duration: 180 }}></div>
-<nav class="drawer" aria-label="Меню" transition:fly|global={{ x: -300, duration: 240, opacity: 1, easing: cubicOut }}>
+<nav class="drawer" aria-label="Меню" bind:this={drawerEl} use:swipe={{ dir: 'left', move: dMove, end: dEnd }} transition:fly|global={{ x: -300, duration: 240, opacity: 1, easing: cubicOut }}>
   <div class="head">
     <button class="me-avatar" aria-label="Мой профиль" onclick={() => (app.modal = { kind: 'editProfile' })}>
       <Avatar name={name} id={acc?.userId} user={acc?.userId} photo={app.me?.avatarId} size={64} />

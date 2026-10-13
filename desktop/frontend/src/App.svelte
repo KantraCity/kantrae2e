@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { app } from './lib/app.svelte'
+  import { swipe } from './lib/gestures'
   import Auth from './components/Auth.svelte'
   import ChatInfo from './components/ChatInfo.svelte'
   import UserCard from './components/UserCard.svelte'
@@ -53,6 +54,39 @@
     resizing = false
     try { localStorage.setItem(SIDEBAR_KEY, String(sidebarW)) } catch { /* storage unavailable */ }
   }
+
+  // Phones: a swipe to the right in a chat slides it away and shows the
+  // chat list underneath, like Telegram's back gesture.
+  let layoutEl: HTMLDivElement | undefined = $state()
+  let backSwipe = $state(false)
+  const narrow = () => matchMedia('(max-width: 720px)').matches
+  function backMove(d: number) {
+    if (!layoutEl) return
+    backSwipe = true
+    const w = layoutEl.clientWidth
+    layoutEl.style.setProperty('--sx', `${Math.min(d, w)}px`)
+    layoutEl.style.setProperty('--sp', `${Math.min(1, d / w)}`)
+  }
+  function backEnd(d: number, v: number) {
+    const el = layoutEl
+    if (!el) return
+    const w = el.clientWidth
+    const go = d > w * 0.33 || (v > 0.45 && d > 40)
+    el.classList.add('settle')
+    el.style.setProperty('--sx', go ? `${w}px` : '0px')
+    el.style.setProperty('--sp', go ? '1' : '0')
+    setTimeout(() => {
+      el.classList.remove('settle')
+      if (go) {
+        el.classList.add('no-anim')
+        app.openChat(null)
+        setTimeout(() => el.classList.remove('no-anim'), 60)
+      }
+      backSwipe = false
+      el.style.removeProperty('--sx')
+      el.style.removeProperty('--sp')
+    }, 190)
+  }
 </script>
 
 <div class="root">
@@ -65,7 +99,9 @@
 {:else if app.pending}
   <PendingDevice />
 {:else}
-  <div class="layout" class:chat-open={!!app.currentId} class:resizing style="--sidebar-w:{sidebarW}px">
+  <div class="layout" class:chat-open={!!app.currentId} class:resizing class:back-swipe={backSwipe} style="--sidebar-w:{sidebarW}px" bind:this={layoutEl}
+    use:swipe={{ dir: 'right', enabled: !!app.currentId && narrow() && !app.modal && !app.menu, move: backMove, end: backEnd,
+      ignore: '.sidebar, textarea, input, .send, .mic, .emoji-panel, .panel, .round-rec, .fmt, [data-noswipe]' }}>
     <Sidebar />
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="resizer" title="Перетащите, чтобы изменить ширину" onpointerdown={startResize} onpointermove={doResize}
@@ -128,5 +164,15 @@
     .layout:not(.chat-open) :global(.sidebar) { animation: pop-back .22s cubic-bezier(.2, .8, .2, 1); }
   }
   @keyframes push-in { from { transform: translateX(100%); } }
+  /* Back swipe: the chat follows the finger, the list waits underneath. */
+  @media (max-width: 720px) {
+    .layout { position: relative; }
+    .layout.back-swipe :global(.sidebar) { display: flex !important; position: absolute; inset: 0; z-index: 0; animation: none;
+      transform: translateX(calc(-24% * (1 - var(--sp, 0)))); filter: brightness(calc(.75 + .25 * var(--sp, 0))); }
+    .layout.back-swipe :global(.chat-view) { position: relative; z-index: 1; animation: none; transform: translateX(var(--sx, 0px));
+      box-shadow: -8px 0 24px rgba(0, 0, 0, .35); }
+    .layout:global(.settle) :global(.chat-view), .layout:global(.settle) :global(.sidebar) { transition: transform .18s ease-out, filter .18s ease-out; }
+    .layout:global(.no-anim) :global(.sidebar), .layout:global(.no-anim) :global(.chat-view) { animation: none !important; }
+  }
   @keyframes pop-back { from { transform: translateX(-24%); opacity: .6; } }
 </style>

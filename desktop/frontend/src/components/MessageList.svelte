@@ -15,6 +15,7 @@
   import { dayLabel } from '../lib/util'
   import Bubble from './Bubble.svelte'
   import Icon from './Icon.svelte'
+  import { swipe, tick, type SwipeOpts } from '../lib/gestures'
 
   let { chatId, group }: { chatId: string; group: boolean } = $props()
 
@@ -89,6 +90,37 @@
     }
   }
 
+  // Swipe a message to the left to reply to it (Telegram): an arrow appears
+  // at the right, a long enough swipe starts the reply.
+  const REPLY_AT = 56
+  function replySwipe(m: Message): SwipeOpts {
+    let armed = false
+    return {
+      dir: 'left',
+      enabled: !!app.chats.find((c) => c.id === chatId)?.active && !m.id.startsWith('local-') && !m.pending && app.selected.length === 0,
+      ignore: 'audio, .wave, .speed, .poll',
+      move(d) {
+        const el = document.getElementById('row-' + m.id)
+        if (!el) return
+        const x = Math.min(d, REPLY_AT + 24) // resists past the mark
+        el.style.transition = 'none'
+        el.style.transform = `translateX(${-x}px)`
+        el.style.setProperty('--reply-p', String(Math.min(1, d / REPLY_AT)))
+        if (!armed && d >= REPLY_AT) { armed = true; tick() } else if (armed && d < REPLY_AT) armed = false
+      },
+      end(d) {
+        const el = document.getElementById('row-' + m.id)
+        if (el) {
+          el.style.transition = 'transform .18s ease-out'
+          el.style.transform = ''
+          el.style.setProperty('--reply-p', '0')
+        }
+        if (d >= REPLY_AT) app.startReply(m)
+        armed = false
+      },
+    }
+  }
+
   export function toBottom(smooth = true) {
     scroller?.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' })
     newBelow = 0
@@ -156,11 +188,15 @@
     {:else if r.m.kind === 'system'}
       <div class="day sys" id={'msg-' + r.m.id} in:fly={{ y: 8, duration: r.animate ? 200 : 0 }}><span>{r.m.text}</span></div>
     {:else if r.animate}
-      <div class="row" in:grow>
+      <div class="row" id={'row-' + r.m.id} in:grow use:swipe={replySwipe(r.m)}>
         <Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} />
+        <span class="reply-hint"><Icon name="reply" size={18} /></span>
       </div>
     {:else}
-      <div class="row"><Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} /></div>
+      <div class="row" id={'row-' + r.m.id} use:swipe={replySwipe(r.m)}>
+        <Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} />
+        <span class="reply-hint"><Icon name="reply" size={18} /></span>
+      </div>
     {/if}
   {/each}
   {#if shown < all.length || app.hasOlder[chatId]}
@@ -209,4 +245,8 @@
   .older .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--tint-3); border-top-color: var(--accent-light);
     animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg) } }
+  .row { position: relative; }
+  .reply-hint { position: absolute; right: -40px; top: 50%; width: 32px; height: 32px; margin-top: -16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0, 0, 0, .3);
+    opacity: var(--reply-p, 0); transform: scale(calc(.5 + .5 * var(--reply-p, 0))); pointer-events: none; }
 </style>
