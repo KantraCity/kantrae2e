@@ -108,6 +108,8 @@ func main() {
 		URL:              "/",
 		// Drag & drop of files from the OS into a chat (drop.go).
 		EnableFileDrop: true,
+		// The interface does not zoom (Ctrl + wheel / Ctrl +/- in WebView2).
+		ZoomControlEnabled: false,
 		// Our own title bar (TitleBar.svelte): window buttons drawn by the
 		// app on Windows, the native traffic lights over it on macOS.
 		Frameless: titlebarStyle() == "custom",

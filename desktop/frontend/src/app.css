@@ -85,6 +85,14 @@
   color-scheme: light;
 }
 
+/* The interface never zooms (pinch, double tap, the system text size):
+   like a native app, its layout stays as designed. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: pan-x pan-y;
+}
+
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
 #app { overflow: hidden; }

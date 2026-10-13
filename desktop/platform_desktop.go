@@ -72,6 +72,16 @@ func platformServices(m *Messenger) []application.Service {
 // platformSetup: like Telegram Desktop, closing the window keeps Kantra
 // running in the tray (setting "background"), so notifications keep coming.
 func platformSetup(app *application.App, w *application.WebviewWindow, m *Messenger) {
+	// The default application menu (macOS) has View → Zoom In/Out and
+	// Reload with shortcuts: the interface must not zoom or reload.
+	// (Windows and Linux show no menu: there it would add a menu bar.)
+	if runtime.GOOS == "darwin" {
+		appMenu := application.NewMenu()
+		appMenu.AddRole(application.AppMenu)
+		appMenu.AddRole(application.EditMenu) // copy / paste shortcuts
+		appMenu.AddRole(application.WindowMenu)
+		app.Menu.SetApplicationMenu(appMenu)
+	}
 	show := func() {
 		w.Show()
 		w.Focus()
