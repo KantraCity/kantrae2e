@@ -488,6 +488,12 @@ func (c *Client) Messages(ctx context.Context, groupID string, limit int) ([]sto
 	return c.st.Messages(ctx, groupID, limit)
 }
 
+// MessagesBefore returns up to limit messages older than (sentAt, seq),
+// oldest first (paging back through a long chat).
+func (c *Client) MessagesBefore(ctx context.Context, groupID string, sentAt, seq int64, limit int) ([]store.Message, error) {
+	return c.st.MessagesBefore(ctx, groupID, sentAt, seq, limit)
+}
+
 // Member is one device in a group.
 type Member struct {
 	UserID   string

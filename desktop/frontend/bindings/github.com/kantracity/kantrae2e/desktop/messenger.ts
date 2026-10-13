@@ -329,6 +329,14 @@ export function Messages(chatID: string, limit: number): $CancellablePromise<$mo
 }
 
 /**
+ * MessagesBefore returns up to limit messages older than the message at
+ * (sentAt, seq), oldest first: scrolling up through a long chat.
+ */
+export function MessagesBefore(chatID: string, sentAt: number, seq: number, limit: number): $CancellablePromise<$models.Message[] | null> {
+    return $Call.ByID(2439257542, chatID, sentAt, seq, limit);
+}
+
+/**
  * MuteChat turns notifications of a chat off for minutes (-1: forever,
  * 0: back on).
  */

@@ -82,7 +82,11 @@
     if (!scroller) return
     // In a column-reverse scroller scrollTop is 0 at the bottom, negative above.
     atBottom = Math.abs(scroller.scrollTop) < 80
-    if (atBottom) newBelow = 0
+    if (atBottom) {
+      newBelow = 0
+      // Back at the newest messages: drop the rendered history (DOM stays small).
+      if (shown > PAGE * 2) shown = PAGE
+    }
   }
 
   export function toBottom(smooth = true) {
@@ -127,8 +131,11 @@
   })
 
   onMount(() => {
-    const io = new IntersectionObserver((es) => {
-      if (es.some((e) => e.isIntersecting) && shown < all.length) shown += PAGE
+    // Near the top: render more of what is loaded, then load older pages.
+    const io = new IntersectionObserver(async (es) => {
+      if (!es.some((e) => e.isIntersecting)) return
+      if (shown < all.length) shown += PAGE
+      else if (app.hasOlder[chatId] && (await app.loadOlder(chatId))) shown += PAGE
     }, { root: scroller, rootMargin: '600px 0px 0px 0px' })
     if (sentinel) io.observe(sentinel)
     return () => io.disconnect()
@@ -150,7 +157,9 @@
       <div class="row"><Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} /></div>
     {/if}
   {/each}
-  {#if shown >= all.length}
+  {#if shown < all.length || app.hasOlder[chatId]}
+    <div class="older"><span class="spinner"></span></div>
+  {:else}
     <div class="e2e-note"><Icon name="lock" size={14} /> Сообщения защищены сквозным шифрованием (MLS)</div>
   {/if}
   <div class="sentinel" bind:this={sentinel}></div>
@@ -190,4 +199,8 @@
     .messages { padding: 8px; }
     .down { right: 12px; bottom: 76px; }
   }
+  .older { display: flex; justify-content: center; padding: 12px 0; }
+  .older .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--tint-3); border-top-color: var(--accent-light);
+    animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
 </style>

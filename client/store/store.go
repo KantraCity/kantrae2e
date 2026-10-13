@@ -678,6 +678,18 @@ func (s *Store) Messages(ctx context.Context, groupID string, limit int) ([]Mess
 	return scanMessages(rows)
 }
 
+// MessagesBefore returns up to limit messages older than (sentAt, seq),
+// oldest first: the page above what the chat already shows.
+func (s *Store) MessagesBefore(ctx context.Context, groupID string, sentAt, seq int64, limit int) ([]Message, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT * FROM (SELECT `+msgCols+` FROM messages WHERE group_id=? AND deleted=0
+		AND (sent_at < ? OR (sent_at = ? AND seq < ?))
+		ORDER BY sent_at DESC, seq DESC LIMIT ?) ORDER BY sent_at, seq`, groupID, sentAt, sentAt, seq, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanMessages(rows)
+}
+
 // MessagesOfKind returns the newest messages of one kind (oldest first).
 func (s *Store) MessagesOfKind(ctx context.Context, groupID, kind string, limit int) ([]Message, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT * FROM (SELECT `+msgCols+` FROM messages WHERE group_id=? AND kind=? AND deleted=0

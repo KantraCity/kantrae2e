@@ -1,6 +1,10 @@
 import { Messenger, onEvent, errorText, type AccountInfo, type Chat, type LinkRequest, type LinkView, type Message, type State, type UIEvent, type UpdateState, type UserHit, type UserProfile } from './api'
 import { plural } from './util'
 import { logClient } from './diag'
+
+/** Messages loaded when a chat opens, and per page when scrolling up. */
+const FIRST_PAGE = 150
+const OLDER_PAGE = 150
 import { MAX_FILE, prepareFile, prepareSticker, type Prepared } from './media'
 import { restoreOpenChat, saveOpenChat } from './persist'
 
@@ -327,8 +331,10 @@ class AppState {
   }
 
   async loadMessages(id: string) {
-    const ms = await this.try(() => Messenger.Messages(id, 500))
+    const ms = await this.try(() => Messenger.Messages(id, FIRST_PAGE))
     if (!ms) return
+    this.hasOlder[id] = ms.length >= FIRST_PAGE
+    this.trimOthers(id)
     // Keep messages that arrived via events while the request was running.
     // (Only those: an older cached message missing from the answer was
     // deleted meanwhile and must go.)
@@ -641,22 +647,49 @@ class AppState {
     await this.refreshMessage(m.chatId, m.id)
   }
 
+  // ---- long chats: history is loaded in pages while scrolling up ----
+  /** More history exists above what is loaded. */
+  hasOlder = $state<Record<string, boolean>>({})
+  private loadingOlder = new Map<string, Promise<boolean>>()
+  /** Loads the page above the oldest loaded message; false at the start. */
+  loadOlder(chatId: string): Promise<boolean> {
+    const busy = this.loadingOlder.get(chatId)
+    if (busy) return busy
+    const p = (async () => {
+      const list = this.messages[chatId] ?? []
+      const oldest = list.find((m) => !m.id.startsWith('local-'))
+      if (!oldest) return false
+      const ms = await Messenger.MessagesBefore(chatId, oldest.sentAt, oldest.seq, OLDER_PAGE).catch(() => null)
+      if (!ms) return false
+      this.hasOlder[chatId] = ms.length >= OLDER_PAGE
+      const have = new Set((this.messages[chatId] ?? []).map((m) => m.id))
+      const add = ms.filter((m) => !have.has(m.id))
+      if (add.length) this.messages[chatId] = [...add, ...(this.messages[chatId] ?? [])]
+      return add.length > 0
+    })().finally(() => this.loadingOlder.delete(chatId))
+    this.loadingOlder.set(chatId, p)
+    return p
+  }
+  /** Chats in the background keep only their newest page in memory. */
+  private trimOthers(current: string) {
+    for (const [id, list] of Object.entries(this.messages)) {
+      if (id === current || list.length <= FIRST_PAGE) continue
+      this.messages[id] = list.slice(list.length - FIRST_PAGE)
+      this.hasOlder[id] = true
+    }
+  }
+
   // ---- jumping to a message (reply quote, search, pinned bar) ----
   /** MessageList scrolls to it and flashes it. */
   jump = $state<{ chatId: string; id: string; n: number } | null>(null)
   private jumpSeq = 0
   async jumpTo(chatId: string, id: string) {
-    // Older than what is loaded: load more history first.
-    let list = this.messages[chatId] ?? []
-    for (const limit of [2000, 10000, 50000]) {
-      if (list.some((m) => m.id === id)) break
-      const ms = await Messenger.Messages(chatId, limit).catch(() => null)
-      if (!ms) break
-      this.messages[chatId] = ms
-      list = ms
-      if (ms.length < limit) break
+    // Older than what is loaded: load history page by page until found.
+    const has = () => (this.messages[chatId] ?? []).some((m) => m.id === id)
+    for (let i = 0; i < 200 && !has() && this.hasOlder[chatId] !== false; i++) {
+      if (!(await this.loadOlder(chatId))) break
     }
-    if (!list.some((m) => m.id === id)) {
+    if (!has()) {
       this.toast('Сообщение не найдено', 'info')
       return
     }

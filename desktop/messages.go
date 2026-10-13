@@ -162,6 +162,31 @@ func (m *Messenger) Messages(chatID string, limit int) ([]Message, error) {
 	return out, nil
 }
 
+// MessagesBefore returns up to limit messages older than the message at
+// (sentAt, seq), oldest first: scrolling up through a long chat.
+func (m *Messenger) MessagesBefore(chatID string, sentAt, seq int64, limit int) ([]Message, error) {
+	c, err := m.loggedIn()
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	ms, err := c.MessagesBefore(context.Background(), chatID, sentAt, seq, limit)
+	if err != nil {
+		return nil, err
+	}
+	v := m.viewOf(c, chatID)
+	for i := range ms {
+		v.byUID[ms[i].UID] = &ms[i]
+	}
+	out := make([]Message, 0, len(ms))
+	for i := range ms {
+		out = append(out, *m.toMessageView(c, &ms[i], v))
+	}
+	return out, nil
+}
+
 // GetMessage returns one message (nil if it was deleted).
 func (m *Messenger) GetMessage(chatID, id string) (*Message, error) {
 	c, err := m.loggedIn()
