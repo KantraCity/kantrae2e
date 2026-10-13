@@ -74,7 +74,7 @@
         {#each album as x (x.id)}
           <button class="album-item" onclick={() => (app.modal = { kind: 'viewer', m: x })}
             oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); app.menu = { m: x, x: e.clientX, y: e.clientY } }}>
-            {#if x.file?.thumb}<img class="a-thumb" src={x.file.thumb} alt="" />{/if}
+            {#if x.file?.thumb && x.file.kind === 'video'}<img class="a-thumb" src={x.file.thumb} alt="" />{/if}
             {#if x.file?.kind === 'video'}
               <span class="a-play"><Icon name="play" size={18} /></span>
             {:else if app.mediaUrl(x)}
@@ -189,7 +189,7 @@
   .album-item { position: relative; aspect-ratio: 1; background: rgba(0,0,0,.25); overflow: hidden; }
   .album:not(.two):not(.many) .album-item:first-child:nth-last-child(odd) { grid-column: 1 / -1; aspect-ratio: 2 / 1; }
   .album-item img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .a-thumb { filter: blur(8px); transform: scale(1.1); }
+  .a-thumb { object-fit: cover; }
   .a-full { opacity: 0; transition: opacity .25s; }
   :global(.a-full.show) { opacity: 1; }
   .a-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border-radius: 50%;

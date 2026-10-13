@@ -16,7 +16,14 @@
   } = $props()
 
   let all = $state<Emoji[]>([])
-  let tab = $state<'emoji' | 'sticker' | 'gif'>('emoji')
+  // The tab you were on comes back next time (compose panel only).
+  const TAB_KEY = 'kantra.panel.tab'
+  type Tab = 'emoji' | 'sticker' | 'gif'
+  let tab = $state<Tab>((() => {
+    if (mode === 'reaction') return 'emoji'
+    try { const t = localStorage.getItem(TAB_KEY); return t === 'sticker' || t === 'gif' ? t : 'emoji' } catch { return 'emoji' }
+  })())
+  $effect(() => { if (mode !== 'reaction') try { localStorage.setItem(TAB_KEY, tab) } catch { /* ignore */ } })
   let query = $state('')
   let scroller: HTMLDivElement | undefined = $state()
   let active = $state(-1) // -1 = recent

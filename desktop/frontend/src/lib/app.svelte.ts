@@ -355,7 +355,11 @@ class AppState {
    * Sends (or saves an edit) optimistically: the message is on screen at
    * once with a clock, the network round trip happens in the background.
    */
-  send(text: string, opts: { silent?: boolean; link?: LinkView | null } = {}): Promise<boolean> {
+  /** Where a message being sent flies in from (the message box, a sticker
+   * in the panel), by its temporary id; MessageList animates it once. */
+  flyFrom: Record<string, DOMRect> = {}
+
+  send(text: string, opts: { silent?: boolean; link?: LinkView | null; from?: DOMRect } = {}): Promise<boolean> {
     const chatId = this.currentId
     if (!chatId || !text.trim()) return Promise.resolve(false)
     const editing = this.editing
@@ -383,6 +387,7 @@ class AppState {
       sentAt: Date.now(), outgoing: true, origin: '', silent: opts.silent, link: opts.link ?? undefined,
       reply: reply ? { id: reply.id, sender: reply.sender, text: reply.text || reply.file?.caption || reply.file?.name || '' } : undefined,
     } as Message
+    if (opts.from) this.flyFrom[tmp] = opts.from
     const attempt = () => {
       delete this.failed[tmp]
       this.sending[tmp] = true
@@ -914,7 +919,7 @@ class AppState {
   }
 
   /** Sends a saved GIF/sticker: shown at once, nothing is uploaded again. */
-  async sendGif(g: Message) {
+  async sendGif(g: Message, from?: DOMRect) {
     const chatId = this.currentId
     if (!chatId) return
     const replyTo = this.reply?.id ?? ''
@@ -923,6 +928,7 @@ class AppState {
     const temp: Message = { ...g, id: tmp, chatId, outgoing: true, sentAt: Date.now(), seq: 0, read: false, reactions: [],
       forwarded: '', reply: undefined, origin: '' }
     this.sending[tmp] = true
+    if (from) this.flyFrom[tmp] = from
     this.addMessage(temp)
     this.touchChat(temp)
     try {

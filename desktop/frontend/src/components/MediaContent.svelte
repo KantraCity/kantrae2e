@@ -179,12 +179,12 @@
   .thumb.sharp { filter: none; transform: none; }
   .full { opacity: 0; transition: opacity .25s, filter .2s; }
   .full.show { opacity: 1; }
-  .badge { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  .badge { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.55); 
     color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; letter-spacing: .3px; }
   .center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; border-radius: 50%;
     color: #fff; display: flex; align-items: center; justify-content: center; transition: transform .15s; }
   .center.big { width: 54px; height: 54px; }
-  .glass { background: rgba(0,0,0,.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 2px 12px rgba(0,0,0,.25); }
+  .glass { background: rgba(0,0,0,.55);  box-shadow: 0 2px 12px rgba(0,0,0,.25); }
   .visual:hover .center.big { transform: translate(-50%, -50%) scale(1.08); }
 
   /* ---- stickers: no frame, transparent ---- */
@@ -204,7 +204,7 @@
   .ring .track { stroke: rgba(255,255,255,.18); stroke-width: 2.5; }
   .ring .progress { stroke: var(--accent-light); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dashoffset .2s linear; }
   .pill { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 5px;
-    background: rgba(0,0,0,.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: #fff; font-size: 12px;
+    background: rgba(0,0,0,.45);  color: #fff; font-size: 12px;
     padding: 2px 9px; border-radius: 10px; font-variant-numeric: tabular-nums; }
 
   /* ---- voice messages ---- */

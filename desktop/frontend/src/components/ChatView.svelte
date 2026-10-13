@@ -103,7 +103,8 @@
     resize()
     input?.focus()
     // On failure put the text back unless the user already typed something new.
-    if (!(await app.send(t, { silent, link })) && !text) text = t
+    const from = input?.closest('.composer')?.getBoundingClientRect()
+    if (!(await app.send(t, { silent, link, from })) && !text) text = t
   }
 
   // ---- send menu (right click / long press on send): silent, scheduled ----
@@ -500,7 +501,7 @@
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <div class="panel-backdrop" onclick={() => (panelOpen = false)}></div>
           <div class="emoji-pop" transition:fly={{ y: 12, duration: 180 }}>
-            <EmojiPanel onpick={insertEmoji} onclose={() => (panelOpen = false)} ongif={() => (panelOpen = false)} />
+            <EmojiPanel onpick={insertEmoji} onclose={() => (panelOpen = false)} />
           </div>
         {/if}
         {#if mention && mentionHits.length}

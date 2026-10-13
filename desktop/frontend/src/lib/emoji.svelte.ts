@@ -57,7 +57,7 @@ class EmojiPrefs {
     this.counts[e] = (this.counts[e] ?? 0) + 1
     const list = [e, ...this.recent.filter((x) => x !== e)]
     // Keep the frequently used ones, drop the rarest beyond 40.
-    this.recent = list.slice(0, 40)
+    this.recent = list.slice(0, 15) // the last 15 used
     write('kantra.emoji.recent', this.recent)
     write('kantra.emoji.counts', this.counts)
   }

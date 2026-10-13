@@ -9,7 +9,6 @@
   //   reading older messages.
   import { onMount } from 'svelte'
   import { fly } from 'svelte/transition'
-  import { cubicOut } from 'svelte/easing'
   import { app } from '../lib/app.svelte'
   import type { Message } from '../lib/api'
   import { dayLabel } from '../lib/util'
@@ -69,20 +68,44 @@
     return out
   })
 
-  // A new message comes in from the bottom: the list above slides up
-  // smoothly (its height grows) while the bubble flies in — one's own from
-  // the message box (bottom right), others' from below on the left.
-  function grow(node: HTMLElement, out: boolean) {
-    const h = node.offsetHeight
-    const origin = out ? 'bottom right' : 'bottom left'
-    return {
-      duration: 340,
-      easing: cubicOut,
-      css: (t: number, u: number) => {
-        const hh = Math.min(1, t * 1.5) * h // room opens first, then the bubble lands
-        return `height:${hh}px;opacity:${Math.min(1, t * 2)};overflow:visible;transform-origin:${origin};` +
-          `transform:translate(${out ? u * 24 : 0}px, ${u * 56}px) scale(${0.82 + 0.18 * t});`
-      },
+  // A new message arrives. Nothing is laid out again frame by frame (that
+  // was the stutter): the row takes its place at once, the messages above,
+  // pushed up by it, slide there smoothly (transform only, on the GPU), and
+  // the new bubble flies in — from the message box or the sticker it was
+  // sent from (app.flyFrom), from below for others' messages.
+  const EASE = 'cubic-bezier(.22, .9, .3, 1)'
+  function arrive(node: HTMLElement, m: Message) {
+    const sc = scroller
+    if (!sc || Math.abs(sc.scrollTop) > 80) return // reading older messages: just appear
+    const h = node.getBoundingClientRect().height
+    const view = sc.getBoundingClientRect()
+    for (const el of sc.children) {
+      if (el === node || !(el instanceof HTMLElement)) continue
+      const r = el.getBoundingClientRect()
+      if (r.bottom < view.top - h || r.top > view.bottom) continue
+      el.animate([{ transform: `translateY(${h}px)` }, { transform: 'none' }], { duration: 320, easing: EASE })
+    }
+    const bubble = node.querySelector<HTMLElement>('.bubble') ?? node
+    const from = app.flyFrom[m.id]
+    delete app.flyFrom[m.id]
+    if (from) {
+      const t = bubble.getBoundingClientRect()
+      const s = Math.max(0.35, Math.min(1.6, from.width / Math.max(1, t.width)))
+      const dx = from.left + from.width / 2 - (t.left + t.width / 2)
+      const dy = from.top + from.height / 2 - (t.top + t.height / 2)
+      bubble.style.transformOrigin = 'center'
+      // A slight arc: it lifts off, then settles into its place.
+      bubble.animate([
+        { transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: 0.85 },
+        { transform: `translate(${dx * 0.35}px, ${dy * 0.35 - 18}px) scale(${(s + 1) / 2})`, opacity: 1, offset: 0.55 },
+        { transform: 'none', opacity: 1 },
+      ], { duration: 460, easing: EASE })
+    } else {
+      bubble.style.transformOrigin = m.outgoing ? 'bottom right' : 'bottom left'
+      bubble.animate([
+        { transform: `translate(${m.outgoing ? 16 : -10}px, ${Math.min(h, 48)}px) scale(.9)`, opacity: 0 },
+        { transform: 'none', opacity: 1 },
+      ], { duration: 360, easing: EASE })
     }
   }
 
@@ -208,7 +231,7 @@
     {:else if r.m.kind === 'system'}
       <div class="day sys" id={'msg-' + r.m.id} in:fly={{ y: 8, duration: r.animate ? 200 : 0 }}><span>{r.m.text}</span></div>
     {:else if r.animate}
-      <div class="row" id={'row-' + r.m.id} in:grow={r.m.outgoing} use:swipe={replySwipe(r.m)}>
+      <div class="row" id={'row-' + r.m.id} use:arrive={r.m} use:swipe={replySwipe(r.m)}>
         <Bubble m={r.m} first={r.first} last={r.last} {group} album={r.album} />
         <span class="reply-hint"><Icon name="reply" size={18} /></span>
       </div>

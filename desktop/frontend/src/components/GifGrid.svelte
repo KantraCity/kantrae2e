@@ -6,7 +6,18 @@
   import type { Message } from '../lib/api'
   import Icon from './Icon.svelte'
 
-  let { onpick, kind = 'gif' }: { onpick: () => void; kind?: 'gif' | 'sticker' } = $props()
+  let { onpick, kind = 'gif' }: { onpick?: () => void; kind?: 'gif' | 'sticker' } = $props()
+
+  // Recently sent (this device): the 15 last, shown first.
+  const RECENT_MAX = 15
+  // svelte-ignore state_referenced_locally
+  const recentKey = `kantra.recent.${kind}` // the grid is re-created per kind ({#key})
+  let recentIds = $state<string[]>((() => { try { return JSON.parse(localStorage.getItem(recentKey) ?? '[]') } catch { return [] } })())
+  const recent = $derived(recentIds.map((id) => app.saved[kind].find((g) => g.id === id)).filter((g): g is Message => !!g))
+  function remember(id: string) {
+    recentIds = [id, ...recentIds.filter((x) => x !== id)].slice(0, RECENT_MAX)
+    try { localStorage.setItem(recentKey, JSON.stringify(recentIds)) } catch { /* ignore */ }
+  }
   // svelte-ignore state_referenced_locally
   let loading = $state(!app.savedLoaded[kind]) // the grid is re-created per kind ({#key})
   let fileInput: HTMLInputElement | undefined = $state()
@@ -24,9 +35,10 @@
     app.loadSaved(kind).finally(() => (loading = false))
   })
 
-  function send(g: Message) {
-    onpick()
-    app.sendGif(g)
+  function send(g: Message, el?: HTMLElement) {
+    remember(g.id)
+    onpick?.()
+    app.sendGif(g, el?.getBoundingClientRect()) // it flies from here into the chat
   }
 
   let removing = $state<string | null>(null)
@@ -37,21 +49,36 @@
     pressTimer = setTimeout(() => { longPressed = true; navigator.vibrate?.(15); removing = g.id }, 480)
   }
   function pressEnd() { clearTimeout(pressTimer) }
-  function click(g: Message) {
+  function click(g: Message, e: MouseEvent) {
     if (longPressed) { longPressed = false; return }
     if (removing) { removing = null; return }
-    send(g)
+    send(g, e.currentTarget as HTMLElement)
   }
 </script>
 
 <div class="grid">
+    {#if recent.length}
+      <div class="sect muted">Недавние</div>
+      {#each recent as g (g.id)}
+        <div class="cell">
+          <button class="gif" title="Отправить" onclick={(e) => send(g, e.currentTarget)}>
+            {#if g.file?.mime?.startsWith('video/')}
+              <video class="full" src={g.file?.url} autoplay loop muted playsinline></video>
+            {:else}
+              <img class="full" class:sticker={kind === 'sticker'} src={g.file?.url} alt="" loading="lazy" />
+            {/if}
+          </button>
+        </div>
+      {/each}
+      <div class="sect muted">{kind === 'gif' ? 'Все GIF' : 'Все стикеры'}</div>
+    {/if}
     <button class="add" onclick={() => fileInput?.click()} disabled={adding} title={kind === 'gif' ? 'Добавить GIF или видео' : 'Добавить картинку'}>
       {#if adding}<span class="spinner"></span>{:else}<Icon name="plus" size={26} /><span>{kind === 'gif' ? 'GIF' : 'Стикер'}</span>{/if}
     </button>
     <input type="file" hidden bind:this={fileInput} accept={kind === 'gif' ? 'image/gif,video/*' : 'image/*'} onchange={(e) => add((e.currentTarget as HTMLInputElement).files)} />
     {#each app.saved[kind] as g (g.id)}
       <div class="cell" class:removing={removing === g.id}>
-        <button class="gif" title="Отправить" onclick={() => click(g)}
+        <button class="gif" title="Отправить" onclick={(e) => click(g, e)}
           oncontextmenu={(e) => { e.preventDefault(); removing = g.id }}
           ontouchstart={() => pressStart(g)} ontouchend={pressEnd} ontouchmove={pressEnd}>
           {#if g.file?.thumb && kind === 'gif'}<img class="thumb" src={g.file.thumb} alt="" />{/if}
@@ -93,4 +120,5 @@
   .remove { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 6px;
     background: var(--danger); color: #fff; font-size: 13px; font-weight: 500; padding: 6px 10px; border-radius: 14px; white-space: nowrap; }
   .empty { grid-column: 1 / -1; text-align: center; padding: 28px 16px; font-size: 14px; line-height: 1.5; }
+  .sect { grid-column: 1 / -1; font-size: 13px; font-weight: 500; padding: 6px 4px 2px; }
 </style>

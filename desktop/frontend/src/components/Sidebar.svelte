@@ -167,6 +167,7 @@
   .search input::placeholder { color: var(--text-muted); }
   .list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 6px 80px; }
   .chat-item { width: 100%; display: flex; gap: 12px; align-items: center; padding: 7px 10px; border-radius: 10px; text-align: left;
+    content-visibility: auto; contain-intrinsic-size: auto 66px; /* off-screen chats are not rendered */
     transition: background .15s, transform .1s; }
   .chat-item:active { transform: scale(.985); }
   .chat-item:hover { background: var(--bg-hover); }

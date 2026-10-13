@@ -195,7 +195,7 @@
     .layout { position: relative; }
     .layout.back-swipe :global(.sidebar) { display: flex !important; position: absolute; inset: 0; z-index: 0; animation: none;
       transform: translateX(calc(-24% * (1 - var(--sp, 0)))); filter: brightness(calc(.75 + .25 * var(--sp, 0))); }
-    .layout.back-swipe :global(.chat-view) { position: relative; z-index: 1; animation: none; transform: translateX(var(--sx, 0px));
+    .layout.back-swipe :global(.chat-view) { position: relative; z-index: 1; animation: none; transform: translateX(var(--sx, 0px)); will-change: transform;
       box-shadow: -8px 0 24px rgba(0, 0, 0, .35); }
     .layout:global(.settle) :global(.chat-view), .layout:global(.settle) :global(.sidebar) { transition: transform .18s ease-out, filter .18s ease-out; }
     .layout.no-anim :global(.sidebar), .layout.no-anim :global(.chat-view) { animation: none !important; }
