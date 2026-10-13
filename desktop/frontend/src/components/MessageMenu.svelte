@@ -1,6 +1,7 @@
 <script lang="ts">
   // Telegram's message context menu: quick reactions + actions.
   import { app } from '../lib/app.svelte'
+  import { titlebarHeight } from '../lib/util'
   import { scale } from 'svelte/transition'
   import Icon from './Icon.svelte'
   import { plain } from '../lib/format'
@@ -24,7 +25,7 @@
     const w = 280, h = allReactions ? 640 : 380
     const x = Math.min(menu.x, window.innerWidth - w - 8)
     const y = menu.y + h > window.innerHeight ? Math.max(8, Math.min(menu.y, window.innerHeight - 8) - h) : menu.y
-    return { x: Math.max(8, x), y: Math.max(8, y) }
+    return { x: Math.max(8, x), y: Math.max(8 + titlebarHeight(), y) }
   })
 
   function close() { app.menu = null }
@@ -81,7 +82,7 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; z-index: 60; }
+  .backdrop { position: fixed; inset: var(--titlebar-h, 0px) 0 0; z-index: 60; }
   .menu { position: fixed; z-index: 61; width: 280px; max-height: calc(100vh - 16px); overflow-y: auto; background: var(--bg-menu); border-radius: 12px; box-shadow: var(--shadow);
     padding: 6px 0; display: flex; flex-direction: column; transform-origin: top left; }
   .menu > button { display: flex; align-items: center; gap: 14px; padding: 9px 16px; text-align: left; font-size: 15px; }

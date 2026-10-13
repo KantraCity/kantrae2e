@@ -1,5 +1,10 @@
 const avatarColors = ['#e17076', '#faa774', '#a695e7', '#7bc862', '#6ec9cb', '#65aadd', '#ee7aae']
 
+/** Height of the app's own window title bar (0 on phones and in the browser). */
+export function titlebarHeight(): number {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--titlebar-h')) || 0
+}
+
 export function hash(s: string): number {
   let h = 0
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0

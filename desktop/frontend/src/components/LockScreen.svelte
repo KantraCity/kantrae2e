@@ -65,7 +65,7 @@
 </div>
 
 <style>
-  .lock { position: absolute; inset: 0; z-index: 1000; background: var(--bg-sidebar); display: flex; flex-direction: column; align-items: center;
+  .lock { position: absolute; inset: var(--titlebar-h, 0px) 0 0; z-index: 1000; background: var(--bg-sidebar); display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 14px; padding: 24px; user-select: none; -webkit-user-select: none; }
   .logo { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; }
   .title { font-size: 18px; font-weight: 600; }

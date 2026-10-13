@@ -58,8 +58,8 @@
 </nav>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 40; }
-  .drawer { position: fixed; top: 0; bottom: 0; left: 0; width: min(300px, 85vw); background: var(--bg-sidebar); z-index: 41;
+  .backdrop { position: fixed; inset: var(--titlebar-h, 0px) 0 0; background: rgba(0, 0, 0, 0.45); z-index: 40; }
+  .drawer { position: fixed; top: var(--titlebar-h, 0px); bottom: 0; left: 0; width: min(300px, 85vw); background: var(--bg-sidebar); z-index: 41;
     display: flex; flex-direction: column; box-shadow: var(--shadow); overflow-y: auto; }
   .head { padding: 20px 18px 10px; background: var(--bg-header); display: flex; flex-direction: column; gap: 12px; }
   .me-avatar { align-self: flex-start; border-radius: 50%; }

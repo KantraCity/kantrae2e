@@ -8,6 +8,15 @@
 
   let { style }: { style: 'custom' | 'mac' } = $props()
   let maximised = $state(false)
+  let bar: HTMLDivElement
+
+  // Full-screen layers (call, viewer, menus…) start below the bar
+  // (--titlebar-h in their styles): it stays on top for the window buttons.
+  $effect(() => {
+    const root = document.documentElement.style
+    root.setProperty('--titlebar-h', bar.offsetHeight + 'px')
+    return () => root.removeProperty('--titlebar-h')
+  })
 
   async function sync() {
     maximised = await Window.IsMaximised().catch(() => false)
@@ -27,7 +36,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="titlebar {style}" ondblclick={toggle}>
+<div class="titlebar {style}" bind:this={bar} ondblclick={toggle}>
   {#if style === 'custom'}<img class="logo" src="/icon.svg" alt="" />{/if}
   <span class="title">{title}</span>
   {#if style === 'custom'}

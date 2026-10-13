@@ -48,7 +48,7 @@
 </div>
 
 <style>
-  .viewer { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, .92); display: flex; align-items: center; justify-content: center; animation: fade .15s; }
+  .viewer { position: fixed; inset: var(--titlebar-h, 0px) 0 0; z-index: 70; background: rgba(0, 0, 0, .92); display: flex; align-items: center; justify-content: center; animation: fade .15s; }
   header { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 6px; padding: 10px 14px; color: #fff; }
   .who { flex: 1; display: flex; flex-direction: column; font-size: 14px; }
   .who span { color: #aaa; font-size: 13px; }

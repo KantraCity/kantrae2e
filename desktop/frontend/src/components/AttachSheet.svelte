@@ -147,7 +147,7 @@
 {/if}
 
 <style>
-  .backdrop { position: fixed; inset: 0; z-index: 40; }
+  .backdrop { position: fixed; inset: var(--titlebar-h, 0px) 0 0; z-index: 40; }
   .backdrop.native { background: rgba(0,0,0,.45); }
   .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; height: min(72vh, 620px); display: flex; flex-direction: column;
     background: var(--bg-sidebar); border-radius: 16px 16px 0 0; box-shadow: var(--shadow); padding-bottom: env(safe-area-inset-bottom); }

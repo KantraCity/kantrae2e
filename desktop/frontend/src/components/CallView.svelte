@@ -157,7 +157,7 @@
 
 <style>
   /* ---- incoming ---- */
-  .incoming { position: fixed; inset: 0; z-index: 250; display: flex; align-items: center; justify-content: center;
+  .incoming { position: fixed; inset: var(--titlebar-h, 0px) 0 0; z-index: 250; display: flex; align-items: center; justify-content: center;
     background: radial-gradient(circle at 50% 30%, rgba(43, 82, 120, .95), rgba(14, 22, 33, .97) 70%); }
   .inc-card { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #fff; text-align: center; padding: 24px; }
   .inc-name { font-size: 26px; font-weight: 600; margin-top: 14px; }
@@ -186,7 +186,7 @@
   .round-btn.green { background: #3fbf5f; }
 
   /* ---- the call ---- */
-  .call { position: fixed; inset: 0; z-index: 240; display: flex; flex-direction: column; color: #fff;
+  .call { position: fixed; inset: var(--titlebar-h, 0px) 0 0; z-index: 240; display: flex; flex-direction: column; color: #fff;
     background: radial-gradient(circle at 50% 0%, #22384f, #0b121a 75%); }
   .call header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
   .ghost { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.8); }
@@ -221,7 +221,7 @@
   .ctl { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.7); }
 
   /* ---- minimised bar ---- */
-  .bar { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 230; margin-top: 6px; display: flex; align-items: center; gap: 10px;
+  .bar { position: fixed; top: var(--titlebar-h, 0px); left: 50%; transform: translateX(-50%); z-index: 230; margin-top: 6px; display: flex; align-items: center; gap: 10px;
     padding: 7px 16px; border-radius: 18px; color: #fff; font-size: 13px; background: linear-gradient(90deg, #3fbf5f, #2fa84f);
     box-shadow: 0 4px 16px rgba(0,0,0,.35); }
   .bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: blink 1.4s infinite; }

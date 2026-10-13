@@ -16,7 +16,7 @@
 
 <style>
   .toasts {
-    position: fixed; left: 50%; top: 64px; transform: translateX(-50%);
+    position: fixed; left: 50%; top: calc(64px + var(--titlebar-h, 0px)); transform: translateX(-50%);
     z-index: 100; display: flex; flex-direction: column; gap: 8px; align-items: center;
     width: min(560px, calc(100vw - 32px)); pointer-events: none;
   }
