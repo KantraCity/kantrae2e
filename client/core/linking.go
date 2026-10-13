@@ -493,17 +493,19 @@ func (c *Client) OpenDirect(ctx context.Context, username string) (string, error
 	}
 	gid := directGroupID(c.acct.UserID, peer)
 	if _, _, err := c.m.GroupInfo([]byte(gid)); err != nil {
-		// Not a member locally: maybe it exists already (created by the peer
-		// or by another device of ours) — catch up first.
-		if err := c.syncLocked(ctx); err != nil {
-			return "", err
-		}
-	}
-	if _, _, err := c.m.GroupInfo([]byte(gid)); err != nil {
+		// Not a member here. Usually the chat is new: create it right away
+		// (a full sync first cost two round trips on every new chat). If it
+		// exists already (started by the peer or another device of ours),
+		// catch up — a pending Welcome lets us in — or join it.
 		_, err := c.createGroupLocked(ctx, gid, "", peer)
 		if connect.CodeOf(err) == connect.CodeAlreadyExists {
-			if jerr := c.joinExternalLocked(ctx, gid); jerr != nil {
-				return "", ErrPeerStarted
+			if err := c.syncLocked(ctx); err != nil {
+				return "", err
+			}
+			if _, _, err := c.m.GroupInfo([]byte(gid)); err != nil {
+				if jerr := c.joinExternalLocked(ctx, gid); jerr != nil {
+					return "", ErrPeerStarted
+				}
 			}
 		} else if err != nil {
 			return "", err

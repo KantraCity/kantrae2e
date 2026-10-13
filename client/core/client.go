@@ -151,6 +151,9 @@ type Client struct {
 	// Realtime connection: current keep-alive and a "reconnect now" signal.
 	keepAlive atomic.Int64 // time.Duration
 	kick      chan struct{}
+	// Recent username lookups (resolveUser).
+	lookupMu sync.Mutex
+	lookups  map[string]lookupResult
 
 	auth  authv1connect.AuthServiceClient
 	dir   directoryv1connect.DirectoryServiceClient

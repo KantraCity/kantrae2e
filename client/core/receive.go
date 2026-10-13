@@ -347,27 +347,31 @@ func (c *Client) Listen(ctx context.Context) error {
 	backoff := time.Second
 	for {
 		connCtx, cancel := context.WithCancel(ctx)
-		kicked := make(chan struct{})
+		// kicked reports whether a Reconnect() ended this connection. The
+		// watcher always finishes before it is read, so a kick arriving
+		// while the connection was failing anyway is never lost (it used to
+		// cost a full backoff second).
+		kicked := make(chan bool, 1)
 		go func() {
 			select {
 			case <-c.kick:
-				close(kicked)
 				cancel()
+				kicked <- true
 			case <-connCtx.Done():
+				kicked <- false
 			}
 		}()
 		start := time.Now()
 		err := c.listenOnce(connCtx)
 		cancel()
+		wasKicked := <-kicked
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		c.emit(Event{Type: EventDisconnected, Err: err})
-		select {
-		case <-kicked:
+		if wasKicked {
 			backoff = time.Second
 			continue // reconnect immediately
-		default:
 		}
 		if time.Since(start) > time.Minute {
 			backoff = time.Second // it worked for a while: not a persistent failure

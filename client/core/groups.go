@@ -119,8 +119,24 @@ func (c *Client) createGroupLocked(ctx context.Context, gid, name, peer string) 
 }
 
 // resolveUser returns the user id of a username and caches the mapping.
+// A lookup from the last minute is reused (opening a chat resolved the same
+// name twice: one round trip each).
 func (c *Client) resolveUser(ctx context.Context, username string) (string, error) {
+	c.lookupMu.Lock()
+	if r, ok := c.lookups[username]; ok && time.Since(r.at) < time.Minute {
+		c.lookupMu.Unlock()
+		return r.uid, nil
+	}
+	c.lookupMu.Unlock()
 	r, err := c.auth.LookupUser(ctx, &authv1.LookupUserRequest{Username: username})
+	if err == nil {
+		c.lookupMu.Lock()
+		if c.lookups == nil {
+			c.lookups = map[string]lookupResult{}
+		}
+		c.lookups[username] = lookupResult{uid: r.UserId, at: time.Now()}
+		c.lookupMu.Unlock()
+	}
 	if err != nil {
 		return "", fmt.Errorf("lookup %q: %w", username, err)
 	}
@@ -223,7 +239,10 @@ func (c *Client) inviteLocked(ctx context.Context, groupID string, usernames []s
 		}
 	}
 	// Tell the new members the group's info (name, description, photo,
-	// invite link).
+	// invite link). Direct chats have none: skip the round trip.
+	if GroupKind(groupID) == KindDirect {
+		return added, nil
+	}
 	if g, err := c.st.Group(ctx, groupID); err == nil {
 		_, err = c.sendLocked(ctx, groupID, payload{Type: "meta", Meta: fullMeta(g)})
 		return added, err
@@ -528,4 +547,9 @@ func (c *Client) ResolveGroup(ctx context.Context, ref string) (*store.Group, er
 	default:
 		return nil, fmt.Errorf("group %q is ambiguous", ref)
 	}
+}
+
+type lookupResult struct {
+	uid string
+	at  time.Time
 }
