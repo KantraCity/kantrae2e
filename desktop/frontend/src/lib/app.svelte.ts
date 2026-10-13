@@ -23,6 +23,7 @@ export type Modal =
   | { kind: 'editProfile' }
   | { kind: 'logout' }
   | { kind: 'chatInfo'; chatId: string }
+  | { kind: 'user'; userId: string; name: string; photo?: string }
   | { kind: 'verify'; username: string }
   | { kind: 'settings' }
   | { kind: 'relogin' }
@@ -409,6 +410,14 @@ class AppState {
     this.addMessage(temp)
     attempt()
     return Promise.resolve(true)
+  }
+
+  /** Opens a person's profile (a tap on their avatar or name in a chat). */
+  openUser(userId: string, name: string, photo?: string) {
+    if (!userId) return
+    const direct = this.chats.find((c) => c.kind === 'direct' && c.peerId === userId)
+    if (direct && direct.id === this.currentId) this.modal = { kind: 'chatInfo', chatId: direct.id }
+    else this.modal = { kind: 'user', userId, name, photo }
   }
 
   /** Sends a message the server refused once more (outbox). */

@@ -113,11 +113,17 @@
   })
 
   // app.jumpTo: render enough history, scroll the message to the middle, flash it.
+  // Each jump is handled once: the effect also re-runs when messages change
+  // (sending, typing a reply…), which used to scroll back to the last pinned
+  // message / quote every time.
+  let handledJump = 0
   $effect(() => {
     const j = app.jump
-    if (!j || j.chatId !== chatId) return
+    if (!j || j.chatId !== chatId || j.n === handledJump) return
     const idx = all.findIndex((m) => m.id === j.id)
     if (idx < 0) return
+    handledJump = j.n
+    queueMicrotask(() => { if (app.jump?.n === j.n) app.jump = null }) // not again when the chat reopens
     if (all.length - idx > shown) shown = all.length - idx + 10
     setTimeout(() => {
       const el = document.getElementById('msg-' + j.id)

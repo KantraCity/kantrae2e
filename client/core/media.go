@@ -100,6 +100,7 @@ func (c *Client) uploadMedia(ctx context.Context, in MediaInput) (*MediaRef, err
 	if _, err := c.media.PutMedia(ctx, &mediav1.PutMediaRequest{Hash: hash, Data: ct}); err != nil {
 		return nil, err
 	}
+	c.opts.MediaCache.Put(hash, ct) // our own files open without a download
 	return &MediaRef{Hash: hash, Key: key, Name: in.Name, Size: len(data), Mime: in.Mime, Kind: in.Kind, Width: in.Width,
 		Height: in.Height, Duration: in.Duration, Thumb: in.Thumb, Waveform: in.Waveform, Caption: in.Caption, Album: in.Album}, nil
 }
@@ -127,16 +128,22 @@ func (c *Client) DownloadMedia(ctx context.Context, m *store.Message) (name stri
 }
 
 // DownloadRef fetches and decrypts the file of a media reference.
+// The device's media cache (Options.MediaCache) is used first.
 func (c *Client) DownloadRef(ctx context.Context, ref *MediaRef) (data []byte, err error) {
-	if err := c.refreshToken(ctx); err != nil {
-		return nil, err
+	ct, ok := c.opts.MediaCache.Get(ref.Hash)
+	if !ok {
+		if err := c.refreshToken(ctx); err != nil {
+			return nil, err
+		}
+		r, err := c.media.GetMedia(ctx, &mediav1.GetMediaRequest{Hash: ref.Hash})
+		if err != nil {
+			return nil, err
+		}
+		if blobstore.Hash(r.Data) != ref.Hash {
+			return nil, errors.New("media hash mismatch")
+		}
+		ct = r.Data
+		c.opts.MediaCache.Put(ref.Hash, ct)
 	}
-	r, err := c.media.GetMedia(ctx, &mediav1.GetMediaRequest{Hash: ref.Hash})
-	if err != nil {
-		return nil, err
-	}
-	if blobstore.Hash(r.Data) != ref.Hash {
-		return nil, errors.New("media hash mismatch")
-	}
-	return crypto.Open(ref.Key, r.Data, []byte("kantra/media/v1"))
+	return crypto.Open(ref.Key, ct, []byte("kantra/media/v1"))
 }

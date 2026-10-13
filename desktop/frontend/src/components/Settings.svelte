@@ -172,6 +172,9 @@
             <span>Работать в фоне<br /><span class="muted small">уведомления приходят сразу, без серверов Apple; расходует больше батареи</span></span>
             <input type="checkbox" class="switch" checked={prefs.background} onchange={(e) => setPref('background', e.currentTarget.checked)} />
           </label>
+          {#if !prefs.notificationsAllowed}
+            <button class="warn-row" onclick={() => system('notifications')}><Icon name="warning" size={18} /> Уведомления запрещены в настройках iPhone — разрешить</button>
+          {/if}
           {#if prefs.background}
             <p class="muted small">Не закрывайте Kantra смахиванием из списка приложений — тогда iPhone завершит её до следующего запуска.</p>
           {/if}

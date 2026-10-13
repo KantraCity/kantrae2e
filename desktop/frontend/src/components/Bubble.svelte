@@ -48,12 +48,12 @@
 <div class="line" class:out={m.outgoing} class:last class:selecting class:selected={isSelected} id={'msg-' + m.id} onclickcapture={lineClick}>
   {#if selecting}<span class="sel-check" class:on={isSelected}>{#if isSelected}<Icon name="check" size={14} />{/if}</span>{/if}
   {#if group && !m.outgoing}
-    <div class="avatar-slot">{#if last}<Avatar name={m.sender} id={m.senderId} user={m.senderId} photo={m.senderAvatar} size={34} />{/if}</div>
+    <div class="avatar-slot">{#if last}<button class="avatar-btn" aria-label="Профиль {m.sender}" onclick={() => app.openUser(m.senderId, m.sender, m.senderAvatar)}><Avatar name={m.sender} id={m.senderId} user={m.senderId} photo={m.senderAvatar} size={34} /></button>{/if}</div>
   {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="bubble" class:tail={last && !bare} class:joined-top={!first} class:joined-bottom={!last} class:bare class:visual={isVisual} oncontextmenu={openMenu} ontouchstart={touchStart} ontouchend={touchEnd} ontouchmove={touchEnd}>
     {#if group && first && !m.outgoing}
-      <div class="sender" style="color:{nameColor(m.senderId)}">{m.sender}</div>
+      <button class="sender" style="color:{nameColor(m.senderId)}" onclick={() => app.openUser(m.senderId, m.sender, m.senderAvatar)}>{m.sender}</button>
     {/if}
     {#if m.forwarded}
       <div class="fwd">Переслано от <b>{m.forwarded}</b></div>
@@ -211,4 +211,6 @@
   .sel-check { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%;
     border: 2px solid var(--text-muted); display: flex; align-items: center; justify-content: center; color: #fff; transition: background .15s; }
   .sel-check.on { background: var(--accent); border-color: var(--accent); }
+  .avatar-btn { display: block; border-radius: 50%; }
+  button.sender { display: block; font-family: inherit; line-height: inherit; text-align: left; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 </style>

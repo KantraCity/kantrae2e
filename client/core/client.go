@@ -20,6 +20,7 @@ import (
 
 	"github.com/kantracity/kantrae2e/client/crypto"
 	"github.com/kantracity/kantrae2e/client/mls"
+	"github.com/kantracity/kantrae2e/client/mediacache"
 	"github.com/kantracity/kantrae2e/client/store"
 	authv1 "github.com/kantracity/kantrae2e/gen/kantra/auth/v1"
 	"github.com/kantracity/kantrae2e/gen/kantra/auth/v1/authv1connect"
@@ -54,6 +55,8 @@ type Options struct {
 	HTTPClient *http.Client
 	// OnEvent receives incoming events (called from the client's goroutines).
 	OnEvent func(Event)
+	// MediaCache keeps downloaded media (ciphertext) on disk. Optional.
+	MediaCache *mediacache.Cache
 	// Logf receives diagnostic messages (never plaintext). Optional.
 	Logf func(format string, args ...any)
 	// DisableAutoBackup turns off the continuous history backup (it is on

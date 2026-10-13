@@ -3,15 +3,12 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
 // iOS: local notifications while the app runs. iOS suspends apps in the
@@ -20,40 +17,9 @@ import (
 // the connection stays open without Apple's push service (APNs).
 const platformName = "ios"
 
-type iosNotifier struct {
-	ns *notifications.NotificationService
-}
+// Notifications: notify_ios.go.
 
-func newNotifier(*Messenger) notifier { return &iosNotifier{ns: notifications.New()} }
-
-func (n *iosNotifier) Show(x Notice) {
-	opts := notifications.NotificationOptions{ID: "chat-" + x.Key, Title: x.Title, Body: x.Body,
-		Data: map[string]any{"key": x.Key}}
-	if x.Image != "" {
-		opts.Attachments = []notifications.NotificationAttachment{{Path: x.Image}}
-	}
-	if err := n.ns.SendNotification(opts); err != nil && x.Image != "" {
-		opts.Attachments = nil
-		_ = n.ns.SendNotification(opts)
-	}
-}
-
-func (n *iosNotifier) Clear(key string) { _ = n.ns.RemoveNotification("chat-" + key) }
-
-type iosNotifications struct {
-	*notifications.NotificationService
-}
-
-func (o *iosNotifications) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
-	if err := o.NotificationService.ServiceStartup(ctx, opts); err != nil {
-		log.Printf("notifications unavailable: %v", err)
-	}
-	return nil
-}
-
-func platformServices(m *Messenger) []application.Service {
-	return []application.Service{application.NewService(&iosNotifications{m.notif.(*iosNotifier).ns})}
-}
+func platformServices(*Messenger) []application.Service { return nil }
 
 func platformSetup(_ *application.App, _ *application.WebviewWindow, m *Messenger) {
 	// Background mode (on unless switched off in Settings).
@@ -61,17 +27,16 @@ func platformSetup(_ *application.App, _ *application.WebviewWindow, m *Messenge
 		_ = m.start()
 		platformApplyBackground(m.pref(prefBackground))
 	}()
-	ns := m.notif.(*iosNotifier).ns
-	_, _ = ns.RequestNotificationAuthorization()
-	ns.OnNotificationResponse(func(r notifications.NotificationResult) {
-		if key, _ := r.Response.UserInfo["key"].(string); key != "" {
-			m.showChat(key)
-		}
-	})
+	notifySetup(m.showChat)
 }
 
-func platformStatus(*Settings)    {}
-func platformOpenSettings(string) {}
+// platformStatus: notifications switched off for Kantra in iOS Settings.
+func platformStatus(s *Settings) {
+	s.NotificationsAllowed = notifyAllowed() != 0
+}
+
+// platformOpenSettings opens Kantra's page in the iPhone Settings app.
+func platformOpenSettings(string) { application.IOS.OpenURL("app-settings:") }
 
 func titlebarStyle() string { return "" }
 
