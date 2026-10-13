@@ -197,7 +197,7 @@
   .round { position: relative; display: block; width: 240px; height: 240px; border-radius: 50%; overflow: hidden;
     background: #0b121a; box-shadow: 0 4px 18px rgba(0,0,0,.35); transition: transform .2s; }
   .round:hover { transform: scale(1.015); }
-  .round img, .round video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+  .round video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
   .round video { opacity: 0; transition: opacity .25s; }
   .round video.show { opacity: 1; }
   .ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); fill: none; pointer-events: none; }
