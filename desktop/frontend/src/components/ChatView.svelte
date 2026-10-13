@@ -270,6 +270,8 @@
     if (!input) return
     input.style.height = 'auto'
     input.style.height = Math.min(input.scrollHeight, 180) + 'px'
+    // Scrolls only when it is taller than the box (no stray scroll bar).
+    input.style.overflowY = input.scrollHeight > 180 ? 'auto' : 'hidden'
   }
 
   function pick(files: FileList | null | undefined) {
@@ -631,7 +633,9 @@
   .cb-dot { width: 8px; height: 8px; border-radius: 50%; background: #4dcd5e; animation: blink 1.4s infinite; }
   .cb-join { margin-left: auto; color: #fff; background: #3fbf5f; border-radius: 14px; padding: 4px 12px; font-weight: 500; }
   .composer { flex: 1; display: flex; align-items: flex-end; background: var(--bg-sidebar); border-radius: 18px; padding: 4px 6px; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-  textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 10px 6px; font-size: 15px; line-height: 1.35; max-height: 180px; }
+  textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 10px 6px; font-size: 15px; line-height: 1.35; max-height: 180px;
+    overflow-y: hidden; scrollbar-width: none; }
+  textarea::-webkit-scrollbar { display: none; }
   textarea::placeholder { color: var(--text-muted); }
   .send { width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
     flex-shrink: 0; transition: filter .15s, transform .15s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }

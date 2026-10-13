@@ -103,11 +103,15 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 input, textarea { font: inherit; color: var(--text); }
 a { color: var(--accent-light); }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: var(--tint-3); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
-* { scrollbar-color: var(--tint-3) transparent; scrollbar-width: thin; }
-::-webkit-scrollbar-track { background: transparent; }
+/* Thin scroll bars with a mouse; phones keep their own overlay ones (a
+   styled bar stays on screen there, e.g. as a stick in the message box). */
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--tint-3); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
+  * { scrollbar-color: var(--tint-3) transparent; scrollbar-width: thin; }
+  ::-webkit-scrollbar-track { background: transparent; }
+}
 
 .field {
   width: 100%;

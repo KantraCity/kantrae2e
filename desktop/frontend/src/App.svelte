@@ -57,12 +57,26 @@
   }
 
   // Phones: a swipe to the right in a chat slides it away and shows the
-  // chat list underneath, like Telegram's back gesture.
+  // chat list underneath, like Telegram's back gesture. The open/close
+  // animations only play for a tap navigation: after a swipe (finished or
+  // cancelled) they are off until the next navigation, otherwise removing
+  // the swipe classes replayed them and the screen jumped.
   let layoutEl: HTMLDivElement | undefined = $state()
   let backSwipe = $state(false)
+  let noAnim = $state(false)
+  let swipeNav = false
+  let lastChat = app.currentId
+  $effect(() => {
+    const id = app.currentId
+    if (id === lastChat) return
+    lastChat = id
+    if (swipeNav) swipeNav = false
+    else noAnim = false
+  })
   const narrow = () => matchMedia('(max-width: 720px)').matches
   function backMove(d: number) {
     if (!layoutEl) return
+    noAnim = true
     backSwipe = true
     const w = layoutEl.clientWidth
     layoutEl.style.setProperty('--sx', `${Math.min(d, w)}px`)
@@ -79,9 +93,8 @@
     setTimeout(() => {
       el.classList.remove('settle')
       if (go) {
-        el.classList.add('no-anim')
+        swipeNav = true
         app.openChat(null)
-        setTimeout(() => el.classList.remove('no-anim'), 60)
       }
       backSwipe = false
       el.style.removeProperty('--sx')
@@ -100,7 +113,7 @@
 {:else if app.pending}
   <PendingDevice />
 {:else}
-  <div class="layout" class:chat-open={!!app.currentId} class:resizing class:back-swipe={backSwipe} style="--sidebar-w:{sidebarW}px" bind:this={layoutEl}
+  <div class="layout" class:chat-open={!!app.currentId} class:resizing class:back-swipe={backSwipe} class:no-anim={noAnim} style="--sidebar-w:{sidebarW}px" bind:this={layoutEl}
     use:swipe={{ dir: 'right', enabled: !!app.currentId && narrow() && !app.modal && !app.menu, move: backMove, end: backEnd,
       ignore: '.sidebar, textarea, input, .send, .mic, .emoji-panel, .panel, .round-rec, .fmt, [data-noswipe]' }}>
     <Sidebar />
@@ -175,7 +188,7 @@
     .layout.back-swipe :global(.chat-view) { position: relative; z-index: 1; animation: none; transform: translateX(var(--sx, 0px));
       box-shadow: -8px 0 24px rgba(0, 0, 0, .35); }
     .layout:global(.settle) :global(.chat-view), .layout:global(.settle) :global(.sidebar) { transition: transform .18s ease-out, filter .18s ease-out; }
-    .layout:global(.no-anim) :global(.sidebar), .layout:global(.no-anim) :global(.chat-view) { animation: none !important; }
+    .layout.no-anim :global(.sidebar), .layout.no-anim :global(.chat-view) { animation: none !important; }
   }
   @keyframes pop-back { from { transform: translateX(-24%); opacity: .6; } }
 </style>
