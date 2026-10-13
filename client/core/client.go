@@ -19,8 +19,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/kantracity/kantrae2e/client/crypto"
-	"github.com/kantracity/kantrae2e/client/mls"
 	"github.com/kantracity/kantrae2e/client/mediacache"
+	"github.com/kantracity/kantrae2e/client/mls"
 	"github.com/kantracity/kantrae2e/client/store"
 	authv1 "github.com/kantracity/kantrae2e/gen/kantra/auth/v1"
 	"github.com/kantracity/kantrae2e/gen/kantra/auth/v1/authv1connect"
