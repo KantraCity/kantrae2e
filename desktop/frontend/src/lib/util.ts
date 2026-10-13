@@ -28,8 +28,25 @@ export function initials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase()
 }
 
+// Date formatters are built once: toLocale*String with options creates a
+// new Intl formatter on every call, which was the most expensive part of
+// re-rendering the message list (every bubble shows its time).
+const fmtHM = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
+const fmtWeekday = new Intl.DateTimeFormat('ru-RU', { weekday: 'short' })
+const fmtShortDate = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })
+const fmtDayMonth = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
+const fmtDayMonthYear = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+const hmCache = new Map<number, string>()
+
 export function timeHM(ms: number): string {
-  return new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  const minute = Math.floor(ms / 60000)
+  let v = hmCache.get(minute)
+  if (v === undefined) {
+    v = fmtHM.format(ms)
+    if (hmCache.size > 5000) hmCache.clear()
+    hmCache.set(minute, v)
+  }
+  return v
 }
 
 export function chatListTime(ms: number): string {
@@ -38,8 +55,8 @@ export function chatListTime(ms: number): string {
   const now = new Date()
   if (d.toDateString() === now.toDateString()) return timeHM(ms)
   const diff = (now.getTime() - ms) / 86400000
-  if (diff < 7) return d.toLocaleDateString('ru-RU', { weekday: 'short' })
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  if (diff < 7) return fmtWeekday.format(d)
+  return fmtShortDate.format(d)
 }
 
 export function dayLabel(ms: number): string {
@@ -48,7 +65,7 @@ export function dayLabel(ms: number): string {
   const yesterday = new Date(now.getTime() - 86400000)
   if (d.toDateString() === now.toDateString()) return 'Сегодня'
   if (d.toDateString() === yesterday.toDateString()) return 'Вчера'
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' })
+  return (d.getFullYear() === now.getFullYear() ? fmtDayMonth : fmtDayMonthYear).format(d)
 }
 
 export function fileSize(n: number): string {
@@ -94,9 +111,9 @@ export function lastSeenText(p: { online: boolean; lastSeen: number; hidden: boo
   const mins = Math.floor((now.getTime() - p.lastSeen) / 60000)
   if (mins < 1) return 'был(а) только что'
   if (mins < 60) return `был(а) ${mins} ${plural(mins, 'минуту', 'минуты', 'минут')} назад`
-  const hm = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  const hm = timeHM(p.lastSeen)
   if (d.toDateString() === now.toDateString()) return `был(а) в ${hm}`
   const y = new Date(now); y.setDate(now.getDate() - 1)
   if (d.toDateString() === y.toDateString()) return `был(а) вчера в ${hm}`
-  return `был(а) ${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`
+  return `был(а) ${fmtDayMonth.format(d)}`
 }

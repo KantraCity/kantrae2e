@@ -260,6 +260,7 @@
 <style>
   .messages {
     flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    contain: content; /* a new message re-lays out only the list, not the page */
     display: flex; flex-direction: column-reverse;
     padding: 8px max(16px, calc((100% - 760px) / 2)); overscroll-behavior: contain;
     animation: list-in .18s ease-out;
@@ -288,7 +289,7 @@
   .older .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--tint-3); border-top-color: var(--accent-light);
     animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg) } }
-  .row { position: relative; }
+  .row { position: relative; contain: layout style; }
   .reply-hint { position: absolute; right: -40px; top: 50%; width: 32px; height: 32px; margin-top: -16px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0, 0, 0, .3);
     opacity: var(--reply-p, 0); transform: scale(calc(.5 + .5 * var(--reply-p, 0))); pointer-events: none; }
