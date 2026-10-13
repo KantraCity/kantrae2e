@@ -112,7 +112,7 @@
             <div class="tile-label">
               {#if !p.mic}<Icon name="micoff" size={14} />{/if}
               {p.name}
-              {#if p.state === 'connecting'}<span class="muted"> · соединение…</span>{:else if p.state === 'failed'}<span class="bad"> · нет связи</span>{/if}
+              {#if p.state === 'connecting'}<span class="muted"> · соединение…</span>{:else if p.state === 'failed'}<span class="bad"> · нет связи</span>{:else if p.route === 'relay'}<span class="muted" title="Прямое соединение не удалось, звонок идёт через сервер (TURN) — задержка чуть выше"> · через сервер</span>{/if}
             </div>
           </div>
         {/each}

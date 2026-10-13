@@ -26,8 +26,25 @@
 // complete gathering), the answering device prepares its connection while
 // ringing, and a broken path is repaired by an ICE restart (keeping the
 // DTLS session) — at once when the network changes.
+import { logClient } from './diag'
 import { Messenger, onEvent, type CallSignal } from './api'
 import { app } from './app.svelte'
+
+/** Opus with in-band forward error correction: a lost packet is rebuilt
+ * from the next one instead of a click or a gap (WebRTC usually offers it;
+ * this makes sure). */
+function opusFec(d: RTCSessionDescriptionInit): RTCSessionDescriptionInit {
+  const sdp = d.sdp
+  if (!sdp) return d
+  const pt = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1]
+  if (!pt) return d
+  const fmtp = new RegExp(`a=fmtp:${pt} ([^\r\n]*)`)
+  const m = fmtp.exec(sdp)
+  let out = sdp
+  if (!m) out = sdp.replace(new RegExp(`(a=rtpmap:${pt} opus/48000[^\r\n]*\r?\n)`, 'i'), `$1a=fmtp:${pt} minptime=10;useinbandfec=1\r\n`)
+  else if (!/useinbandfec=1/.test(m[1])) out = sdp.replace(fmtp, `a=fmtp:${pt} ${m[1]};useinbandfec=1`)
+  return { type: d.type, sdp: out }
+}
 
 export type Peer = {
   key: string
@@ -38,6 +55,9 @@ export type Peer = {
   mic: boolean
   cam: boolean
   speaking: boolean
+  /** How the media flows once connected: straight between the devices, or
+   * through the server's TURN relay (a bit more delay). */
+  route?: 'direct' | 'relay'
 }
 
 type Ringing = { call: string; chatId: string; from: string; fromKey: string; name: string; video: boolean; at: number }
@@ -275,7 +295,7 @@ class CallStore {
     pc.addTransceiver('audio', { direction: 'sendrecv' })
     pc.addTransceiver('video', { direction: 'sendrecv' })
     this.warm = { call: r.call, key: r.fromKey, pc }
-    await pc.setLocalDescription(await pc.createOffer())
+    await pc.setLocalDescription(opusFec(await pc.createOffer()))
   }
 
   private dropWarm() {
@@ -423,6 +443,7 @@ class CallStore {
         this.restarts.delete(key)
         this.iceRestarts.delete(key)
         this.tune(pc)
+        this.route(key, pc)
         if (this.call && !this.call.connectedAt) this.call.connectedAt = Date.now()
       } else if (pc.connectionState === 'failed') {
         this.repair(key)
@@ -432,6 +453,24 @@ class CallStore {
         lost = setTimeout(() => pc.connectionState === 'disconnected' && this.repair(key), 2000)
       }
     }
+  }
+
+  /** Finds out whether the selected ICE pair goes through the TURN relay
+   * (shown on the tile; logged to the diagnostics report). */
+  private async route(key: string, pc: RTCPeerConnection) {
+    const stats = await pc.getStats().catch(() => null)
+    if (!stats || this.pcs.get(key) !== pc) return
+    let pair: any = null
+    stats.forEach((r: any) => {
+      if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId)
+    })
+    if (!pair) stats.forEach((r: any) => { if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair = r })
+    if (!pair) return
+    const local = stats.get(pair.localCandidateId), remote = stats.get(pair.remoteCandidateId)
+    const relay = local?.candidateType === 'relay' || remote?.candidateType === 'relay'
+    const p = this.peers[key]
+    if (p) this.peers[key] = { ...p, route: relay ? 'relay' : 'direct' }
+    logClient(`call: ${relay ? 'relayed via TURN' : 'direct'} (${local?.candidateType}/${local?.protocol} ↔ ${remote?.candidateType}), rtt ${Math.round((pair.currentRoundTripTime ?? 0) * 1000)} ms`)
   }
 
   /** Candidates leave in small batches (each signal is an MLS message). */
@@ -475,7 +514,7 @@ class CallStore {
     if (this.peers[key]) this.peers[key].state = 'connecting'
     await this.ensureIce()
     try { pc.setConfiguration({ ...pc.getConfiguration(), iceServers: this.ice ?? [] }) } catch { /* not supported */ }
-    await pc.setLocalDescription(await pc.createOffer({ iceRestart: true }))
+    await pc.setLocalDescription(opusFec(await pc.createOffer({ iceRestart: true })))
     await firstCandidates(pc)
     if (!this.call || this.pcs.get(key) !== pc) return
     this.send(this.call.chatId, { t: 'offer', call: this.call.id, to: key, sdp: pc.localDescription?.sdp, restart: true })
@@ -553,7 +592,7 @@ class CallStore {
     pc.addTransceiver('video', { direction: 'sendrecv' })
     this.attach(pc)
     this.pendingIce.delete(key)
-    await pc.setLocalDescription(await pc.createOffer())
+    await pc.setLocalDescription(opusFec(await pc.createOffer()))
     this.trickle.add(pc)
     await firstCandidates(pc)
     if (!this.call || this.pcs.get(key) !== pc) return
@@ -569,7 +608,7 @@ class CallStore {
     await pc.setRemoteDescription({ type: 'offer', sdp })
     this.flushIce(key, pc)
     this.attach(pc)
-    await pc.setLocalDescription(await pc.createAnswer())
+    await pc.setLocalDescription(opusFec(await pc.createAnswer()))
     this.trickle.add(pc)
     await firstCandidates(pc)
     if (!this.call || this.pcs.get(key) !== pc) return
@@ -755,7 +794,7 @@ export async function checkCalls(): Promise<CallCheck> {
       if (c && c.type === (turn ? 'relay' : 'srflx')) { out.ok = true; out.ip = c.address ?? '' }
     }
     pc.onicecandidateerror = (e: Event) => codes.add((e as RTCPeerConnectionIceErrorEvent).errorCode)
-    await pc.setLocalDescription(await pc.createOffer())
+    await pc.setLocalDescription(opusFec(await pc.createOffer()))
     const t0 = Date.now()
     while (!out.ok && pc.iceGatheringState !== 'complete' && Date.now() - t0 < 7000) await new Promise((r) => setTimeout(r, 200))
     pc.close()
