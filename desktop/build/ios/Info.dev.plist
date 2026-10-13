@@ -58,5 +58,11 @@
 		</array>
 		<key>WailsDevelopmentMode</key>
 		<true/>
-	</dict>
+	<!-- Kantra stays connected in the background (silent audio, see
+	     background_ios.go) instead of relying on Apple's push service. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+</dict>
 </plist>

@@ -167,6 +167,14 @@
               <span>Снять ограничение батареи — иначе в режиме сна Android отключает сеть приложению и сообщения придут с задержкой</span>
             </button>
           {/if}
+        {:else if prefs.platform === 'ios'}
+          <label class="switch-row">
+            <span>Работать в фоне<br /><span class="muted small">уведомления приходят сразу, без серверов Apple; расходует больше батареи</span></span>
+            <input type="checkbox" class="switch" checked={prefs.background} onchange={(e) => setPref('background', e.currentTarget.checked)} />
+          </label>
+          {#if prefs.background}
+            <p class="muted small">Не закрывайте Kantra смахиванием из списка приложений — тогда iPhone завершит её до следующего запуска.</p>
+          {/if}
         {:else if prefs.platform === 'desktop'}
           <label class="switch-row">
             <span>Сворачивать в трей при закрытии окна</span>

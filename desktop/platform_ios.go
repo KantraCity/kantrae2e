@@ -11,9 +11,9 @@ import (
 )
 
 // iOS: local notifications while the app runs. iOS suspends apps in the
-// background shortly after they leave the screen, so — unlike Android — a
-// persistent connection cannot wait for messages there; that would need
-// Apple's push service (APNs), which this project deliberately avoids.
+// background shortly after they leave the screen; with "Работать в фоне"
+// on, background_ios.go keeps the app alive (silent background audio), so
+// the connection stays open without Apple's push service (APNs).
 const platformName = "ios"
 
 type iosNotifier struct {
@@ -52,6 +52,11 @@ func platformServices(m *Messenger) []application.Service {
 }
 
 func platformSetup(_ *application.App, _ *application.WebviewWindow, m *Messenger) {
+	// Background mode (on unless switched off in Settings).
+	go func() {
+		_ = m.start()
+		platformApplyBackground(m.pref(prefBackground))
+	}()
 	ns := m.notif.(*iosNotifier).ns
 	_, _ = ns.RequestNotificationAuthorization()
 	ns.OnNotificationResponse(func(r notifications.NotificationResult) {
@@ -61,9 +66,8 @@ func platformSetup(_ *application.App, _ *application.WebviewWindow, m *Messenge
 	})
 }
 
-func platformStatus(*Settings)     {}
-func platformApplyBackground(bool) {}
-func platformOpenSettings(string)  {}
+func platformStatus(*Settings)    {}
+func platformOpenSettings(string) {}
 
 func titlebarStyle() string { return "" }
 
