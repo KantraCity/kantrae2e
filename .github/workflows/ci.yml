@@ -6,6 +6,11 @@ on:
   # Actions → ci → "Run workflow": build and release without a push.
   workflow_dispatch:
 
+# A newer push to the same branch cancels the older run still building.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 # Every build is versioned 1.0.<run number>; the apps trust update manifests
 # signed with the key whose public part is the repository variable
 # UPDATE_PUBLIC_KEY (create the keys with deploy/release-keys.sh).
@@ -321,4 +326,9 @@ jobs:
           NOTES: ${{ github.event.head_commit.message }}
         run: |
           printf '%s\n' "$NOTES" > notes.md
-          gh release create "v$KANTRA_VERSION" dist/* --title "Kantra $KANTRA_VERSION" --notes-file notes.md --target "$GITHUB_SHA" --latest
+          # Two runs can finish out of order: never let an older build become
+          # "latest" (the update manifests and the iPhone source live there).
+          current=$(gh release view --json tagName --jq .tagName 2>/dev/null | sed 's/.*\.//' || true)
+          latest=--latest
+          if [ -n "$current" ] && [ "$current" -gt "$KANTRA_BUILD" ]; then latest=--latest=false; fi
+          gh release create "v$KANTRA_VERSION" dist/* --title "Kantra $KANTRA_VERSION" --notes-file notes.md --target "$GITHUB_SHA" $latest
