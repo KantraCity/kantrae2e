@@ -19,11 +19,7 @@
     const user = app.state?.account?.username ?? ''
     const text = `Kantra — ключ восстановления для @${user}\n\n${words.map((w, i) => `${i + 1}. ${w}`).join('\n')}\n\n` +
       `Храните в надёжном месте. Любой, у кого есть этот ключ и ваш пароль, получит доступ к истории сообщений.\n`
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
-    a.download = `kantra-recovery-${user}.txt`
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    app.saveText(`kantra-recovery-${user}.txt`, text)
   }
 </script>
 

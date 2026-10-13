@@ -147,8 +147,19 @@ a { color: var(--accent-light); }
 .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .5px; }
 .error-text { color: var(--danger); font-size: 13px; }
 
+/* ---- an app, not a web page -------------------------------------------- */
+/* No text selection, long-press callouts ("Открыть", "Скопировать",
+   "Поделиться"…), dragging of pictures or grey tap flashes. What is typed
+   stays editable; with a mouse, message text can still be selected. */
+html { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+* { -webkit-tap-highlight-color: transparent; }
+img, video, a { -webkit-user-drag: none; }
+input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+@media (hover: hover) and (pointer: fine) {
+  .selectable { -webkit-user-select: text; user-select: text; }
+}
+
 /* ---- motion & feedback ------------------------------------------------- */
-button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .btn, .icon-btn { transition: filter .15s, opacity .15s, background .15s, color .15s, transform .12s; }
 .btn:active:not(:disabled), .icon-btn:active { transform: scale(.94); }
 .field { transition: border-color .15s, background .15s; }

@@ -664,7 +664,7 @@ class AppState {
   // ---- saving files (gallery / Downloads; the browser downloads in web mode) ----
   async saveMedia(m: Message) {
     const where = await this.try(() => Messenger.SaveMedia(m.chatId, m.id))
-    if (where === undefined) return
+    if (where === undefined || where === 'share') return
     if (where) {
       this.toast(where)
       return
@@ -679,6 +679,31 @@ class AppState {
     a.remove()
   }
 
+  /** Saves a file made here (the recovery key): Downloads, the phone's
+   * files or the share sheet; the browser downloads it in web mode. */
+  async saveText(name: string, text: string) {
+    const bytes = new TextEncoder().encode(text)
+    let bin = ''
+    for (const b of bytes) bin += String.fromCharCode(b)
+    const where = await this.try(() => Messenger.SaveBytes(name, 'text/plain', btoa(bin)))
+    if (where === undefined || where === 'share') return
+    if (where) {
+      this.toast(where)
+      return
+    }
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([bytes], { type: 'text/plain;charset=utf-8' }))
+    a.download = name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+
+  /** Web links open outside the app (system browser): the app's own page
+   * never navigates away. Web mode: a new browser tab. */
+  openUrl(href: string) {
+    Messenger.OpenURL(href).catch(() => window.open(href, '_blank', 'noopener,noreferrer'))
+  }
+
   // ---- app updates (desktop/update.go) ----
   update = $state<UpdateState | null>(null)
   async loadUpdate() {
@@ -690,7 +715,7 @@ class AppState {
     const u = this.update
     if (!u) return
     if (u.state === 'manual') {
-      if (u.page) window.open(u.page, '_blank')
+      if (u.page) this.openUrl(u.page)
       return
     }
     await this.try(() => Messenger.ApplyUpdate())

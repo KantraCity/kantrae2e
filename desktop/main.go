@@ -94,6 +94,19 @@ func main() {
 			// Decrypted media for <img>/<video> (media.go).
 			Middleware: mediaMiddleware(messenger),
 		},
+		// iPhone: an app, not a web page. No rubber-band scrolling of the
+		// whole page, no link previews on long press, no "‹ › Готово" bar
+		// over the keyboard; videos (GIFs, circles, calls) play in place
+		// instead of the system's full-screen player, and start by
+		// themselves.
+		IOS: application.IOSOptions{
+			DisableBounce:                   true,
+			DisableLinkPreview:              true,
+			DisableInputAccessoryView:       true,
+			EnableInlineMediaPlayback:       true,
+			EnableAutoplayWithoutUserAction: true,
+			BackgroundColour:                application.NewRGB(23, 33, 43),
+		},
 		Mac: application.MacOptions{
 			// Keep running (tray) when the window is closed.
 			ApplicationShouldTerminateAfterLastWindowClosed: false,

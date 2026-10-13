@@ -37,6 +37,6 @@
   .spoiler { background: var(--tint-3); color: transparent; border-radius: 4px; cursor: pointer; filter: blur(2px);
     transition: filter .25s, color .25s, background .25s; user-select: none; }
   .spoiler :global(*) { color: transparent !important; }
-  .spoiler.shown { background: transparent; color: inherit; filter: none; user-select: text; cursor: text; }
+  .spoiler.shown { background: transparent; color: inherit; filter: none; user-select: inherit; -webkit-user-select: inherit; cursor: inherit; }
   .spoiler.shown :global(*) { color: inherit !important; }
 </style>

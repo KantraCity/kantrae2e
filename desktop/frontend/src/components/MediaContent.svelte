@@ -160,7 +160,7 @@
     {/if}
   </div>
 {:else}
-  <a class="file" href={url ? url + '?download=1' : undefined} download={f.name} title="Скачать">
+  <button class="file" disabled={sending} onclick={(e) => { e.stopPropagation(); app.saveMedia(m) }} title="Сохранить">
     <span class="file-icon">
       {#if sending}<span class="spinner"></span>{:else}<span class="ext">{ext || 'FILE'}</span><span class="dl"><Icon name="download" size={20} /></span>{/if}
     </span>
@@ -168,9 +168,9 @@
       <span class="file-name">{f.name}</span>
       <span class="file-size">{fileSize(f.size)}</span>
     </span>
-  </a>
+  </button>
 {/if}
-{#if f.caption}<div class="caption">{f.caption}</div>{/if}
+{#if f.caption}<div class="caption selectable">{f.caption}</div>{/if}
 
 <style>
   /* ---- photos / GIFs / videos ---- */

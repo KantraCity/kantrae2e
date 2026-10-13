@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,39 @@ import (
 
 // errSaveUnsupported: the UI downloads the file through the browser instead.
 var errSaveUnsupported = errors.New("save: use the browser download")
+
+// errSaveShared: the system share sheet took the file (iPhone: "Сохранить
+// изображение", "Сохранить в Файлы"); the UI shows nothing more.
+var errSaveShared = errors.New("save: handed to the share sheet")
+
+// saveResult maps platformSaveMedia's answer to what the UI expects: a place
+// to show in a toast, "share" (the share sheet is open) or "" (let the
+// browser download it).
+func saveResult(where string, err error) (string, error) {
+	switch {
+	case errors.Is(err, errSaveUnsupported):
+		return "", nil
+	case errors.Is(err, errSaveShared):
+		return "share", nil
+	}
+	return where, err
+}
+
+// SaveBytes saves a file made by the UI (the recovery key as .txt) the same
+// way as SaveMedia.
+func (m *Messenger) SaveBytes(name, mime string, data []byte) (string, error) {
+	return saveResult(platformSaveMedia(safeName(name, mime), mime, data))
+}
+
+// OpenURL opens a web link outside the app (the system browser), so the
+// app's own page never navigates away. Web mode: the browser opens it.
+func (m *Messenger) OpenURL(link string) error {
+	u, err := url.Parse(link)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http" && u.Scheme != "mailto" && u.Scheme != "tel") {
+		return errors.New("ссылка не поддерживается")
+	}
+	return platformOpenURL(u.String())
+}
 
 // SaveMedia saves a message's file to the gallery (phones) or the Downloads
 // folder (desktop). It returns where it went; "" means the UI should let
@@ -36,11 +70,7 @@ func (m *Messenger) SaveMedia(chatID, id string) (string, error) {
 		return "", friendly(err)
 	}
 	name := safeName(ref.Name, ref.Mime)
-	where, err := platformSaveMedia(name, ref.Mime, data)
-	if errors.Is(err, errSaveUnsupported) {
-		return "", nil
-	}
-	return where, err
+	return saveResult(platformSaveMedia(name, ref.Mime, data))
 }
 
 func safeName(name, mime string) string {

@@ -362,6 +362,14 @@ export function OpenSystemSettings(what: string): $CancellablePromise<void> {
 }
 
 /**
+ * OpenURL opens a web link outside the app (the system browser), so the
+ * app's own page never navigates away. Web mode: the browser opens it.
+ */
+export function OpenURL(link: string): $CancellablePromise<void> {
+    return $Call.ByID(741024658, link);
+}
+
+/**
  * PendingCall returns a call that is ringing right now (or nothing).
  */
 export function PendingCall(): $CancellablePromise<$models.CallSignal | null> {
@@ -469,6 +477,14 @@ export function RevokeInviteLink(chatID: string): $CancellablePromise<void> {
  */
 export function SaveAs(chatID: string, id: string, kind: string): $CancellablePromise<void> {
     return $Call.ByID(65728224, chatID, id, kind);
+}
+
+/**
+ * SaveBytes saves a file made by the UI (the recovery key as .txt) the same
+ * way as SaveMedia.
+ */
+export function SaveBytes(name: string, mime: string, data: string | null): $CancellablePromise<string> {
+    return $Call.ByID(580714155, name, mime, data);
 }
 
 /**

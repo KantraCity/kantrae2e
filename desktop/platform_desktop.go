@@ -147,6 +147,8 @@ func titlebarStyle() string {
 }
 
 // platformSaveMedia saves into Downloads/Kantra, like Telegram Desktop.
+func platformOpenURL(u string) error { return application.Get().Browser.OpenURL(u) }
+
 func platformSaveMedia(name, _ string, data []byte) (string, error) {
 	return saveToDownloads(name, data)
 }

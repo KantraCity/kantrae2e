@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // JNI side of com.wails.app.KantraNative: the Android shell calls these, and
@@ -118,6 +120,11 @@ func platformApplyBackground(on bool) { javaCall("setBackground", boolPref(on)) 
 func platformOpenSettings(what string) { javaCall("openSettings", what) }
 
 // platformSaveMedia hands a decrypted copy to the gallery (MediaStore).
+func platformOpenURL(u string) error {
+	application.Android.OpenURL(u)
+	return nil
+}
+
 func platformSaveMedia(name, mime string, data []byte) (string, error) {
 	dir, _ := storageDir.Load().(string)
 	if dir == "" {

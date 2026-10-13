@@ -4,7 +4,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
+	"net/url"
+	"os"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
@@ -71,4 +75,24 @@ func platformOpenSettings(string) {}
 
 func titlebarStyle() string { return "" }
 
-func platformSaveMedia(string, string, []byte) (string, error) { return "", errSaveUnsupported }
+func platformOpenURL(u string) error {
+	application.IOS.OpenURL(u)
+	return nil
+}
+
+// platformSaveMedia hands the file to the share sheet, which offers
+// "Сохранить изображение/видео" (Photos) and "Сохранить в Файлы".
+func platformSaveMedia(name, _ string, data []byte) (string, error) {
+	dir := filepath.Join(os.TempDir(), "share")
+	_ = os.RemoveAll(dir) // the previous shared file
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return "", err
+	}
+	b, _ := json.Marshal(map[string]string{"url": (&url.URL{Scheme: "file", Path: path}).String()})
+	application.IOS.Share(string(b))
+	return "", errSaveShared
+}

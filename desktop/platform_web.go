@@ -14,6 +14,7 @@ func platformSetup(*application.App, *application.WebviewWindow, *Messenger) {}
 func platformStatus(*Settings)                                               {}
 func platformApplyBackground(bool)                                           {}
 func platformOpenSettings(string)                                            {}
+func platformOpenURL(string) error                                           { return errSaveUnsupported }
 
 func titlebarStyle() string { return "" }
 

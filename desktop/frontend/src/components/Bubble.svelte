@@ -91,7 +91,7 @@
       {#if m.kind === 'poll' && m.poll}
         <Poll {m} />
       {:else}
-        <span class="text" class:big-emoji={bigEmoji > 0} style={bigEmoji ? `--emoji-size:${[0, 64, 50, 40][bigEmoji]}px` : undefined}>{#if bigEmoji}{m.text}{:else}<RichText text={m.text} />{/if}</span>
+        <span class="text selectable" class:big-emoji={bigEmoji > 0} style={bigEmoji ? `--emoji-size:${[0, 64, 50, 40][bigEmoji]}px` : undefined}>{#if bigEmoji}{m.text}{:else}<RichText text={m.text} />{/if}</span>
       {/if}
       {#if m.link}
         <a class="lp" href={m.link.url} target="_blank" rel="noopener noreferrer">
